@@ -18,6 +18,11 @@ fun init(witness: TEST_COIN, ctx: &mut TxContext) {
 		transfer::public_transfer(treasury, ctx.sender())
 }
 
+#[test_only]
+public(package) fun test_init(ctx: &mut TxContext){
+	init(TEST_COIN{}, ctx)
+}
+
 public fun mint(
 		treasury_cap: &mut TreasuryCap<TEST_COIN>,
 		amount: u64,

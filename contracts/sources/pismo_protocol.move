@@ -15,6 +15,8 @@ use sui::object::UID;
 
 use std::vector;
 use std::string::String;
+use std::type_name;
+use std::debug;
 
 use pyth::price_info;
 use pyth::price_identifier;
@@ -22,7 +24,9 @@ use pyth::price;
 use pyth::pyth;
 use pyth::price_info::PriceInfoObject;
 
-const E_INVALID_PRICE_ID: u64 = 1;
+const E_INVALID_PRICE_ID: u64 = 0;
+const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 1;
+const E_INVALID_COLLATERAL: u64 = 2;
 
 public struct CollateralIdentifier has copy, drop, store {
     token_info: String,
@@ -48,15 +52,19 @@ public struct Account has key {
 }
 
 public fun init_program(init_collateral: vector<CollateralIdentifier>, ctx: &mut TxContext) {
-    transfer::transfer(
-        Program { 
-            id: object::new(ctx), 
-            supported_collateral: init_collateral 
-        }, ctx.sender()
-    )
+    transfer::share_object(
+        init_program_internal(init_collateral, ctx)
+    );
 }
 
-//Can anyone pass in a reference to an object they don't own off chain???
+public(package) fun init_program_internal(init_collateral: vector<CollateralIdentifier>, ctx: &mut TxContext): Program {
+    Program { 
+        id: object::new(ctx), 
+        supported_collateral: init_collateral 
+    }
+}
+
+//Can you have multiple of the same type of object?
 public fun init_account(program: &Program, ctx: &mut TxContext) {
     let Program {id, supported_collateral: _} = program;
 
@@ -70,19 +78,33 @@ public fun init_account(program: &Program, ctx: &mut TxContext) {
     )
 }
 
-//Is there any way to ensure that the Program Account is keyed on is the same program that's passed in??
+fun ensure_account_program_match(account: &Account, program: &Program) {
+    assert!(account.program_id == program.id.to_address(), E_ACCOUNT_PROGRAM_MISMATCH);
+}
+
 public fun post_collateral<CoinType>(account: &mut Account, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
+    ensure_account_program_match(account, program);
     ensure_collateral_balance_length(program, &mut account.collateral_balances);
-
-    //We need a way to get the token address from coin so that we can add it to the right collateral_balances index.
-
-    transfer::transfer(
-        Collateral<CoinType> {
-            id: object::new(ctx),
-            coin: coin.into_balance()
-        },
-        ctx.sender()
-    )
+    let coin_bal = coin.value();
+    let type_str = type_name::get<CoinType>().into_string();
+    let mut i = 0;
+    while(i < program.supported_collateral.length()){
+        if(type_str.to_string() == program.supported_collateral[i].token_info){
+            account.collateral_balances.push_back(coin_bal);
+            account.collateral_balances.swap_remove(i);
+            transfer::transfer(
+                Collateral<CoinType> {
+                    id: object::new(ctx),
+                    coin: coin.into_balance()
+                },
+                ctx.sender()
+            );
+            return;
+        };
+        i = i + 1;
+    };
+    assert!(false, E_INVALID_COLLATERAL);
+    coin.destroy_zero();
 }
 
 public(package) fun ensure_collateral_balance_length(program: &Program, account_balances: &mut vector<u64>){
@@ -98,32 +120,56 @@ public(package) fun ensure_collateral_balance_length(program: &Program, account_
     }
 }
 
+
 fun init(ctx: &mut TxContext) {
 
 }
 
+const E_PRICE_OBJS_DONT_MATCH_COLLATS: u64 = 4;
+
+fun ensure_price_obj_match_collateral(price_objs: &vector<PriceInfoObject>, collaterals: &vector<CollateralIdentifier>): bool {
+    let mut i = 0;
+    if(price_objs.length() != collaterals.length()){
+        return false;
+    };
+    while(i < price_objs.length()){
+        let p_obj = price_objs.borrow(i);
+        let p_id = p_obj.get_price_info_from_price_info_object().get_price_feed().get_price_identifier().get_bytes();
+        let collat = collaterals.borrow(i);
+        if(p_id != collat.price_feed_id_bytes){
+            return false;
+        };
+        i = i + 1;
+    };
+    true
+}
+
 //This is a test function, use for reference later.
-public fun use_pyth_price(
+public fun sum_collateral_balances(
     clock: &Clock,
-    price_info_object: &PriceInfoObject,
+    price_info_objects: &vector<PriceInfoObject>,
+    account: &Account,
+    program: &Program
 ){
-    let max_age = 60;
-    // Make sure the price is not older than max_age seconds
-    let price_struct = pyth::get_price_no_older_than(price_info_object,clock, max_age);
+    ensure_account_program_match(account, program);
+    ensure_price_obj_match_collateral(price_info_objects, &program.supported_collateral);
+    let max_age_seconds = 3;
+    
+    let mut i = 0;
+    while(i < price_info_objects.length()){
+        let account_balance = account.collateral_balances.borrow(i);
+        let price_info_object = price_info_objects.borrow(i);
+        let price_struct = pyth::get_price_no_older_than(price_info_object,clock, max_age_seconds);
+        let decimal_i64 = price::get_expo(&price_struct);
+        let price_i64 = price::get_price(&price_struct);
 
-    // Check the price feed ID
-    let price_info = price_info::get_price_info_from_price_info_object(price_info_object);
-    let price_id = price_identifier::get_bytes(&price_info::get_price_identifier(&price_info));
+        //We need to convert price to a 10^18 decimals (we're going to have to make a math module for this)
+        //IE: balance = 9000000000 (90 USD at 8 on-chain decimals) * price * decimal
 
-    // ETH/USD price feed ID
-    // The complete list of feed IDs is available at https://pyth.network/developers/price-feed-ids
-    // Note: Sui uses the Pyth price feed ID without the `0x` prefix.
-    assert!(price_id!=x"ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace", E_INVALID_PRICE_ID);
+        i = i + 1;
+    };
 
-    // Extract the price, decimal, and timestamp from the price struct and use them
-    let decimal_i64 = price::get_expo(&price_struct);
-    let price_i64 = price::get_price(&price_struct);
-    let timestamp_sec = price::get_timestamp(&price_struct);
+    
 }
 
 public fun supported_collateral(program: &Program): &vector<CollateralIdentifier>{
@@ -136,16 +182,15 @@ public fun collateral_balances(account: &Account): &vector<u64> {
     collateral_balances
 }
 
+public fun value<CoinType>(collateral: &Collateral<CoinType>): u64 {
+    collateral.coin.value()
+}
+
 public fun new_collateral_identifier(
     token_info: String, 
     price_feed_id_bytes: vector<u8>
 ): CollateralIdentifier{
     CollateralIdentifier { token_info, price_feed_id_bytes }
-}
-
-#[test_only]
-public(package) fun init_test_program(supported_collateral: vector<CollateralIdentifier>, ctx: &mut TxContext): Program{
-    Program { id: object::new(ctx), supported_collateral }
 }
 
 #[test_only]
