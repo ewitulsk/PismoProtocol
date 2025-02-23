@@ -36,7 +36,6 @@ public struct CollateralIdentifier has copy, drop, store {
 public struct Program has key {
     id: UID,
     supported_collateral: vector<CollateralIdentifier>,
-
 }
 
 public struct Collateral<phantom CoinType> has key {
