@@ -24,7 +24,7 @@ public struct Account has key {
 }
 
 //Can you have multiple of the same type of object?
-public(package) fun init_account(program: &Program, ctx: &mut TxContext) {
+public entry fun init_account(program: &Program, ctx: &mut TxContext) {
 
     transfer::transfer(
         Account{
@@ -42,6 +42,10 @@ public(package) fun collateral_balances(account: &Account): &vector<u64> {
 
 public(package) fun collateral_balances_mut(account: &mut Account): &mut vector<u64> {
     &mut account.collateral_balances
+}
+
+public(package) fun id(account: &Account): address {
+    account.id.to_address()
 }
 
 public(package) fun assert_account_program_match(account: &Account, program: &Program) {

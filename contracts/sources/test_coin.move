@@ -23,11 +23,11 @@ public(package) fun test_init(ctx: &mut TxContext){
 	init(TEST_COIN{}, ctx)
 }
 
-public fun mint(
+public entry fun mint(
 		treasury_cap: &mut TreasuryCap<TEST_COIN>,
 		amount: u64,
 		recipient: address,
-		ctx: &mut TxContext,
+		ctx: &mut TxContext
 ) {
 		let coin = coin::mint(treasury_cap, amount, ctx);
 		transfer::public_transfer(coin, recipient)

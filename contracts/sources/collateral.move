@@ -21,10 +21,12 @@ use pismo_protocol::programs::{Program, CollateralIdentifier, new_collateral_ide
 use pismo_protocol::accounts::{Account, assert_account_program_match};
 
 const E_PRICE_OBJS_DONT_MATCH_COLLATS: u64 = 0;
-const E_INVALID_COLLATERAL: u64 = 1;
+const E_INVALID_COLLATERAL: u64 = 9999999999;
 
 public struct Collateral<phantom CoinType> has key {
     id: UID,
+    account_id: address,
+    program_id: address,
     coin: Balance<CoinType>
 }
 
@@ -105,7 +107,7 @@ public(package) fun sum_collateral_balances(
     total_collateral_value
 }
 
-public(package) fun post_collateral<CoinType>(account: &mut Account, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
+public entry fun post_collateral<CoinType>(account: &mut Account, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
     assert_account_program_match(account, program);
     ensure_collateral_balance_length(program, account.collateral_balances_mut());
     let coin_bal = coin.value();
@@ -118,6 +120,8 @@ public(package) fun post_collateral<CoinType>(account: &mut Account, program: &P
             transfer::transfer(
                 Collateral<CoinType> {
                     id: object::new(ctx),
+                    account_id: account.id(),
+                    program_id: program.id(),
                     coin: coin.into_balance()
                 },
                 ctx.sender()
