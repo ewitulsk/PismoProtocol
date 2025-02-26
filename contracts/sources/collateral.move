@@ -27,7 +27,8 @@ public struct Collateral<phantom CoinType> has key {
     id: UID,
     account_id: address,
     program_id: address,
-    coin: Balance<CoinType>
+    coin: Balance<CoinType>,
+    collateral_index: u64
 }
 
 public(package) fun ensure_collateral_balance_length(program: &Program, account_balances: &mut vector<u64>){
@@ -122,7 +123,8 @@ public entry fun post_collateral<CoinType>(account: &mut Account, program: &Prog
                     id: object::new(ctx),
                     account_id: account.id(),
                     program_id: program.id(),
-                    coin: coin.into_balance()
+                    coin: coin.into_balance(),
+                    collateral_index: i
                 },
                 ctx.sender()
             );
