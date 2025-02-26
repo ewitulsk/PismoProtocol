@@ -1,0 +1,7 @@
+from backend import get_collateral_objects, form_collateral_triples, get_price_feed
+
+
+get_collateral_objects("testnet", "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865", "0x1b04601c7395809e6dbbc257b34f8efefec880b2513381ad402ee0a747c3b4d6")
+form_collateral_triples("testnet", "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865", "0x1b04601c7395809e6dbbc257b34f8efefec880b2513381ad402ee0a747c3b4d6")
+
+#get_price_feed('0x23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744')
