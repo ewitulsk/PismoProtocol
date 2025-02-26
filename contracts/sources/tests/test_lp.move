@@ -294,3 +294,97 @@ fun test_deposit_zero() {
     };
     test_scenario::end(scenario);
 }
+
+// New test for extract_coin
+#[test]
+fun test_extract_coin() {
+    let admin = @0x1;
+    let user = @0x2;
+
+    let mut scenario = test_scenario::begin(admin);
+    // Initialize TEST_COIN
+    {
+        let treasury_cap = test_coin::init_token(scenario.ctx());
+        transfer::public_transfer(treasury_cap, scenario.sender());
+    };
+    // Initialize the vault
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(scenario.ctx());
+    };
+    // Mint 1000 TEST_COIN for user and deposit into vault
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let mut treasury_cap = test_scenario::take_from_sender<TreasuryCap<TEST_COIN>>(&scenario);
+        let coin = coin::mint(&mut treasury_cap, 1000, scenario.ctx());
+        transfer::public_transfer(coin, user);
+        test_scenario::return_to_sender(&scenario, treasury_cap);
+    };
+    test_scenario::next_tx(&mut scenario, user);
+    {
+        let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
+        lp::deposit_lp(&mut vault, coin, scenario.ctx());
+        test_scenario::return_shared(vault);
+    };
+    // Extract 300 TEST_COIN as admin
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        let extracted = lp::extract_coin(&mut vault, 300, scenario.ctx());
+        assert!(extracted.value() == 300, 0);
+        transfer::public_transfer(extracted, scenario.ctx().sender());
+        test_scenario::return_shared(vault);
+    };
+    // Verify that vault has 700 TEST_COIN left
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        assert!(vault.coin_value() == 700, 0);
+        test_scenario::return_shared(vault);
+    };
+    test_scenario::end(scenario);
+}
+
+// New test for deposit_coin
+#[test]
+fun test_deposit_coin() {
+    let admin = @0x1;
+    let user = @0x2;
+
+    let mut scenario = test_scenario::begin(admin);
+    // Initialize TEST_COIN
+    {
+        let treasury_cap = test_coin::init_token(scenario.ctx());
+        transfer::public_transfer(treasury_cap, scenario.sender());
+    };
+    // Initialize the vault
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(scenario.ctx());
+    };
+    // Mint 500 TEST_COIN for user
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let mut treasury_cap = test_scenario::take_from_sender<TreasuryCap<TEST_COIN>>(&scenario);
+        let coin = coin::mint(&mut treasury_cap, 500, scenario.ctx());
+        transfer::public_transfer(coin, user);
+        test_scenario::return_to_sender(&scenario, treasury_cap);
+    };
+    // User deposits 500 TEST_COIN into the vault
+    test_scenario::next_tx(&mut scenario, user);
+    {
+        let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
+        lp::deposit_coin(&mut vault, coin);
+        test_scenario::return_shared(vault);
+    };
+    // Verify that vault has 500 TEST_COIN
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        assert!(vault.coin_value() == 500, 0);
+        test_scenario::return_shared(vault);
+    };
+    test_scenario::end(scenario);
+}

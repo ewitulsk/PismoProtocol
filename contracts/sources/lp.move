@@ -67,6 +67,17 @@ public entry fun withdraw_lp<CoinType, LPType>(vault: &mut Vault<CoinType, LPTyp
     transfer::public_transfer(balance_out.into_coin(ctx), ctx.sender());
 }
 
+public(package) fun extract_coin<CoinType, LPType>(vault: &mut Vault<CoinType, LPType>, amount: u64, ctx: &mut TxContext): Coin<CoinType> {
+    //THIS IS A PERMISSIONED METHOD ADD THE WHITELIST CALL HERE
+    assert!(vault.coin.value() >= amount, 0); // Insufficient balance
+    let balance_out = vault.coin.split(amount);
+    balance_out.into_coin(ctx)
+}
+
+public(package) fun deposit_coin<CoinType, LPType>( vault: &mut Vault<CoinType, LPType>, coin: Coin<CoinType>) {
+    vault.coin.join(coin.into_balance());
+}
+
 public fun coin_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
     return vault.coin.value()
 }
