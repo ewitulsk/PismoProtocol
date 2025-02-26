@@ -1,4 +1,4 @@
-module pismo_protocol::test;
+module pismo_protocol::test_post_collateral;
 
 use std::string;
 use std::vector;
