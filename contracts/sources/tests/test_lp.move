@@ -43,7 +43,7 @@ fun test_lp() {
     test_scenario::next_tx(&mut scenario, admin);
     {
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
     };
 
@@ -287,7 +287,7 @@ fun test_deposit_zero() {
     test_scenario::next_tx(&mut scenario, admin);
     {
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
     };
     test_scenario::next_tx(&mut scenario, admin);
@@ -330,7 +330,7 @@ fun test_extract_coin() {
     test_scenario::next_tx(&mut scenario, admin);
     {
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
     };
     // Mint 1000 TEST_COIN for user and deposit into vault
@@ -392,7 +392,7 @@ fun test_deposit_coin() {
     test_scenario::next_tx(&mut scenario, admin);
     {
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
     };
     // Mint 500 TEST_COIN for user

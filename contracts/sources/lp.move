@@ -3,6 +3,7 @@ module pismo_protocol::lp;
 use sui::coin::{Self, Coin, TreasuryCap};
 use sui::balance::{Self, Balance, Supply};
 use sui::bag::{Self, Bag};
+use std::type_name;
 use std::string::{Self, String};
 
 use pismo_protocol::math;
@@ -18,7 +19,8 @@ public struct Vault<phantom CoinType, phantom LPType> has key {
 
 public struct Global has key {
     id: UID,
-    supported_lp: vector<address>,
+    supported_lp: vector<String>,
+    price_feed_bytes: vector<vector<u8>>,
     vault_balances: vector<u64>,
 }
 
@@ -26,12 +28,13 @@ fun init(ctx: &mut TxContext) {
     transfer::share_object(Global {
         id: object::new(ctx),
         supported_lp: vector::empty(),
+        price_feed_bytes: vector::empty(),
         vault_balances: vector::empty(),
     });
 }
 
 //This needs to be a permissioned function
-public entry fun init_lp_vault<CoinType, LPType>(global: &mut Global, ctx: &mut TxContext) {
+public entry fun init_lp_vault<CoinType, LPType>(global: &mut Global, vault_price_feed_bytes: vector<u8>, ctx: &mut TxContext) {
     // PUT WHITELIST CALL HERE
 
     let lp_supply = balance::create_supply(LPToken<LPType>{});
@@ -43,11 +46,12 @@ public entry fun init_lp_vault<CoinType, LPType>(global: &mut Global, ctx: &mut 
         global_index: global.supported_lp.length(),
     };
 
-    let vault_addr = object::id(&vault).to_address();
     transfer::share_object(vault);
 
-    global.supported_lp.push_back(vault_addr);
+    let token_info = type_name::get<CoinType>().into_string();
+    global.supported_lp.push_back(token_info.to_string());
     global.vault_balances.push_back(0);
+    global.price_feed_bytes.push_back(vault_price_feed_bytes);
 }
 
 fun calc_amount_to_mint(supply_amount: u64, lp_supply: u64, reserve_amount: u64): u64 {
