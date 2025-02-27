@@ -1,14 +1,19 @@
-module pismo_protocol::test;
+module pismo_protocol::test_post_collateral;
 
 use std::string;
 use std::vector;
 use sui::coin::{Self, TreasuryCap, Coin};
+use sui::tx_context;
 
 #[test_only]
 use sui::test_scenario;
 
 #[test_only]
-use pismo_protocol::main::{Collateral, E_INVALID_COLLATERAL, post_collateral, Account, init_program, init_account, ensure_collateral_balance_length, init_program_internal, destroy_program, new_collateral_identifier};
+use pismo_protocol::programs::{Program, new_collateral_identifier, init_program_internal, destroy_program};
+#[test_only]
+use pismo_protocol::accounts::{Account, init_account};
+#[test_only]
+use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_balance_length, E_INVALID_COLLATERAL};
 #[test_only]
 use pismo_protocol::test_coin::{Self, TEST_COIN};
 
@@ -18,26 +23,31 @@ fun test_ensure_balances() {
     let collats = vector[
         new_collateral_identifier (
             string::utf8(b"0x1"),
+            8,
             x"01"
         ),
         new_collateral_identifier (
             string::utf8(b"0x2"),
+            8,
             x"02"
         ),
         new_collateral_identifier (
             string::utf8(b"0x3"),
+            8,
             x"03"
         ),
         new_collateral_identifier (
             string::utf8(b"0x4"),
+            8,
             x"04"
         ),
         new_collateral_identifier (
             string::utf8(b"0x5"),
+            8,
             x"05"
         ),
     ];
-    let test_program =  init_program_internal(collats, &mut ctx);
+    let test_program =  init_program_internal(&mut ctx, collats, 8);
 
     let mut test_collats = vector::empty<u64>();
     ensure_collateral_balance_length(&test_program, &mut test_collats);
@@ -64,31 +74,37 @@ public fun test_post_collateral_bad() {
     let collats = vector[
         new_collateral_identifier (
             string::utf8(b"0x1"),
+            8,
             x"01"
         ),
         new_collateral_identifier (
             string::utf8(b"0x2"),
+            8,
             x"02"
         ),
         new_collateral_identifier (
             string::utf8(b"0x3"),
+            8,
             x"03"
         ),
         new_collateral_identifier (
             string::utf8(b"0x4"),
+            8,
             x"04"
         ),
         new_collateral_identifier (
             string::utf8(b"0x5"),
+            8,
             x"05"
         ),
     ];
-    let program =  init_program_internal(collats, scenario.ctx());
+    let program =  init_program_internal(scenario.ctx(), collats, 8);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
     let mint_amount = 100;
-    test_coin::mint(&mut t_cap, mint_amount, scenario.sender(), scenario.ctx());
+    let sender = scenario.sender();
+    test_coin::mint(&mut t_cap, mint_amount, sender, scenario.ctx());
 
     init_account(&program, scenario.ctx());
 
@@ -97,7 +113,7 @@ public fun test_post_collateral_bad() {
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
 
-    post_collateral(&mut account, &program, coin, scenario.ctx());
+    post_collateral( &mut account, &program, coin, scenario.ctx());
     
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
@@ -118,31 +134,37 @@ public fun test_post_collateral_good() {
     let collats = vector[
         new_collateral_identifier (
             string::utf8(b"0x1"),
+            8,
             x"01"
         ),
         new_collateral_identifier (
             string::utf8(b"0x2"),
+            8,
             x"02"
         ),
         new_collateral_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
+            8,
             x"03"
         ),
         new_collateral_identifier (
             string::utf8(b"0x4"),
+            8,
             x"04"
         ),
         new_collateral_identifier (
             string::utf8(b"0x5"),
+            8,
             x"05"
         ),
     ];
-    let program =  init_program_internal(collats, scenario.ctx());
+    let program =  init_program_internal(scenario.ctx(), collats, 8);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
     let mint_amount = 100;
-    test_coin::mint(&mut t_cap, mint_amount, scenario.sender(), scenario.ctx());
+    let sender = scenario.sender();
+    test_coin::mint( &mut t_cap, mint_amount, sender, scenario.ctx());
 
     init_account(&program, scenario.ctx());
 
@@ -156,6 +178,62 @@ public fun test_post_collateral_good() {
     while(i < account.collateral_balances().length()){
         let bal = account.collateral_balances().borrow(i);
         if(i != 2){
+            assert!(bal == 0, 0);
+        }
+        else{
+            assert!(bal == mint_amount, 0);
+        };
+        i = i + 1;
+    };
+    
+    scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
+    scenario.return_to_sender<Account>(account);
+    destroy_program(program);
+
+    scenario.next_tx(sender);
+    let collateral = scenario.take_from_sender<Collateral<TEST_COIN>>();
+    assert!(collateral.value() == mint_amount, 0);
+    scenario.return_to_sender<Collateral<TEST_COIN>>(collateral);
+
+    scenario.end();
+}
+
+#[test]
+public fun test_post_collateral_good_2() {
+    let sender = @0xdeadbeef;
+    let mut scenario = test_scenario::begin(sender);
+
+    test_coin::test_init(scenario.ctx());
+
+    scenario.next_tx(sender);
+
+    let collats = vector[
+        new_collateral_identifier (
+            string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
+            8,
+            x"03"
+        )
+    ];
+    let program =  init_program_internal(scenario.ctx(), collats, 8);
+
+    let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
+
+    let mint_amount = 100;
+    let sender = scenario.sender();
+    test_coin::mint( &mut t_cap, mint_amount, sender, scenario.ctx());
+
+    init_account(&program, scenario.ctx());
+
+    scenario.next_tx(sender);
+
+    let mut account = scenario.take_from_sender<Account>();
+    let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+
+    post_collateral(&mut account, &program, coin, scenario.ctx());
+    let mut i = 0;
+    while(i < account.collateral_balances().length()){
+        let bal = account.collateral_balances().borrow(i);
+        if(i != 0){
             assert!(bal == 0, 0);
         }
         else{
