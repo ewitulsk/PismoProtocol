@@ -7,6 +7,7 @@ use std::type_name;
 use std::string::{Self, String};
 
 use pismo_protocol::math;
+use pismo_protocol::main::AdminCap;
 
 public struct LPToken<phantom CoinType> has drop, store {}
 
@@ -15,6 +16,7 @@ public struct Vault<phantom CoinType, phantom LPType> has key {
     coin: Balance<CoinType>,
     lp: Supply<LPToken<LPType>>,
     global_index: u64,
+    deprecated: bool,
 }
 
 public struct Global has key {
@@ -33,9 +35,7 @@ fun init(ctx: &mut TxContext) {
     });
 }
 
-//This needs to be a permissioned function
-public entry fun init_lp_vault<CoinType, LPType>(global: &mut Global, vault_price_feed_bytes: vector<u8>, ctx: &mut TxContext) {
-    // PUT WHITELIST CALL HERE
+public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Global, vault_price_feed_bytes: vector<u8>, ctx: &mut TxContext) {
 
     let lp_supply = balance::create_supply(LPToken<LPType>{});
 
@@ -44,6 +44,7 @@ public entry fun init_lp_vault<CoinType, LPType>(global: &mut Global, vault_pric
         coin: balance::zero(),
         lp: lp_supply,
         global_index: global.supported_lp.length(),
+        deprecated: false,
     };
 
     transfer::share_object(vault);
@@ -75,6 +76,9 @@ public entry fun deposit_lp<CoinType, LPType>(
     coin: Coin<CoinType>,
     ctx: &mut TxContext
 ) {
+    // Do not allow deposits if the vault is deprecated
+    assert!(!vault.deprecated, 0);
+    
     let reserve_amount = vault.coin.value();
     let supply_amount = coin.value(); // Adjusted from coin.balance().value()
     let lp_supply = vault.lp.supply_value();
@@ -112,6 +116,7 @@ public entry fun withdraw_lp<CoinType, LPType>(
 }
 
 public(package) fun extract_coin<CoinType, LPType>(
+    _: &AdminCap,
     global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
     amount: u64,
@@ -128,6 +133,7 @@ public(package) fun extract_coin<CoinType, LPType>(
 }
 
 public(package) fun deposit_coin<CoinType, LPType>(
+    _: &AdminCap,
     global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
     coin: Coin<CoinType>
@@ -144,6 +150,39 @@ public fun coin_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
 
 public fun lp_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
     vault.lp.supply_value()
+}
+
+public fun global_index<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
+    vault.global_index
+}
+
+public fun get_id(global: &Global): address {
+    global.id.to_address()
+}
+
+public fun get_supported_lp(global: &Global): vector<String> {
+    global.supported_lp
+}
+
+public fun get_price_feed_bytes(global: &Global): vector<vector<u8>> {
+    global.price_feed_bytes
+}
+
+public fun get_vault_balances(global: &Global): vector<u64> {
+    global.vault_balances
+}
+
+public fun is_deprecated<CoinType, LPType>(vault: &Vault<CoinType, LPType>): bool {
+    vault.deprecated
+}
+
+public entry fun set_deprecated<CoinType, LPType>(
+    _: &AdminCap,
+    vault: &mut Vault<CoinType, LPType>,
+    deprecated: bool,
+    ctx: &mut TxContext
+) { 
+    vault.deprecated = deprecated;
 }
 
 #[test_only]

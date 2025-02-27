@@ -12,6 +12,8 @@ use std::type_name;
 use std::debug;
 use std::u128::pow;
 
+use pismo_protocol::main::AdminCap;
+
 public struct CollateralIdentifier has copy, drop, store {
     token_info: String,
     token_decimals: u8,
@@ -24,7 +26,7 @@ public struct Program has key {
     shared_price_decimals: u8 //This is the precision that each asset will be evaluated on DEFAULT WILL BE 10.
 }
 
-public entry fun init_program(init_token_info: vector<String>, init_price_feed_id_bytes: vector<vector<u8>>, shared_price_decimals: u8, ctx: &mut TxContext) {
+public entry fun init_program(_: &AdminCap, init_token_info: vector<String>, init_price_feed_id_bytes: vector<vector<u8>>, shared_price_decimals: u8, ctx: &mut TxContext) {
     let mut collateral_identifiers = vector::empty<CollateralIdentifier>();
     let mut i = 0;
     while(i < init_token_info.length()){

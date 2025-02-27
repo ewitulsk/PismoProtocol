@@ -2,6 +2,7 @@ module pismo_protocol::test_lp;
 
 use pismo_protocol::lp;
 use pismo_protocol::lp::{Vault, LPToken, Global};
+use pismo_protocol::main::{Self, AdminCap};
 
 use pismo_protocol::test_coin::{Self, TEST_COIN};
 
@@ -27,10 +28,12 @@ fun test_lp() {
     // Start test scenario
     let mut scenario = test_scenario::begin(admin);
 
-    // Transaction 1: Create TEST_COIN currency
+    // Transaction 1: Create TEST_COIN currency and AdminCap
     {
         let treasury_cap = test_coin::init_token(scenario.ctx());
         transfer::public_transfer(treasury_cap, scenario.sender());
+        let admin_cap = main::create_admin_cap_for_testing(scenario.ctx());
+        transfer::public_transfer(admin_cap, scenario.sender());
     };
 
     // Transaction 2: Initialize the Global object
@@ -42,9 +45,11 @@ fun test_lp() {
     // Transaction 3: Initialize the vault
     test_scenario::next_tx(&mut scenario, admin);
     {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&admin_cap, &mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
+        test_scenario::return_to_sender(&scenario, admin_cap);
     };
 
     // Transaction 4: Mint 1000 TEST_COIN for user1
@@ -63,6 +68,7 @@ fun test_lp() {
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
         lp::deposit_lp(&mut global, &mut vault, coin, scenario.ctx());
+        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1000);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -96,6 +102,7 @@ fun test_lp() {
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
         lp::deposit_lp(&mut global, &mut vault, coin, scenario.ctx());
+        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1500);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -123,6 +130,7 @@ fun test_lp() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         lp::withdraw_lp(&mut global, &mut vault, to_burn, scenario.ctx());
+        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1200);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
         test_scenario::return_to_sender(&scenario, lp_token);
@@ -157,6 +165,7 @@ fun test_lp() {
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
         lp::deposit_lp(&mut global, &mut vault, coin, scenario.ctx());
+        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1800);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -181,6 +190,7 @@ fun test_lp() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         lp::withdraw_lp(&mut global, &mut vault, lp_token, scenario.ctx());
+        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1200);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -214,6 +224,7 @@ fun test_lp() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         lp::withdraw_lp(&mut global, &mut vault, lp_token, scenario.ctx());
+        assert!(global.get_vault_balances().borrow(vault.global_index()) == 0);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -265,6 +276,24 @@ fun test_lp() {
         test_scenario::return_shared(vault);
     };
 
+    // Test set_deprecated
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
+        let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        lp::set_deprecated(&admin_cap, &mut vault, true, scenario.ctx());
+        test_scenario::return_shared(vault);
+        test_scenario::return_to_sender(&scenario, admin_cap);
+    };
+
+    // Verify vault is deprecated
+    test_scenario::next_tx(&mut scenario, admin);
+    {
+        let vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
+        assert!(vault.is_deprecated(), 0);
+        test_scenario::return_shared(vault);
+    };
+
     test_scenario::end(scenario);
 }
 
@@ -279,6 +308,8 @@ fun test_deposit_zero() {
     {
         let treasury_cap = test_coin::init_token(scenario.ctx());
         transfer::public_transfer(treasury_cap, scenario.sender());
+        let admin_cap = main::create_admin_cap_for_testing(scenario.ctx());
+        transfer::public_transfer(admin_cap, scenario.sender());
     };
     test_scenario::next_tx(&mut scenario, admin);
     {
@@ -286,9 +317,11 @@ fun test_deposit_zero() {
     };
     test_scenario::next_tx(&mut scenario, admin);
     {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&admin_cap, &mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
+        test_scenario::return_to_sender(&scenario, admin_cap);
     };
     test_scenario::next_tx(&mut scenario, admin);
     {
@@ -316,10 +349,12 @@ fun test_extract_coin() {
     let user = @0x2;
 
     let mut scenario = test_scenario::begin(admin);
-    // Initialize TEST_COIN
+    // Initialize TEST_COIN and AdminCap
     {
         let treasury_cap = test_coin::init_token(scenario.ctx());
         transfer::public_transfer(treasury_cap, scenario.sender());
+        let admin_cap = main::create_admin_cap_for_testing(scenario.ctx());
+        transfer::public_transfer(admin_cap, scenario.sender());
     };
     // Initialize the Global object
     test_scenario::next_tx(&mut scenario, admin);
@@ -329,9 +364,11 @@ fun test_extract_coin() {
     // Initialize the vault
     test_scenario::next_tx(&mut scenario, admin);
     {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&admin_cap, &mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
+        test_scenario::return_to_sender(&scenario, admin_cap);
     };
     // Mint 1000 TEST_COIN for user and deposit into vault
     test_scenario::next_tx(&mut scenario, admin);
@@ -353,13 +390,15 @@ fun test_extract_coin() {
     // Extract 300 TEST_COIN as admin
     test_scenario::next_tx(&mut scenario, admin);
     {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
-        let extracted = lp::extract_coin(&mut global, &mut vault, 300, scenario.ctx());
+        let extracted = lp::extract_coin(&admin_cap, &mut global, &mut vault, 300, scenario.ctx());
         assert!(extracted.value() == 300, 0);
         transfer::public_transfer(extracted, scenario.ctx().sender());
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
+        test_scenario::return_to_sender(&scenario, admin_cap);
     };
     // Verify that vault has 700 TEST_COIN left
     test_scenario::next_tx(&mut scenario, admin);
@@ -378,10 +417,12 @@ fun test_deposit_coin() {
     let user = @0x2;
 
     let mut scenario = test_scenario::begin(admin);
-    // Initialize TEST_COIN
+    // Initialize TEST_COIN and AdminCap
     {
         let treasury_cap = test_coin::init_token(scenario.ctx());
         transfer::public_transfer(treasury_cap, scenario.sender());
+        let admin_cap = main::create_admin_cap_for_testing(scenario.ctx());
+        transfer::public_transfer(admin_cap, scenario.sender());
     };
     // Initialize the Global object
     test_scenario::next_tx(&mut scenario, admin);
@@ -391,27 +432,31 @@ fun test_deposit_coin() {
     // Initialize the vault
     test_scenario::next_tx(&mut scenario, admin);
     {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
-        lp::init_lp_vault<TEST_COIN, TEST_LP>(&mut global, vector::empty(), scenario.ctx());
+        lp::init_lp_vault<TEST_COIN, TEST_LP>(&admin_cap, &mut global, vector::empty(), scenario.ctx());
         test_scenario::return_shared(global);
+        test_scenario::return_to_sender(&scenario, admin_cap);
     };
     // Mint 500 TEST_COIN for user
     test_scenario::next_tx(&mut scenario, admin);
     {
         let mut treasury_cap = test_scenario::take_from_sender<TreasuryCap<TEST_COIN>>(&scenario);
         let coin = coin::mint(&mut treasury_cap, 500, scenario.ctx());
-        transfer::public_transfer(coin, user);
+        transfer::public_transfer(coin, admin);
         test_scenario::return_to_sender(&scenario, treasury_cap);
     };
     // User deposits 500 TEST_COIN into the vault using deposit_coin
-    test_scenario::next_tx(&mut scenario, user);
+    test_scenario::next_tx(&mut scenario, admin);
     {
+        let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
-        lp::deposit_coin(&mut global, &mut vault, coin);
+        lp::deposit_coin(&admin_cap, &mut global, &mut vault, coin);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
+        test_scenario::return_to_sender(&scenario, admin_cap);
     };
     // Verify that vault has 500 TEST_COIN
     test_scenario::next_tx(&mut scenario, admin);
