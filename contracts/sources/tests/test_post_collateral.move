@@ -9,7 +9,9 @@ use sui::tx_context;
 use sui::test_scenario;
 
 #[test_only]
-use pismo_protocol::programs::{Program, new_collateral_identifier, init_program_internal, destroy_program};
+use pismo_protocol::programs::{Program, init_program_internal, destroy_program};
+#[test_only]
+use pismo_protocol::tokens::new_token_identifier;
 #[test_only]
 use pismo_protocol::accounts::{Account, init_account};
 #[test_only]
@@ -21,27 +23,27 @@ use pismo_protocol::test_coin::{Self, TEST_COIN};
 fun test_ensure_balances() {
     let mut ctx = tx_context::dummy();
     let collats = vector[
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x1"),
             8,
             x"01"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x2"),
             8,
             x"02"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x3"),
             8,
             x"03"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x4"),
             8,
             x"04"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x5"),
             8,
             x"05"
@@ -72,27 +74,27 @@ public fun test_post_collateral_bad() {
     scenario.next_tx(sender);
 
     let collats = vector[
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x1"),
             8,
             x"01"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x2"),
             8,
             x"02"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x3"),
             8,
             x"03"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x4"),
             8,
             x"04"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x5"),
             8,
             x"05"
@@ -132,27 +134,27 @@ public fun test_post_collateral_good() {
     scenario.next_tx(sender);
 
     let collats = vector[
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x1"),
             8,
             x"01"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x2"),
             8,
             x"02"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
             8,
             x"03"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x4"),
             8,
             x"04"
         ),
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0x5"),
             8,
             x"05"
@@ -208,7 +210,7 @@ public fun test_post_collateral_good_2() {
     scenario.next_tx(sender);
 
     let collats = vector[
-        new_collateral_identifier (
+        new_token_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
             8,
             x"03"
