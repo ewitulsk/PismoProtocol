@@ -1,13 +1,16 @@
-import { SuiPriceServiceConnection, SuiPythClient } from "@pythnetwork/pyth-sui-js";
+import { SuiPythClient, SuiPriceServiceConnection } from "@pythnetwork/pyth-sui-js";
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import * as dotenv from 'dotenv';
 
+// Export our SuiPriceServiceConnection class
+// export { SuiPriceServiceConnection } from './SuiPriceServiceConnection';
+
 // Load environment variables from .env file
 dotenv.config({ path: '.env' });
 
-const SUI_PACKAGE_ID = "0x38c1ba22d155543aa4ea21624b6d93301753a5aeb99f030484ef0683c8b2d77f"
+const SUI_PACKAGE_ID = "0x6e2effa9b54182da69ea6706ff15a643eae1f1dd66b4a1c73c5b91ff9cefa296"
 
 async function main() {
     const private_key = process.env.PRIVATE_KEY as string;
@@ -18,7 +21,7 @@ async function main() {
      
     const priceIDs = [
         // You can find the IDs of prices at https://pyth.network/developers/price-feed-ids
-        "0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6" // ETH/USD price ID
+        "0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266" // ETH/USD price ID
     ];
      
     const priceUpdateData = await connection.getPriceFeedsUpdateData(priceIDs);
@@ -47,12 +50,10 @@ async function main() {
     });
      
     // Create the wallet from the client and keypair
-    client.signAndExecuteTransaction({
-        transaction: tx,
-        signer: keypair,
-    });
-
-    
+    // client.signAndExecuteTransaction({
+    //     transaction: tx,
+    //     signer: keypair,
+    // });
 }
 
 // Execute the main function
