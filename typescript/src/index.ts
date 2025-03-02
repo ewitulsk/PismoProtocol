@@ -7,7 +7,7 @@ import * as dotenv from 'dotenv';
 // Load environment variables from .env file
 dotenv.config({ path: '.env' });
 
-const SUI_PACKAGE_ID = "0x38c1ba22d155543aa4ea21624b6d93301753a5aeb99f030484ef0683c8b2d77f"
+const SUI_PACKAGE_ID = "0x6e2effa9b54182da69ea6706ff15a643eae1f1dd66b4a1c73c5b91ff9cefa296"
 
 async function main() {
     const private_key = process.env.PRIVATE_KEY as string;

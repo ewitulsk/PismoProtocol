@@ -28,7 +28,8 @@ public entry fun init_program(
     init_collateral_price_feed_id_bytes: vector<vector<u8>>, 
     init_positions_info: vector<String>,
     init_positions_price_feed_id_bytes: vector<vector<u8>>,
-    shared_price_decimals: u8, ctx: &mut TxContext
+    shared_price_decimals: u8, 
+    ctx: &mut TxContext
 ) {
     let mut collateral_identifiers = vector::empty<TokenIdentifier>();
     let mut i = 0;
@@ -46,8 +47,8 @@ public entry fun init_program(
     let mut position_identifiers = vector::empty<TokenIdentifier>();
     let mut j = 0;
     while(j < init_positions_info.length()) {
-        let info = init_positions_info[i];
-        let feed_id = init_positions_price_feed_id_bytes[i];
+        let info = init_positions_info[j];
+        let feed_id = init_positions_price_feed_id_bytes[j];
         position_identifiers.push_back(new_token_identifier(
             info,
             shared_price_decimals,
