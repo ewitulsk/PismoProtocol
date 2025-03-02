@@ -15,7 +15,7 @@ use pismo_protocol::tokens::new_token_identifier;
 #[test_only]
 use pismo_protocol::accounts::{Account, init_account};
 #[test_only]
-use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_balance_length, E_INVALID_COLLATERAL};
+use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_vecs_length, E_INVALID_COLLATERAL};
 #[test_only]
 use pismo_protocol::test_coin::{Self, TEST_COIN};
 
@@ -26,37 +26,74 @@ fun test_ensure_balances() {
         new_token_identifier (
             string::utf8(b"0x1"),
             8,
-            x"01"
+            x"01",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x2"),
             8,
-            x"02"
+            x"02",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x3"),
             8,
-            x"03"
+            x"03",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x4"),
             8,
-            x"04"
+            x"04",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x5"),
             8,
-            x"05"
+            x"05",
+            0
         ),
     ];
-    let test_program =  init_program_internal(&mut ctx, collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0x1"),
+            8,
+            x"01",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x2"),
+            8,
+            x"02",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x3"),
+            8,
+            x"03",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x4"),
+            8,
+            x"04",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x5"),
+            8,
+            x"05",
+            0
+        ),
+    ];
+    let test_program =  init_program_internal(&mut ctx, collats, positions, 8);
 
     let mut test_collats = vector::empty<u64>();
-    ensure_collateral_balance_length(&test_program, &mut test_collats);
+    ensure_collateral_vecs_length(&test_program, &mut test_collats, 0);
     assert!(test_collats.length() == test_program.supported_collateral().length(), 0);
 
     let mut test_collats_2 = vector[1, 2];
-    ensure_collateral_balance_length(&test_program, &mut test_collats_2);
+    ensure_collateral_vecs_length(&test_program, &mut test_collats_2, 0);
     assert!(test_collats_2.length() == test_program.supported_collateral().length(), 0);
 
     destroy_program(test_program);
@@ -77,30 +114,67 @@ public fun test_post_collateral_bad() {
         new_token_identifier (
             string::utf8(b"0x1"),
             8,
-            x"01"
+            x"01",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x2"),
             8,
-            x"02"
+            x"02",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x3"),
             8,
-            x"03"
+            x"03",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x4"),
             8,
-            x"04"
+            x"04",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x5"),
             8,
-            x"05"
+            x"05",
+            0
         ),
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0x1"),
+            8,
+            x"01",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x2"),
+            8,
+            x"02",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x3"),
+            8,
+            x"03",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x4"),
+            8,
+            x"04",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x5"),
+            8,
+            x"05",
+            0
+        ),
+    ];
+    let program =  init_program_internal(scenario.ctx(), collats, positions, 8);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -137,30 +211,67 @@ public fun test_post_collateral_good() {
         new_token_identifier (
             string::utf8(b"0x1"),
             8,
-            x"01"
+            x"01",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x2"),
             8,
-            x"02"
+            x"02",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
             8,
-            x"03"
+            x"03",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x4"),
             8,
-            x"04"
+            x"04",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x5"),
             8,
-            x"05"
+            x"05",
+            0
         ),
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0x1"),
+            8,
+            x"01",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x2"),
+            8,
+            x"02",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
+            8,
+            x"03",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x4"),
+            8,
+            x"04",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x5"),
+            8,
+            x"05",
+            0
+        ),
+    ];
+    let program =  init_program_internal(scenario.ctx(), collats, positions, 8);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -213,10 +324,19 @@ public fun test_post_collateral_good_2() {
         new_token_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
             8,
-            x"03"
+            x"03",
+            0
         )
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
+            8,
+            x"03",
+            0
+        )
+    ];
+    let program =  init_program_internal(scenario.ctx(), collats,positions, 8);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 

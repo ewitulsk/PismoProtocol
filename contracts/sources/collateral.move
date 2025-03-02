@@ -18,10 +18,11 @@ use std::debug;
 use std::u128::pow;
 
 use pismo_protocol::programs::Program;
-use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID};
+use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth};
 use pismo_protocol::accounts::{Account, assert_account_program_match};
 
 const E_INVALID_COLLATERAL: u64 = 9999999999;
+const E_VALUE_UPDATED_TO_LONG_AGO: u64 = 98888;
 
 public struct Collateral<phantom CoinType> has key {
     id: UID,
@@ -31,71 +32,105 @@ public struct Collateral<phantom CoinType> has key {
     collateral_index: u64
 }
 
-public(package) fun ensure_collateral_balance_length(program: &Program, account_balances: &mut vector<u64>){
+public(package) fun ensure_collateral_vecs_length<T: copy + drop>(program: &Program, account_collateral_vec: &mut vector<T>, default: T){
     let num_collat_types = program.supported_collateral().length();
-    let balances_len = account_balances.length();
+    let balances_len = account_collateral_vec.length();
     let mut i = 0;
     if(balances_len > 0){
         i = balances_len;
     };
     while(i < num_collat_types){
-        account_balances.push_back(0);
+        account_collateral_vec.push_back(copy default);
         i = i + 1;
     }
 }
 
 //For how to pass in the PriceInfoObjs, see the comment above assert_price_obj_match_identifiers_pyth
-public(package) fun sum_collateral_balances_pyth(
+// public(package) fun sum_collateral_balances_pyth(
+//     clock: &Clock,
+//     price_info_objs: &vector<PriceInfoObject>,
+//     account: &Account,
+//     program: &Program
+// ): u128 {
+//     assert_account_program_match(account, program);
+//     assert_price_obj_match_identifiers_pyth(price_info_objs, program.supported_collateral());
+
+//     let shared_decimals = program.shared_price_decimals();
+
+//     let mut total_collateral_value = 0;
+
+//     let mut collateral_i = 0;
+//     let mut price_objs_i = 0;
+//     while(collateral_i < account.collateral_balances().length()){
+//         let account_balance = *account.collateral_balances().borrow(collateral_i);
+//         let token_id = program.supported_collateral().borrow(collateral_i);
+//         if (token_id.oracle_feed() as u64 == get_PYTH_ID()){
+//             let price_info_obj = price_info_objs.borrow(price_objs_i);
+//             let normalized_value = token_id.get_value_pyth(price_info_obj, clock, account_balance, shared_decimals);
+//             total_collateral_value = total_collateral_value + normalized_value;
+//             price_objs_i = price_objs_i + 1;
+//         };
+
+//         collateral_i = collateral_i + 1;
+//     };
+
+//     total_collateral_value
+// }
+
+public entry fun set_collateral_value_pyth(
     clock: &Clock,
-    price_info_objs: &vector<PriceInfoObject>,
-    account: &Account,
+    price_info_obj: &PriceInfoObject,
+    collateral_i: u64,
+    //Add other oracle price objects here.
+    account: &mut Account,
     program: &Program
-): u128 {
-    assert_account_program_match(account, program);
-    assert_price_obj_match_identifiers_pyth(price_info_objs, program.supported_collateral());
+) {
+    ensure_collateral_vecs_length(program, account.collateral_values_mut(), 0);
+    ensure_collateral_vecs_length(program, account.collateral_balances_mut(), 0);
+    ensure_collateral_vecs_length(program, account.collateral_update_times_mut(), 0);
+    let token_id = program.supported_collateral().borrow(collateral_i);
+    assert!(token_id.oracle_feed() as u64 == get_PYTH_ID(), E_INVALID_COLLATERAL);
+    assert!(token_id.price_feed_id_bytes() == get_price_feed_bytes_pyth(price_info_obj), E_INVALID_COLLATERAL);
+    let amount = *account.collateral_balances().borrow(collateral_i);
 
-    let shared_decimals = program.shared_price_decimals();
+    let collateral_value = token_id.get_value_pyth(price_info_obj, clock, amount, program.shared_price_decimals());
+    account.set_collateral_value(collateral_i, collateral_value, clock);
+}   
 
-    let mut total_collateral_value = 0;
-
-    let mut collateral_i = 0;
-    let mut price_objs_i = 0;
-    while(collateral_i < account.collateral_balances().length()){
-        let account_balance = *account.collateral_balances().borrow(collateral_i);
-        let token_id = program.supported_collateral().borrow(collateral_i);
-        if (token_id.oracle_feed() as u64 == get_PYTH_ID()){
-            let price_info_obj = price_info_objs.borrow(price_objs_i);
-            let normalized_value = token_id.get_value_pyth(price_info_obj, clock, account_balance, shared_decimals);
-            total_collateral_value = total_collateral_value + normalized_value;
-            price_objs_i = price_objs_i + 1;
-        };
-
-        collateral_i = collateral_i + 1;
+public fun sum_collateral_values(account: &Account, clock: &Clock): u128{
+    let mut total_value: u128 = 0;
+    let cur_time = clock.timestamp_ms();
+    let mut i = 0;
+    while(i < account.collateral_values().length()){
+        let value = *account.collateral_values().borrow(i);
+        let updated_time = account.collateral_update_times().borrow(i);
+        assert!(updated_time == cur_time, E_VALUE_UPDATED_TO_LONG_AGO);
+        total_value = total_value + value;
+        i = i + 1;
     };
-
-    total_collateral_value
+    total_value
 }
 
 //For how to pass in the PriceInfoObjs, see the comment above assert_price_obj_match_identifiers_pyth
 //If we upgrade the contracts I don't think we can change function parameters, so we might have to make a whole new
 //function every time we want to add a new oracle.
-public(package) fun sum_collateral_balances_0(
-    clock: &Clock,
-    price_info_objs: &vector<PriceInfoObject>,
-    //Add other oracle price objects here.
-    account: &Account,
-    program: &Program
-): u128 {
-    let mut total = 0;
-    total = total + sum_collateral_balances_pyth(clock, price_info_objs, account, program);
-    //Sum other oracle collateral balances here.
+// public(package) fun sum_collateral_balances_0(
+//     clock: &Clock,
+//     price_info_objs: &vector<PriceInfoObject>,
+//     //Add other oracle price objects here.
+//     account: &Account,
+//     program: &Program
+// ): u128 {
+//     let mut total = 0;
+//     total = total + sum_collateral_balances_pyth(clock, price_info_objs, account, program);
+//     //Sum other oracle collateral balances here.
 
-    total
-}
+//     total
+// }
 
 public entry fun post_collateral<CoinType>(account: &mut Account, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
     assert_account_program_match(account, program);
-    ensure_collateral_balance_length(program, account.collateral_balances_mut());
+    ensure_collateral_vecs_length(program, account.collateral_balances_mut(), 0);
     let coin_bal = coin.value();
     let type_str = type_name::get<CoinType>().into_string();
     let mut i = 0;
