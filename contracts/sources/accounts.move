@@ -75,13 +75,14 @@ public fun open_position(
 
     assert_maintence_margin();
 
-    let entry_price = token_id.get_price(oracle_info);
+    let (entry_price, entry_price_decimals) = oracle_info.get_price();
 
     transfer::public_transfer(
         new_position(
             pos_type,
             pos_amount,
             entry_price,
+            entry_price_decimals,
             program_pos_i,
             ctx
         ), ctx.sender()

@@ -20,7 +20,8 @@ public struct Position has key, store {
     id: UID,
     _type: PositionType,
     amount: u64,
-    entry_price:  u128,
+    entry_price:  u64,
+    entry_price_decimals: u8,
     supported_positions_token_i: u64
 }
 
@@ -38,7 +39,8 @@ public fun u64_to_position_type(pos_id: u64): PositionType {
 public(package) fun new_position(
     pos_type: PositionType,
     amount: u64,
-    entry_price: u128,
+    entry_price: u64,
+    entry_price_decimals: u8,
     supported_positions_token_i: u64,
     ctx: &mut TxContext
 ): Position {
@@ -47,6 +49,7 @@ public(package) fun new_position(
         _type: pos_type,
         amount,
         entry_price,
+        entry_price_decimals,
         supported_positions_token_i
     }
 }
