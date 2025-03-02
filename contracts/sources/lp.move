@@ -5,9 +5,12 @@ use sui::balance::{Self, Balance, Supply};
 use sui::bag::{Self, Bag};
 use std::type_name;
 use std::string::{Self, String};
+use sui::transfer;
+use sui::object::{Self, UID};
+use sui::tx_context::{Self, TxContext};
 
 use pismo_protocol::math;
-use pismo_protocol::main::AdminCap;
+use pismo_protocol::main::{Self, AdminCap, Global};
 
 public struct LPToken<phantom CoinType> has drop, store {}
 
@@ -15,24 +18,8 @@ public struct Vault<phantom CoinType, phantom LPType> has key {
     id: UID,
     coin: Balance<CoinType>,
     lp: Supply<LPToken<LPType>>,
-    global_index: u64,
+    global_index: u64, //Index into the global supported lp vector.
     deprecated: bool,
-}
-
-public struct Global has key {
-    id: UID,
-    supported_lp: vector<String>,
-    price_feed_bytes: vector<vector<u8>>,
-    vault_balances: vector<u64>,
-}
-
-fun init(ctx: &mut TxContext) {
-    transfer::share_object(Global {
-        id: object::new(ctx),
-        supported_lp: vector::empty(),
-        price_feed_bytes: vector::empty(),
-        vault_balances: vector::empty(),
-    });
 }
 
 public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Global, vault_price_feed_bytes: vector<u8>, ctx: &mut TxContext) {
@@ -43,16 +30,16 @@ public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Glob
         id: object::new(ctx),
         coin: balance::zero(),
         lp: lp_supply,
-        global_index: global.supported_lp.length(),
+        global_index: global.get_supported_lp_length(),
         deprecated: false,
     };
 
     transfer::share_object(vault);
 
     let token_info = type_name::get<CoinType>().into_string();
-    global.supported_lp.push_back(token_info.to_string());
-    global.vault_balances.push_back(0);
-    global.price_feed_bytes.push_back(vault_price_feed_bytes);
+    global.push_supported_lp(token_info.to_string());
+    global.push_vault_balance(0);
+    global.push_price_feed_bytes(vault_price_feed_bytes);
 }
 
 fun calc_amount_to_mint(supply_amount: u64, lp_supply: u64, reserve_amount: u64): u64 {
@@ -88,8 +75,8 @@ public entry fun deposit_lp<CoinType, LPType>(
 
     vault.coin.join(coin.into_balance());
     
-    global.vault_balances.push_back(vault.coin.value());
-    global.vault_balances.swap_remove(vault.global_index);
+    global.push_vault_balance(vault.coin.value());
+    global.swap_remove_vault_balance(vault.global_index);
     
     transfer::public_transfer(balance_out.into_coin(ctx), ctx.sender());
 }
@@ -109,39 +96,36 @@ public entry fun withdraw_lp<CoinType, LPType>(
 
     let balance_out = vault.coin.split(amount_remove);
     
-    global.vault_balances.push_back(vault.coin.value());
-    global.vault_balances.swap_remove(vault.global_index);
+    global.push_vault_balance(vault.coin.value());
+    global.swap_remove_vault_balance(vault.global_index);
     
     transfer::public_transfer(balance_out.into_coin(ctx), ctx.sender());
 }
 
 public(package) fun extract_coin<CoinType, LPType>(
-    _: &AdminCap,
     global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
     amount: u64,
     ctx: &mut TxContext
 ): Coin<CoinType> {
-    // THIS IS A PERMISSIONED METHOD ADD THE WHITELIST CALL HERE
     assert!(vault.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = vault.coin.split(amount);
     
-    global.vault_balances.push_back(vault.coin.value());
-    global.vault_balances.swap_remove(vault.global_index);
+    global.push_vault_balance(vault.coin.value());
+    global.swap_remove_vault_balance(vault.global_index);
     
     balance_out.into_coin(ctx)
 }
 
 public(package) fun deposit_coin<CoinType, LPType>(
-    _: &AdminCap,
     global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
     coin: Coin<CoinType>
 ) {
     vault.coin.join(coin.into_balance());
     
-    global.vault_balances.push_back(vault.coin.value());
-    global.vault_balances.swap_remove(vault.global_index);
+    global.push_vault_balance(vault.coin.value());
+    global.swap_remove_vault_balance(vault.global_index);
 }
 
 public fun coin_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
@@ -157,19 +141,19 @@ public fun global_index<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 
 }
 
 public fun get_id(global: &Global): address {
-    global.id.to_address()
+    global.get_id_address()
 }
 
 public fun get_supported_lp(global: &Global): vector<String> {
-    global.supported_lp
+    global.get_supported_lp_vec()
 }
 
 public fun get_price_feed_bytes(global: &Global): vector<vector<u8>> {
-    global.price_feed_bytes
+    global.get_price_feed_bytes_vec()
 }
 
 public fun get_vault_balances(global: &Global): vector<u64> {
-    global.vault_balances
+    global.get_vault_balances_vec()
 }
 
 public fun is_deprecated<CoinType, LPType>(vault: &Vault<CoinType, LPType>): bool {
@@ -180,12 +164,12 @@ public entry fun set_deprecated<CoinType, LPType>(
     _: &AdminCap,
     vault: &mut Vault<CoinType, LPType>,
     deprecated: bool,
-    ctx: &mut TxContext
+    _ctx: &mut TxContext
 ) { 
     vault.deprecated = deprecated;
 }
 
 #[test_only]
 public fun init_global(ctx: &mut TxContext){
-    init(ctx);
+    main::test_init(ctx);
 }

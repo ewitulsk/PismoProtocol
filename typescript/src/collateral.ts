@@ -1,10 +1,13 @@
-import { SuiPriceServiceConnection, SuiPythClient } from "@pythnetwork/pyth-sui-js";
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
+import { SuiPythClient } from "@pythnetwork/pyth-sui-js";
+import { SuiPriceServiceConnection } from './SuiPriceServiceConnection';
+import { getFullnodeUrl, SuiClient, SuiObjectChange, SuiParsedData } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { bcs } from '@mysten/bcs';
 import * as dotenv from 'dotenv';
 import { SUI_PACKAGE_ID, SUI_PROGRAM_ID } from "./constants";
+import { execSync } from "child_process";
+import path from "path";
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env' });
@@ -21,23 +24,47 @@ async function main() {
     // // create a client connected to devnet
     const client = new SuiClient({ url: rpcUrl });
 
-    let token_infos = [`${SUI_PACKAGE_ID}::test_coin::TEST_COIN`.replace("0x", "")];
-    let price_feed_id_bytes = [Uint8Array.from(
+    let collateral_token_infos = [`${SUI_PACKAGE_ID}::test_coin::TEST_COIN`.replace("0x", "")];
+    let collateral_price_feed_id_bytes = [Uint8Array.from(
         Buffer.from(
-            "23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744",
+            "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266",
+            'hex'
+        )
+    )];
+    let position_token_infos = [`${SUI_PACKAGE_ID}::test_coin::TEST_COIN`.replace("0x", "")];
+    let position_price_feed_id_bytes = [Uint8Array.from(
+        Buffer.from(
+            "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266",
             'hex'
         )
     )];
     let token_decimals = 10;
-    
+
     /////////////// INIT PROGRAM
+
+    // const admin_cap = `${SUI_PACKAGE_ID}::main::AdminCap`;
+    // const owned_admin_caps = await client.getOwnedObjects({
+    //     owner: sender,
+    //     filter: {
+    //         MatchAny: [{
+    //             StructType: admin_cap
+    //         }]
+    //     }
+    // })
+    // const admin_cap_obj = owned_admin_caps.data[0].data?.objectId as string
+    // console.log(`Admin Cap: ${admin_cap_obj}`)
 
     // const tx0 = new Transaction();
     // tx0.moveCall({
     //     target: `${SUI_PACKAGE_ID}::programs::init_program`,
     //     arguments: [ // other arguments needed for your contract
-    //         tx0.pure(bcs.vector(bcs.string()).serialize(token_infos).toBytes()),
-    //         tx0.pure(bcs.vector(bcs.vector(bcs.u8())).serialize(price_feed_id_bytes).toBytes()),
+    //         tx0.object(admin_cap_obj),
+    //         tx0.pure(bcs.vector(bcs.string()).serialize(collateral_token_infos).toBytes()),
+    //         tx0.pure(bcs.vector(bcs.vector(bcs.u8())).serialize(collateral_price_feed_id_bytes).toBytes()),
+    //         tx0.pure(bcs.vector(bcs.u16()).serialize([0]).toBytes()),
+    //         tx0.pure(bcs.vector(bcs.string()).serialize(position_token_infos).toBytes()),
+    //         tx0.pure(bcs.vector(bcs.vector(bcs.u8())).serialize(position_price_feed_id_bytes).toBytes()),
+    //         tx0.pure(bcs.vector(bcs.u16()).serialize([0]).toBytes()),
     //         tx0.pure(bcs.u8().serialize(token_decimals).toBytes())
     //     ],
     // });
@@ -47,7 +74,12 @@ async function main() {
     //     transaction: tx0,
     //     signer: keypair,
     // });
-    // console.log(`TX: ${tx.transaction?.txSignatures}`);
+    // console.log(tx.digest);
+
+
+
+    
+    
 
 
 
@@ -84,25 +116,30 @@ async function main() {
 
     /////////////// INIT ACCOUNT
 
-    // const program = await client.getObject({
-    //     id: SUI_PROGRAM_ID
-    // })
+    // for( let program_id of SUI_PROGRAM_IDS) {
+    //     console.log(program_id)
+    //     const program = await client.getObject({
+    //         id: program_id
+    //     })
+    
+    //     console.log("Program: ", program);
+    
+    //     const tx1 = new Transaction();
+    //     tx1.moveCall({
+    //         target: `${SUI_PACKAGE_ID}::accounts::init_account`,
+    //         arguments: [ // other arguments needed for your contract
+    //             tx1.object(program_id)
+    //         ],
+    //     });
+    
+    //     let tx = await client.signAndExecuteTransaction({
+    //         transaction: tx1,
+    //         signer: keypair,
+    //     });
+    //     console.log(`TX: ${tx.digest}`);
+    // }
 
-    // console.log("Program: ", program);
-
-    // const tx1 = new Transaction();
-    // tx1.moveCall({
-    //     target: `${SUI_PACKAGE_ID}::accounts::init_account`,
-    //     arguments: [ // other arguments needed for your contract
-    //         tx1.object(SUI_PROGRAM_ID)
-    //     ],
-    // });
-
-    // let tx = await client.signAndExecuteTransaction({
-    //     transaction: tx1,
-    //     signer: keypair,
-    // });
-    // console.log(`TX: ${tx.transaction?.txSignatures}`);
+    
 
 
     /////////// POST COLLATERAL

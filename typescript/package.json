@@ -9,6 +9,8 @@
     "start": "ts-node src/index.ts",
     "collateral": "ts-node src/collateral.ts",
     "lp": "ts-node src/lp.ts",
+    "positions": "ts-node src/positions.ts",
+    "sum": "ts-node src/sum_collateral.ts",
     "serve": "ts-node src/server.ts"
   },
   "keywords": [],

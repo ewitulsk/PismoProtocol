@@ -13,55 +13,11 @@ use pismo_protocol::programs::{Program, init_program_internal, destroy_program};
 #[test_only]
 use pismo_protocol::tokens::new_token_identifier;
 #[test_only]
-use pismo_protocol::accounts::{Account, init_account};
+use pismo_protocol::accounts::{Account, AccountStats, init_account};
 #[test_only]
-use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_balance_length, E_INVALID_COLLATERAL};
+use pismo_protocol::collateral::{Collateral, post_collateral, E_INVALID_COLLATERAL, value};
 #[test_only]
 use pismo_protocol::test_coin::{Self, TEST_COIN};
-
-#[test]
-fun test_ensure_balances() {
-    let mut ctx = tx_context::dummy();
-    let collats = vector[
-        new_token_identifier (
-            string::utf8(b"0x1"),
-            8,
-            x"01"
-        ),
-        new_token_identifier (
-            string::utf8(b"0x2"),
-            8,
-            x"02"
-        ),
-        new_token_identifier (
-            string::utf8(b"0x3"),
-            8,
-            x"03"
-        ),
-        new_token_identifier (
-            string::utf8(b"0x4"),
-            8,
-            x"04"
-        ),
-        new_token_identifier (
-            string::utf8(b"0x5"),
-            8,
-            x"05"
-        ),
-    ];
-    let test_program =  init_program_internal(&mut ctx, collats, 8);
-
-    let mut test_collats = vector::empty<u64>();
-    ensure_collateral_balance_length(&test_program, &mut test_collats);
-    assert!(test_collats.length() == test_program.supported_collateral().length(), 0);
-
-    let mut test_collats_2 = vector[1, 2];
-    ensure_collateral_balance_length(&test_program, &mut test_collats_2);
-    assert!(test_collats_2.length() == test_program.supported_collateral().length(), 0);
-
-    destroy_program(test_program);
-}
-
 
 #[test]
 #[expected_failure(abort_code = E_INVALID_COLLATERAL)]
@@ -77,30 +33,68 @@ public fun test_post_collateral_bad() {
         new_token_identifier (
             string::utf8(b"0x1"),
             8,
-            x"01"
+            x"01",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x2"),
             8,
-            x"02"
+            x"02",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x3"),
             8,
-            x"03"
+            x"03",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x4"),
             8,
-            x"04"
+            x"04",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x5"),
             8,
-            x"05"
+            x"05",
+            0
         ),
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0x1"),
+            8,
+            x"01",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x2"),
+            8,
+            x"02",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x3"),
+            8,
+            x"03",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x4"),
+            8,
+            x"04",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x5"),
+            8,
+            x"05",
+            0
+        ),
+    ];
+    let max_leverage = vector[1, 1, 1, 1, 1];
+    let program =  init_program_internal(scenario.ctx(), collats, positions, 8, max_leverage);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -114,9 +108,11 @@ public fun test_post_collateral_bad() {
 
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+    let mut stats = scenario.take_shared<AccountStats>();
 
-    post_collateral( &mut account, &program, coin, scenario.ctx());
+    post_collateral( &account, &mut stats, &program, coin, scenario.ctx());
     
+    test_scenario::return_shared(stats);
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
     destroy_program(program);
@@ -137,30 +133,68 @@ public fun test_post_collateral_good() {
         new_token_identifier (
             string::utf8(b"0x1"),
             8,
-            x"01"
+            x"01",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x2"),
             8,
-            x"02"
+            x"02",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
             8,
-            x"03"
+            x"03",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x4"),
             8,
-            x"04"
+            x"04",
+            0
         ),
         new_token_identifier (
             string::utf8(b"0x5"),
             8,
-            x"05"
+            x"05",
+            0
         ),
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0x1"),
+            8,
+            x"01",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x2"),
+            8,
+            x"02",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
+            8,
+            x"03",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x4"),
+            8,
+            x"04",
+            0
+        ),
+        new_token_identifier (
+            string::utf8(b"0x5"),
+            8,
+            x"05",
+            0
+        ),
+    ];
+    let max_leverage = vector[1, 1, 1, 1, 1];
+    let program =  init_program_internal(scenario.ctx(), collats, positions, 8, max_leverage);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -174,29 +208,22 @@ public fun test_post_collateral_good() {
 
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+    let mut stats = scenario.take_shared<AccountStats>();
 
-    post_collateral(&mut account, &program, coin, scenario.ctx());
-    let mut i = 0;
-    while(i < account.collateral_balances().length()){
-        let bal = account.collateral_balances().borrow(i);
-        if(i != 2){
-            assert!(bal == 0, 0);
-        }
-        else{
-            assert!(bal == mint_amount, 0);
-        };
-        i = i + 1;
-    };
+    post_collateral(&account, &mut stats, &program, coin, scenario.ctx());
     
+    assert!(stats.collateral_count() == 1, 0);
+    
+    test_scenario::return_shared(stats);
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
-    destroy_program(program);
-
+    
     scenario.next_tx(sender);
-    let collateral = scenario.take_from_sender<Collateral<TEST_COIN>>();
+    let collateral = scenario.take_shared<Collateral<TEST_COIN>>();
     assert!(collateral.value() == mint_amount, 0);
-    scenario.return_to_sender<Collateral<TEST_COIN>>(collateral);
-
+    test_scenario::return_shared(collateral);
+    
+    destroy_program(program);
     scenario.end();
 }
 
@@ -213,10 +240,20 @@ public fun test_post_collateral_good_2() {
         new_token_identifier (
             string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
             8,
-            x"03"
+            x"03",
+            0
         )
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, 8);
+    let positions = vector[
+        new_token_identifier (
+            string::utf8(b"0000000000000000000000000000000000000000000000000000000000000000::test_coin::TEST_COIN"),
+            8,
+            x"03",
+            0
+        )
+    ];
+    let max_leverage = vector[1];
+    let program =  init_program_internal(scenario.ctx(), collats,positions, 8, max_leverage);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -230,28 +267,21 @@ public fun test_post_collateral_good_2() {
 
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+    let mut stats = scenario.take_shared<AccountStats>();
 
-    post_collateral(&mut account, &program, coin, scenario.ctx());
-    let mut i = 0;
-    while(i < account.collateral_balances().length()){
-        let bal = account.collateral_balances().borrow(i);
-        if(i != 0){
-            assert!(bal == 0, 0);
-        }
-        else{
-            assert!(bal == mint_amount, 0);
-        };
-        i = i + 1;
-    };
+    post_collateral(&account, &mut stats, &program, coin, scenario.ctx());
     
+    assert!(stats.collateral_count() == 1, 0);
+    
+    test_scenario::return_shared(stats);
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
-    destroy_program(program);
-
+    
     scenario.next_tx(sender);
-    let collateral = scenario.take_from_sender<Collateral<TEST_COIN>>();
+    let collateral = scenario.take_shared<Collateral<TEST_COIN>>();
     assert!(collateral.value() == mint_amount, 0);
-    scenario.return_to_sender<Collateral<TEST_COIN>>(collateral);
-
+    test_scenario::return_shared(collateral);
+    
+    destroy_program(program);
     scenario.end();
 }
