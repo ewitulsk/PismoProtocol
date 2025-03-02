@@ -25,14 +25,23 @@ const PYTH_MAX_PRICE_AGE: u64 = 2; //2 seconds
 public struct TokenIdentifier has copy, drop, store {
     token_info: String,
     token_decimals: u8,
-    price_feed_id_bytes: vector<u8>
+    price_feed_id_bytes: vector<u8>,
+    deprecated: bool
 }
 
 public enum OracleInfoObjects {
     Pyth(PriceInfoObject, Clock)
 }
 
-public(package) fun get_value(token_id: &TokenIdentifier, oracle_info: &OracleInfoObjects, amount: u64, shared_decimals: u8): u128 {
+public(package) fun get_price_feed_bytes(oracle_info: &OracleInfoObjects): vector<u8> {
+    match (oracle_info) {
+        OracleInfoObjects::Pyth(price_info_obj, _) => {
+            price_info_obj.get_price_info_from_price_info_object().get_price_feed().get_price_identifier().get_bytes()
+        }
+    }
+}
+
+public(package) fun get_price(oracle_info: &OracleInfoObjects): (u64, u8) {
     match (oracle_info) {
         OracleInfoObjects::Pyth(price_info_object, clock) => {
 
@@ -42,33 +51,40 @@ public(package) fun get_value(token_id: &TokenIdentifier, oracle_info: &OracleIn
             let price_i64 = price::get_price(&price_struct);
 
             let price_decimal_u8 = (price_decimal_i64).get_magnitude_if_negative() as u8; //There's a chance this needs to be .get_magnitude_if_positive
-            let price_u128 = price_i64.get_magnitude_if_positive() as u128;
-            let token_decimal = token_id.token_decimals();
-            let token_balance_u128 = amount as u128;
-
-            let local_decimals = price_decimal_u8 + token_decimal;
-            let value = price_u128 * token_balance_u128;
-
-            let mut normalized_value = value; 
-            if(local_decimals > shared_decimals){
-                let diff = local_decimals-shared_decimals;
-                normalized_value = value / pow(10, diff);
-            }
-            else if(shared_decimals > local_decimals){
-                let diff = shared_decimals-local_decimals;
-                normalized_value = value * pow(10, diff);
-            };
-            //If shared_decimals == local_decimals, price will already by normalized;
-            //normalized_value is now the value of the asset in shared_decimals
-
-            normalized_value
+            let price_u64 = price_i64.get_magnitude_if_positive();
+            (price_u64, price_decimal_u8)
         },
 
         _ => {
             assert!(false, INVALID_ORACLE_INFO);
-            0
+            (0, 0)
         }
     }
+}
+
+public(package) fun get_value(token_id: &TokenIdentifier, oracle_info: &OracleInfoObjects, amount: u64, shared_decimals: u8): u128 {
+    assert!(token_id.price_feed_id_bytes() == oracle_info.get_price_feed_bytes());
+    let (price, decimals) = get_price(oracle_info);
+
+    let token_decimal = token_id.token_decimals();
+    let token_balance_u128 = amount as u128;
+
+    let local_decimals = decimals + token_decimal;
+    let value = (price as u128) * token_balance_u128;
+
+    let mut normalized_value = value; 
+    if(local_decimals > shared_decimals){
+        let diff = local_decimals-shared_decimals;
+        normalized_value = value / pow(10, diff);
+    }
+    else if(shared_decimals > local_decimals){
+        let diff = shared_decimals-local_decimals;
+        normalized_value = value * pow(10, diff);
+    };
+    //If shared_decimals == local_decimals, price will already by normalized;
+    //normalized_value is now the value of the asset in shared_decimals
+
+    normalized_value
 }
 
 public(package) fun assert_price_obj_match_identifiers(price_objs: &vector<OracleInfoObjects>, identifiers: &vector<TokenIdentifier>) {
@@ -93,17 +109,21 @@ public(package) fun new_token_identifier(
     token_decimals: u8,
     price_feed_id_bytes: vector<u8>
 ): TokenIdentifier {
-    TokenIdentifier { token_info, token_decimals, price_feed_id_bytes }
+    TokenIdentifier { token_info, token_decimals, price_feed_id_bytes, deprecated: false }
 }
 
-public(package) fun token_info(collateral: &TokenIdentifier): String {
-    collateral.token_info
+public(package) fun token_info(token: &TokenIdentifier): String {
+    token.token_info
 }
 
-public(package) fun token_decimals(collateral: &TokenIdentifier): u8 {
-    collateral.token_decimals
+public(package) fun token_decimals(token: &TokenIdentifier): u8 {
+    token.token_decimals
 }
 
-public(package) fun price_feed_id_bytes(collateral: &TokenIdentifier): vector<u8> {
-    collateral.price_feed_id_bytes
+public(package) fun price_feed_id_bytes(token: &TokenIdentifier): vector<u8> {
+    token.price_feed_id_bytes
+}
+
+public(package) fun set_deprecated(token: &mut TokenIdentifier, val: bool) {
+    token.deprecated = val;
 }
