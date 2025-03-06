@@ -1,0 +1,138 @@
+{
+  "owned_objects_response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "data": [
+        {
+          "data": {
+            "objectId": "0xsample_object_id",
+            "version": "1",
+            "digest": "sample_digest",
+            "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>",
+            "content": {
+              "fields": {
+                "account_id": "0xsample_account",
+                "coin": "100",
+                "program_id": "0xsample_program_id",
+                "id": {
+                  "id": "0xsample_id"
+                },
+                "collateral_index": "0"
+              },
+              "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>"
+            }
+          }
+        },
+        {
+          "data": {
+            "objectId": "0xnon_collateral_object",
+            "version": "1",
+            "digest": "sample_digest",
+            "type": "0xsample_contract::other_type::Other",
+            "content": {
+              "fields": {
+                "value": "200"
+              },
+              "type": "0xsample_contract::other_type::Other"
+            }
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasNextPage": false
+    }
+  },
+  "collateral_object": {
+    "data": {
+      "objectId": "0xsample_object_id",
+      "version": "1",
+      "digest": "sample_digest",
+      "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>",
+      "content": {
+        "fields": {
+          "account_id": "0xsample_account",
+          "coin": "100",
+          "program_id": "0xsample_program_id",
+          "id": {
+            "id": "0xsample_id"
+          },
+          "collateral_index": "0"
+        },
+        "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>"
+      }
+    }
+  },
+  "collateral_triples": [
+    {
+      "coin": "100",
+      "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>",
+      "program_id": "0xsample_program_id"
+    }
+  ],
+  "program_objects": [
+    {
+      "data": {
+        "objectId": "0xsample_program_id",
+        "version": "1",
+        "digest": "sample_digest",
+        "type": "0xsample_contract::programs::Program",
+        "owner": {
+          "Shared": {
+            "initial_shared_version": "1"
+          }
+        },
+        "content": {
+          "fields": {
+            "id": {
+              "id": "0xsample_program_id_inner"
+            },
+            "supported_collateral": [
+              {
+                "type": "0xsample_contract::programs::CollateralIdentifier",
+                "fields": {
+                  "price_feed_id_bytes": [35, 215, 49, 81, 19, 245, 177, 211, 186, 122, 131, 96, 76, 68, 185, 77, 121, 244, 253, 105, 175, 119, 248, 4, 252, 127, 146, 10, 109, 198, 87, 68],
+                  "token_decimals": 10,
+                  "token_info": "sample_contract::test_coin::TEST_COIN"
+                }
+              }
+            ],
+            "shared_price_decimals": 8
+          }
+        }
+      }
+    }
+  ],
+  "supported_collateral_list": [
+    {
+      "type": "0xsample_contract::programs::CollateralIdentifier",
+      "fields": {
+        "price_feed_id_bytes": [35, 215, 49, 81, 19, 245, 177, 211, 186, 122, 131, 96, 76, 68, 185, 77, 121, 244, 253, 105, 175, 119, 248, 4, 252, 127, 146, 10, 109, 198, 87, 68],
+        "token_decimals": 10,
+        "token_info": "sample_contract::test_coin::TEST_COIN"
+      }
+    }
+  ],
+  "price_feed_response": {
+    "parsed": [
+      {
+        "id": "0xsample_price_id",
+        "price": {
+          "price": "150000000",
+          "conf": "1250000",
+          "expo": -8,
+          "publish_time": 1685447858
+        },
+        "ema_price": {
+          "price": "149500000",
+          "conf": "1300000",
+          "expo": -8,
+          "publish_time": 1685447858
+        }
+      }
+    ],
+    "raw": [
+      "sample_raw_data"
+    ]
+  }
+}
