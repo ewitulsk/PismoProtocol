@@ -1,60 +1,59 @@
 "use client";
 import React, { useState } from "react";
-
-type TimeFrame = "1H" | "4H" | "1D";
+import AssetSelector from "./AssetSelector";
+import TradingViewWidget from "./TradingViewWidget";
+import TimeFrameSelector, { timeframes } from "./TimeFrameSelector";
+import LivePriceOverlay from "./LivePriceOverlay";
+import { tradingPairs, TradingPair } from "@/data/mocks/tradingPairs";
 
 const ChartContainer: React.FC = () => {
-  const [activeTimeFrame, setActiveTimeFrame] = useState<TimeFrame>("1H");
+  // Default to 1H timeframe, also support second-based intervals "1S", "10S", "30S"
+  const [selectedInterval, setSelectedInterval] = useState<string>("60");
+  const [selectedPair, setSelectedPair] = useState<TradingPair>(tradingPairs[0]);
 
-  const handleTimeFrameClick = (timeFrame: TimeFrame) => {
-    setActiveTimeFrame(timeFrame);
+  const handleTimeFrameChange = (interval: string) => {
+    setSelectedInterval(interval);
+  };
+
+  const handlePairSelect = (pair: TradingPair) => {
+    setSelectedPair(pair);
+  };
+
+  // Format symbol for TradingView - remove hyphen
+  const formatSymbol = (pair: TradingPair) => {
+    return `${pair.baseAsset}${pair.quoteAsset}`;
+  };
+  
+  // Get current price with formatting
+  const getFormattedPrice = (price: number) => {
+    return price.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   };
 
   return (
-    <section className="chart-container">
-      <div className="flex gap-4 mb-6 max-sm:flex-wrap">
-        <TimeButton
-          label="1H"
-          isActive={activeTimeFrame === "1H"}
-          onClick={() => handleTimeFrameClick("1H")}
+    <section className="trading-chart">
+      <div className="trading-controls">
+        <TimeFrameSelector
+          selectedTimeFrame={selectedInterval}
+          onTimeFrameChange={handleTimeFrameChange}
         />
-        <TimeButton
-          label="4H"
-          isActive={activeTimeFrame === "4H"}
-          onClick={() => handleTimeFrameClick("4H")}
+        <AssetSelector 
+          selectedPair={selectedPair} 
+          onPairSelect={handlePairSelect}
         />
-        <TimeButton
-          label="1D"
-          isActive={activeTimeFrame === "1D"}
-          onClick={() => handleTimeFrameClick("1D")}
-        />
-        <div className="px-4 py-2 ml-auto text-black rounded-lg bg-zinc-300 max-sm:mt-4 max-sm:w-full max-sm:text-center">
-          ETH-USD
-        </div>
       </div>
-      <div className="bg-mainBackground rounded-lg h-[600px]" />
+      <div className="relative bg-mainBackground rounded-lg w-full" style={{ height: 'calc(100% - 40px)' }}>
+        {/* Live price overlay component */}
+        <LivePriceOverlay pair={selectedPair} />
+        
+        <TradingViewWidget 
+          symbol={formatSymbol(selectedPair)} 
+          interval={selectedInterval} 
+        />
+      </div>
     </section>
-  );
-};
-
-interface TimeButtonProps {
-  label: TimeFrame;
-  isActive: boolean;
-  onClick: () => void;
-}
-
-const TimeButton: React.FC<TimeButtonProps> = ({
-  label,
-  isActive,
-  onClick,
-}) => {
-  return (
-    <button
-      className={`time-button ${isActive ? "time-button-active" : "time-button-inactive"}`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 };
 

@@ -7,6 +7,7 @@
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-rgb: 17, 24, 39;
+  --trading-sidebar-width: 350px;
 }
 
 body {

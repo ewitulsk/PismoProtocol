@@ -63,6 +63,12 @@
   @apply flex-1 p-6 rounded-xl bg-darkBackground max-md:w-full;
 }
 
+/* Special container for trading page */
+.trading-chart {
+  @apply p-2 md:p-3 rounded-xl bg-darkBackground max-md:w-full;
+  flex: 1 1 auto;
+}
+
 /* Headers */
 .header-main {
   @apply flex items-center px-6 py-0 border-b border-solid bg-darkBackground border-b-secondary h-[73px] max-sm:px-4 max-sm:py-0 rounded-b-lg;
