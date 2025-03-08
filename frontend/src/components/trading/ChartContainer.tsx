@@ -1,13 +1,33 @@
 "use client";
 import React, { useState } from "react";
+import AssetSelector from "./AssetSelector";
+import TradingViewWidget from "./TradingViewWidget";
+import { tradingPairs, TradingPair } from "@/data/mocks/tradingPairs";
 
 type TimeFrame = "1H" | "4H" | "1D";
 
 const ChartContainer: React.FC = () => {
   const [activeTimeFrame, setActiveTimeFrame] = useState<TimeFrame>("1H");
+  const [selectedPair, setSelectedPair] = useState<TradingPair>(tradingPairs[0]);
 
   const handleTimeFrameClick = (timeFrame: TimeFrame) => {
     setActiveTimeFrame(timeFrame);
+  };
+
+  const handlePairSelect = (pair: TradingPair) => {
+    setSelectedPair(pair);
+  };
+
+  // Map timeframe to TradingView intervals
+  const timeframeToInterval = {
+    "1H": "60",
+    "4H": "240",
+    "1D": "1D"
+  };
+
+  // Format symbol for TradingView - remove hyphen
+  const formatSymbol = (pair: TradingPair) => {
+    return `${pair.baseAsset}${pair.quoteAsset}`;
   };
 
   return (
@@ -28,11 +48,17 @@ const ChartContainer: React.FC = () => {
           isActive={activeTimeFrame === "1D"}
           onClick={() => handleTimeFrameClick("1D")}
         />
-        <div className="px-4 py-2 ml-auto text-black rounded-lg bg-zinc-300 max-sm:mt-4 max-sm:w-full max-sm:text-center">
-          ETH-USD
-        </div>
+        <AssetSelector 
+          selectedPair={selectedPair} 
+          onPairSelect={handlePairSelect}
+        />
       </div>
-      <div className="bg-mainBackground rounded-lg h-[600px]" />
+      <div className="bg-mainBackground rounded-lg h-[600px]">
+        <TradingViewWidget 
+          symbol={formatSymbol(selectedPair)} 
+          interval={timeframeToInterval[activeTimeFrame]} 
+        />
+      </div>
     </section>
   );
 };
