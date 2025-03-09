@@ -252,13 +252,17 @@ class PriceFeedWebsocketServer:
             client_id: The unique ID of the client
             subscription: The feed subscription details
         """
+
+        self.logger.info("Trying subscribe client to feed...")
+
         feed_id = subscription.feed_id
         ticker = subscription.ticker
         
         # Add subscription for this client
         if client_id in self.client_subscriptions:
+            self.logger.info("1")
             self.client_subscriptions[client_id].add(subscription)
-            
+
             # Add client to feed subscribers
             if feed_id not in self.feed_subscribers:
                 self.feed_subscribers[feed_id] = set()
@@ -268,9 +272,12 @@ class PriceFeedWebsocketServer:
             if feed_id not in self.active_pyth_feeds:
                 self.active_pyth_feeds.add(feed_id)
                 await self.pyth_client.subscribe_to_feed(feed_id)
-            
+            self.logger.info("2")
+
+            self.logger.info(f"Ticker: {ticker}, polygon_client: {bool(self.polygon_client)} ticker not in: {ticker not in self.active_polygon_tickers}")
             # Subscribe to Polygon ticker if Polygon client is available
             if ticker and self.polygon_client and ticker not in self.active_polygon_tickers:
+                self.logger.info("Trying to subscribe to Polygon...")
                 try:
                     self.active_polygon_tickers.add(ticker)
                     await self.polygon_client.subscribe_to_ticker(ticker)
@@ -491,6 +498,9 @@ class PriceFeedWebsocketServer:
         Args:
             bar_data: The bar data received from Polygon
         """
+
+        self.logger.info(bar_data)
+
         ticker = bar_data.ticker
         
         # Store the latest Polygon data
@@ -539,6 +549,7 @@ class PriceFeedWebsocketServer:
                 send_tasks = []
                 for client_id in self.feed_subscribers[feed_id]:
                     if client_id in self.clients:
+                        self.logger.info("Sending update to client!")
                         send_tasks.append(self.send_to_client(client_id, update_json))
                 
                 # Send messages in parallel

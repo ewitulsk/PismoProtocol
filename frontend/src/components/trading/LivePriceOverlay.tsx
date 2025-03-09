@@ -41,11 +41,9 @@ const LivePriceOverlay: React.FC<LivePriceOverlayProps> = ({ pair }) => {
     // This effect runs when the selected trading pair changes
     let isSubscribed = true;
     
-    // Function to handle price updates
-    const handlePriceUpdate = (newPrice: number, confidence: number) => {
+    // Function to handle price updates from Pyth
+    const handlePythUpdate = (newPrice: number, confidence: number) => {
       if (!isSubscribed) return;
-      
-      // Update with new price - no logging in production
       
       // Update price change direction
       if (previousPriceRef.current !== null) {
@@ -70,19 +68,19 @@ const LivePriceOverlay: React.FC<LivePriceOverlayProps> = ({ pair }) => {
     
     const initializePriceFeed = async () => {
       try {
-        // First get the latest price
+        // Get the latest price from Pyth
         const initialPrice = await pythPriceFeedService.getLatestPrice(symbol);
         if (initialPrice && isSubscribed) {
           setPrice(initialPrice.price);
           previousPriceRef.current = initialPrice.price;
         }
         
-        // Then subscribe to updates
+        // Subscribe to Pyth updates
         if (isSubscribed) {
-          await pythPriceFeedService.subscribe(symbol, handlePriceUpdate);
+          await pythPriceFeedService.subscribe(symbol, handlePythUpdate);
         }
       } catch (error) {
-        console.error(`[Pyth] Error initializing price feed for ${symbol}:`, error);
+        console.error(`[LivePriceOverlay] Error initializing Pyth price feed for ${symbol}:`, error);
       }
     };
     
@@ -92,8 +90,10 @@ const LivePriceOverlay: React.FC<LivePriceOverlayProps> = ({ pair }) => {
     // Cleanup function
     return () => {
       isSubscribed = false;
+      
+      // Unsubscribe from Pyth
       pythPriceFeedService.unsubscribe(symbol)
-        .catch(error => console.error(`Error unsubscribing from ${symbol}:`, error));
+        .catch(error => console.error(`Error unsubscribing from Pyth ${symbol}:`, error));
     };
   }, [symbol]);
   

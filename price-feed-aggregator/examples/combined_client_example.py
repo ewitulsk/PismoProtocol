@@ -240,16 +240,16 @@ async def main() -> None:
                 
                 # Default subscriptions for BTC and ETH
                 subscriptions = [
-                    {
-                        "feed_id": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # BTC/USD
-                        "ticker": "X:BTC-USD",
-                        "timespan": timespan
-                    },
                     # {
-                    #     "feed_id": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # ETH/USD
-                    #     "ticker": "X:ETH-USD",
+                    #     "feed_id": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # BTC/USD
+                    #     "ticker": "X:BTC-USD",
                     #     "timespan": timespan
-                    # }
+                    # },
+                    {
+                        "feed_id": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # ETH/USD
+                        "ticker": "X:ETH-USD",
+                        "timespan": timespan
+                    }
                 ]
                 
                 # Subscribe to all default feeds at once
