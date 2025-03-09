@@ -83,6 +83,9 @@ class PriceFeedWebsocketServer:
             self.handle_client_connection,
             self.host,
             self.port,
+            # Set ping_interval and ping_timeout to keep connections alive
+            ping_interval=30,  # Send ping every 30 seconds
+            ping_timeout=10,   # Wait 10 seconds for pong response
         )
         
         self.logger.info(f"Websocket server started on ws://{self.host}:{self.port}")
@@ -247,11 +250,16 @@ class PriceFeedWebsocketServer:
             
             # Subscribe to Polygon ticker if Polygon client is available
             if ticker and self.polygon_client and ticker not in self.active_polygon_tickers:
-                self.active_polygon_tickers.add(ticker)
-                await self.polygon_client.subscribe_to_ticker(ticker)
-                
-                # Store the mapping between feed_id and ticker
-                self.feed_to_ticker_map[feed_id] = ticker
+                try:
+                    self.active_polygon_tickers.add(ticker)
+                    await self.polygon_client.subscribe_to_ticker(ticker)
+                    
+                    # Store the mapping between feed_id and ticker
+                    self.feed_to_ticker_map[feed_id] = ticker
+                except Exception as e:
+                    self.logger.error(f"Failed to subscribe to Polygon ticker {ticker}: {e}")
+                    # Remove from active tickers if subscription failed
+                    self.active_polygon_tickers.discard(ticker)
             
             # Notify client of successful subscription
             await self.clients[client_id].send(json.dumps({
@@ -417,6 +425,8 @@ class PriceFeedWebsocketServer:
             bar_data: The bar data received from Polygon
         """
         ticker = bar_data.ticker
+
+        self.logger.info(f"Got Update: {bar_data}")
         
         # Store the latest Polygon data
         self.latest_polygon_data[ticker] = bar_data

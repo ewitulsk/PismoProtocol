@@ -86,6 +86,9 @@ async def process_message(message: str) -> None:
     Args:
         message: The message received from the server
     """
+
+    # logger.info(message)
+
     try:
         data = json.loads(message)
         message_type = data.get("type", "")
@@ -118,7 +121,7 @@ async def process_message(message: str) -> None:
             
         elif message_type == "price_update":
             update_data = data.get("data", {})
-            
+                        
             # Extract key information
             symbol = update_data.get("symbol", "Unknown")
             price = update_data.get("price", 0)
@@ -219,7 +222,12 @@ async def main() -> None:
     logger.info(f"Connecting to server at {server_url}")
     
     try:
-        async with websockets.connect(server_url) as websocket:
+        # Connect with ping_interval and ping_timeout to match server settings
+        async with websockets.connect(
+            server_url,
+            ping_interval=30,
+            ping_timeout=10
+        ) as websocket:
             # First, get available feeds
             await get_available_feeds(websocket)
             
@@ -234,12 +242,12 @@ async def main() -> None:
                 subscriptions = [
                     {
                         "feed_id": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # BTC/USD
-                        "ticker": "X:BTCUSD",
+                        "ticker": "X:BTC-USD",
                         "timespan": timespan
                     },
                     # {
                     #     "feed_id": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # ETH/USD
-                    #     "ticker": "X:ETHUSD",
+                    #     "ticker": "X:ETH-USD",
                     #     "timespan": timespan
                     # }
                 ]

@@ -269,7 +269,12 @@ async def main() -> None:
     logger.info(f"Connecting to server at {server_url}")
     
     try:
-        async with websockets.connect(server_url) as websocket:
+        # Connect with ping_interval and ping_timeout settings
+        async with websockets.connect(
+            server_url,
+            ping_interval=30,
+            ping_timeout=10
+        ) as websocket:
             # First get available feeds
             await get_available_feeds(websocket)
             

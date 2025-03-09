@@ -100,8 +100,12 @@ class PriceFeedAggregator:
         self.logger.info("Pyth client started (will connect when clients subscribe to feeds)")
         
         # Initialize the Polygon client
-        await self.polygon_client.start()
-        self.logger.info("Polygon client started (will connect when clients subscribe to tickers)")
+        # Initialize the Polygon client if available
+        if self.polygon_client:
+            await self.polygon_client.start()
+            self.logger.info("Polygon client started (will connect when clients subscribe to tickers)")
+        else:
+            self.logger.info("Skipping Polygon client initialization (not available)")
         
         # Start websocket server
         await self.websocket_server.start()
@@ -137,8 +141,10 @@ class PriceFeedAggregator:
         await self.websocket_server.stop()
         self.logger.info("Websocket server stopped")
         
-        await self.polygon_client.stop()
-        self.logger.info("Polygon client stopped")
+        # Stop Polygon client if it exists
+        if self.polygon_client:
+            await self.polygon_client.stop()
+            self.logger.info("Polygon client stopped")
         
         await self.pyth_client.stop()
         self.logger.info("Pyth client stopped")
