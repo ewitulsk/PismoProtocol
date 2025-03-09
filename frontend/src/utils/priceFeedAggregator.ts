@@ -174,9 +174,12 @@ export class PriceFeedAggregatorService {
     ticker?: string,
     timespan: string = 'minute'
   ): Promise<boolean> {
+    // Remove "0x" prefix from feedId if present
+    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+    
     // If not connected, store subscription for later
     if (!this.isConnected) {
-      this.pendingSubscriptions.push({ feedId, ticker, timespan });
+      this.pendingSubscriptions.push({ feedId: cleanFeedId, ticker, timespan });
       
       // Try to connect
       const connected = await this.connect();
@@ -191,7 +194,7 @@ export class PriceFeedAggregatorService {
     try {
       const subscriptionMsg: any = {
         type: 'subscribe',
-        feed_id: feedId,
+        feed_id: cleanFeedId,
         timespan
       };
 
@@ -199,8 +202,9 @@ export class PriceFeedAggregatorService {
       if (ticker) {
         subscriptionMsg.ticker = ticker;
       }
+      
+      console.log(`[PriceFeedAggregator] Sending subscription with feed_id: ${cleanFeedId}`);
       const jsonSubscriptionMsg = JSON.stringify(subscriptionMsg);
-      console.log(jsonSubscriptionMsg)
       this.socket.send(jsonSubscriptionMsg);
       return true;
     } catch (error) {
@@ -219,11 +223,16 @@ export class PriceFeedAggregatorService {
     }
 
     try {
-      const formattedSubscriptions = subscriptions.map(sub => ({
-        feed_id: sub.feedId,
-        ticker: sub.ticker,
-        timespan: sub.timespan || 'minute'
-      }));
+      const formattedSubscriptions = subscriptions.map(sub => {
+        // Remove "0x" prefix from feedId if present
+        const cleanFeedId = sub.feedId.startsWith('0x') ? sub.feedId.substring(2) : sub.feedId;
+        
+        return {
+          feed_id: cleanFeedId,
+          ticker: sub.ticker,
+          timespan: sub.timespan || 'minute'
+        };
+      });
 
       this.socket.send(JSON.stringify({
         type: 'subscribe_multiple',
@@ -239,6 +248,9 @@ export class PriceFeedAggregatorService {
 
   // Unsubscribe from a price feed
   public unsubscribeFromFeed(feedId: string): boolean {
+    // Remove "0x" prefix from feedId if present
+    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+    
     if (!this.isConnected || !this.socket) {
       console.warn('[PriceFeedAggregator] Cannot unsubscribe, not connected');
       return false;
@@ -247,7 +259,7 @@ export class PriceFeedAggregatorService {
     try {
       this.socket.send(JSON.stringify({
         type: 'unsubscribe',
-        feed_id: feedId
+        feed_id: cleanFeedId
       }));
 
       return true;
@@ -300,26 +312,13 @@ export class PriceFeedAggregatorService {
   // Handle price updates
   private handlePriceUpdate(data: PriceUpdate): void {
     // Find handlers for this symbol
-    const symbol = data.symbol.replace('/', '');
-    
-    // Log price update to console
-    console.log('[PriceFeedAggregator] Price update received:', {
-      symbol: data.symbol,
-      price: data.price,
-      timestamp: data.timestamp,
-      source: data.source_priority,
-      has_pyth: data.has_pyth_data,
-      has_polygon: data.has_polygon_data,
-      polygon_data: data.polygon_data ? {
-        open: data.polygon_data.open,
-        high: data.polygon_data.high,
-        low: data.polygon_data.low,
-        close: data.polygon_data.close,
-        volume: data.polygon_data.volume
-      } : null
-    });
+    const symbol = data.symbol.replace('/', '').replace('-', '');
+
+    console.log(`Got price update for: ${symbol}`)
     
     const handlers = this.messageHandlers.get(symbol);
+
+    console.log(`handlers: ${handlers === undefined} size: ${handlers?.size}`)
 
     if (handlers && handlers.size > 0) {
       // Call each registered handler

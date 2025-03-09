@@ -25,10 +25,10 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
 
   // Generate initial sample data
   const generateInitialData = (): CandlestickData<Time>[] => {
-    const now = Math.floor(Date.now() / 1000);
+    // const now = Math.floor(Date.now() / 1000);
     const data: CandlestickData<Time>[] = [];
     
-    // Create sample data for the last 50 periods based on interval
+    // // Create sample data for the last 50 periods based on interval
     // const periodSeconds = parseInt(interval.replace('S', '')) || 60; // Default to 60s if parsing fails
     
     // // Generate some sample data

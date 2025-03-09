@@ -28,6 +28,21 @@ class FeedSubscription(NamedTuple):
     timespan: str = "minute"  # Polygon timeframe
 
 
+def sanitize_feed_id(feed_id: str) -> str:
+    """
+    Sanitize the feed ID by removing the '0x' prefix if present.
+    
+    Args:
+        feed_id: The feed ID to sanitize
+        
+    Returns:
+        The sanitized feed ID
+    """
+    if feed_id and isinstance(feed_id, str) and feed_id.startswith("0x"):
+        return feed_id[2:]
+    return feed_id
+
+
 class PriceFeedWebsocketServer:
     """
     Websocket server that allows clients to connect and subscribe to price feeds.
@@ -179,6 +194,10 @@ class PriceFeedWebsocketServer:
             if message_type == "subscribe":
                 # Handle subscription request with combined parameters
                 feed_id = data.get("feed_id")
+                
+                # Sanitize feed ID by removing 0x prefix if present
+                feed_id = sanitize_feed_id(feed_id)
+
                 ticker = data.get("ticker")  # Optional Polygon ticker
                 timespan = data.get("timespan", "minute")  # Default to minute bars
                 
@@ -194,6 +213,9 @@ class PriceFeedWebsocketServer:
             elif message_type == "unsubscribe":
                 # Handle unsubscription request
                 feed_id = data.get("feed_id")
+                # Sanitize feed ID by removing 0x prefix if present
+                feed_id = sanitize_feed_id(feed_id)
+                
                 if feed_id:
                     # Find the subscription with this feed_id
                     for subscription in self.client_subscriptions.get(client_id, set()):
@@ -207,6 +229,9 @@ class PriceFeedWebsocketServer:
                 if subscriptions and isinstance(subscriptions, list):
                     for sub_data in subscriptions:
                         feed_id = sub_data.get("feed_id")
+                        # Sanitize feed ID by removing 0x prefix if present
+                        feed_id = sanitize_feed_id(feed_id)
+                        
                         ticker = sub_data.get("ticker")
                         timespan = sub_data.get("timespan", "minute")
                         
@@ -253,14 +278,11 @@ class PriceFeedWebsocketServer:
             subscription: The feed subscription details
         """
 
-        self.logger.info("Trying subscribe client to feed...")
-
         feed_id = subscription.feed_id
         ticker = subscription.ticker
         
         # Add subscription for this client
         if client_id in self.client_subscriptions:
-            self.logger.info("1")
             self.client_subscriptions[client_id].add(subscription)
 
             # Add client to feed subscribers
@@ -272,12 +294,9 @@ class PriceFeedWebsocketServer:
             if feed_id not in self.active_pyth_feeds:
                 self.active_pyth_feeds.add(feed_id)
                 await self.pyth_client.subscribe_to_feed(feed_id)
-            self.logger.info("2")
 
-            self.logger.info(f"Ticker: {ticker}, polygon_client: {bool(self.polygon_client)} ticker not in: {ticker not in self.active_polygon_tickers}")
             # Subscribe to Polygon ticker if Polygon client is available
             if ticker and self.polygon_client and ticker not in self.active_polygon_tickers:
-                self.logger.info("Trying to subscribe to Polygon...")
                 try:
                     self.active_polygon_tickers.add(ticker)
                     await self.polygon_client.subscribe_to_ticker(ticker)
@@ -499,8 +518,6 @@ class PriceFeedWebsocketServer:
             bar_data: The bar data received from Polygon
         """
 
-        self.logger.info(bar_data)
-
         ticker = bar_data.ticker
         
         # Store the latest Polygon data
@@ -549,7 +566,6 @@ class PriceFeedWebsocketServer:
                 send_tasks = []
                 for client_id in self.feed_subscribers[feed_id]:
                     if client_id in self.clients:
-                        self.logger.info("Sending update to client!")
                         send_tasks.append(self.send_to_client(client_id, update_json))
                 
                 # Send messages in parallel

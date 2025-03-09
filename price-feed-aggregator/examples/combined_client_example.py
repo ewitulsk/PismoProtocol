@@ -253,7 +253,7 @@ async def main() -> None:
                 ]
                 
                 # Subscribe to all default feeds at once
-                await subscribe_to_multiple_feeds(websocket, subscriptions)
+                await subscribe_to_combined_feed(websocket, subscriptions[0]["feed_id"], subscriptions[0]["ticker"], subscriptions[0]["timespan"])
             else:
                 # Create subscriptions from provided arguments
                 subscriptions = []
