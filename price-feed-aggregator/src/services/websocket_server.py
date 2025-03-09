@@ -10,8 +10,9 @@ import websockets.server
 from websockets.server import WebSocketServerProtocol, WebSocketServer
 from websockets.exceptions import ConnectionClosed
 
-from src.clients.pyth_client import PythHermesClient
-from src.services.ohlc import OHLCService
+from src.clients.threaded_pyth_adapter import ThreadedPythAdapter
+from src.services.ohlc.ohlc_service import OHLCService
+from src.utils.constants import PRICE_FEEDS, DEFAULT_HISTORY_LIMIT
 from src.models.price_feed_models import (
     PythPriceData,
     FeedSubscription,
@@ -56,11 +57,11 @@ class PriceFeedWebsocketServer:
 
     def __init__(
         self,
-        pyth_client: PythHermesClient,
+        pyth_client: ThreadedPythAdapter,
         host: str = "localhost",
         port: int = 8765,
     ) -> None:
-        self.pyth_client: PythHermesClient = pyth_client
+        self.pyth_client: ThreadedPythAdapter = pyth_client
         self.host: str = host
         self.port: int = port
         self.logger = logging.getLogger("websocket_server")
@@ -111,7 +112,88 @@ class PriceFeedWebsocketServer:
             ping_timeout=10,   # Wait 10 seconds for pong response
         )
         
+        # Subscribe to all available Pyth price feeds at startup
+        await self.subscribe_to_all_pyth_feeds()
+        
         self.logger.info(f"Websocket server started on ws://{self.host}:{self.port}")
+        
+    async def subscribe_to_all_pyth_feeds(self) -> None:
+        """Subscribe to all available Pyth price feeds to build historical data."""
+        self.logger.info("Subscribing to all available Pyth price feeds...")
+        
+        # Get list of available price feeds
+        try:
+            # Fetch available feeds from Pyth
+            available_feeds = await self.pyth_client.get_available_price_feeds()
+            feed_count = len(available_feeds)
+            self.logger.info(f"Found {feed_count} available Pyth price feeds")
+            
+            # If we can't get feeds from Pyth, use the central list of price feeds
+            if not available_feeds:
+                self.logger.warning("No feeds received from Pyth API, using defined feeds from constants")
+                # Convert the PRICE_FEEDS constant to the format expected by the code
+                fallback_feeds = [
+                    {"id": feed_id, "symbol": symbol} for symbol, feed_id in PRICE_FEEDS.items()
+                ]
+                available_feeds = fallback_feeds
+                feed_count = len(fallback_feeds)
+                self.logger.info(f"Using {feed_count} feeds from constants")
+            
+            # First collect all feed IDs and symbols
+            feeds_to_subscribe = []
+            for feed in available_feeds:
+                feed_id = feed.get("id")
+                symbol = feed.get("symbol", "")
+                
+                if feed_id:
+                    # Clean the feed ID
+                    feed_id = sanitize_feed_id(feed_id)
+                    
+                    # Store symbol mapping
+                    if symbol:
+                        self.feed_symbols[feed_id] = symbol
+                    
+                    # Add to our active feeds set
+                    self.active_pyth_feeds.add(feed_id)
+                    
+                    # Add to list for batch subscription
+                    feeds_to_subscribe.append((feed_id, symbol))
+                    
+                    # Log each feed we're subscribing to
+                    self.logger.info(f"Adding feed to subscription: {symbol or 'Unknown'} ({feed_id})")
+            
+            # Set up a single SSE connection with all feeds
+            # This is more efficient than subscribing to each feed individually
+            if feeds_to_subscribe:
+                # Create a list of feed IDs for subscription
+                feed_ids = [feed_id for feed_id, _ in feeds_to_subscribe]
+                
+                # Subscribe to all feeds in a single connection
+                # This avoids multiple reconnections
+                self.logger.info(f"Subscribing to {len(feed_ids)} feeds: {feed_ids[:3]}... (and more)")
+                await self.pyth_client.subscribe_to_feeds(feed_ids)
+                
+                self.logger.info(f"Successfully subscribed to {len(feeds_to_subscribe)} Pyth feeds in a single connection")
+                
+                # Wait for a short time to allow initial data to come in
+                self.logger.info(f"Waiting for initial price data...")
+                await asyncio.sleep(5)
+                
+                # Log the number of feeds with actual price data
+                price_data_count = len(self.latest_pyth_data)
+                self.logger.info(f"Received initial price data for {price_data_count} feeds")
+                
+                # Log the specific feeds we've received data for
+                if price_data_count > 0:
+                    received_feeds = list(self.latest_pyth_data.keys())
+                    self.logger.info(f"Received data for feeds: {received_feeds[:min(5, len(received_feeds))]}")
+                else:
+                    self.logger.warning("No price data received for any feeds during startup")
+            
+            self.logger.info(f"Finished subscribing to {feed_count} Pyth feeds")
+        except Exception as e:
+            self.logger.error(f"Error subscribing to Pyth feeds: {e}")
+            # Continue despite errors, we'll try again when clients connect
 
     async def stop(self) -> None:
         """Stop the websocket server."""
@@ -360,46 +442,7 @@ class PriceFeedWebsocketServer:
                 # Handle request for available feeds
                 await self.send_available_feeds(client_id)
                 
-            elif message_type == "get_ohlc_history":
-                # Handle request for OHLC history
-                feed_id = data.get("feed_id")
-                interval_str = data.get("interval", "1m")
-                limit = data.get("limit", 100)
-                
-                if not feed_id:
-                    await self.clients[client_id].send(json.dumps({
-                        "type": "error",
-                        "message": "Feed ID is required for OHLC history"
-                    }))
-                    return
-                
-                # Sanitize feed ID by removing 0x prefix if present
-                feed_id = sanitize_feed_id(feed_id)
-                
-                # Convert interval string to TimeInterval enum
-                interval = None
-                for ti in TimeInterval:
-                    if ti.value == interval_str:
-                        interval = ti
-                        break
-                
-                if not interval:
-                    await self.clients[client_id].send(json.dumps({
-                        "type": "error",
-                        "message": f"Invalid interval: {interval_str}"
-                    }))
-                    return
-                
-                # Get OHLC bars (always use async method now)
-                bars = await self.ohlc_service.get_latest_bars(feed_id, interval, limit)
-                
-                # Send the bars
-                await self.clients[client_id].send(json.dumps({
-                    "type": "ohlc_history",
-                    "feed_id": feed_id,
-                    "interval": interval.value,
-                    "bars": [bar.model_dump(mode="json") for bar in bars]
-                }))
+            # Removed get_ohlc_history message handling
                 
             else:
                 # Unknown message type
@@ -442,10 +485,15 @@ class PriceFeedWebsocketServer:
                 self.feed_subscribers[feed_id] = set()
             self.feed_subscribers[feed_id].add(client_id)
             
-            # Subscribe to Pyth feed if this is the first client for this feed
-            if feed_id not in self.active_pyth_feeds:
-                self.active_pyth_feeds.add(feed_id)
-                await self.pyth_client.subscribe_to_feed(feed_id)
+            # We should already be subscribed to the Pyth feed from startup
+            # Just store the symbol if it's provided and we don't already have it
+            if feed_id not in self.feed_symbols:
+                symbol = None
+                for sub in self.client_subscriptions[client_id]:
+                    if hasattr(sub, 'symbol') and sub.symbol:
+                        symbol = sub.symbol
+                        self.feed_symbols[feed_id] = symbol
+                        break
             
             # Notify client of successful subscription
             await self.clients[client_id].send(json.dumps({
@@ -473,10 +521,8 @@ class PriceFeedWebsocketServer:
             if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
                 self.feed_subscribers[feed_id].remove(client_id)
                 
-                # If no more clients are subscribed to this feed, unsubscribe from Pyth
-                if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
-                    self.active_pyth_feeds.remove(feed_id)
-                    await self.pyth_client.unsubscribe_from_feed(feed_id)
+                # Keep the feed subscription active with Pyth even if no clients are subscribed
+                # This allows us to maintain historical data
                 
                 # Remove empty feed subscriber set
                 if not self.feed_subscribers[feed_id]:
@@ -511,7 +557,7 @@ class PriceFeedWebsocketServer:
             # Get all subscriptions for this client
             subscriptions_to_remove = list(self.client_subscriptions[client_id])
             
-            # For each subscription, clean up the feed subscribers and data sources
+            # For each subscription, clean up the feed subscribers, but keep Pyth feeds active
             for subscription in subscriptions_to_remove:
                 feed_id = subscription.feed_id
                 
@@ -519,13 +565,8 @@ class PriceFeedWebsocketServer:
                 if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
                     self.feed_subscribers[feed_id].remove(client_id)
                     
-                    # If no more clients are subscribed to this feed, unsubscribe from Pyth
-                    if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
-                        self.active_pyth_feeds.remove(feed_id)
-                        try:
-                            await self.pyth_client.unsubscribe_from_feed(feed_id)
-                        except Exception as e:
-                            self.logger.error(f"Error unsubscribing from Pyth feed {feed_id}: {e}")
+                    # Keep all Pyth feed subscriptions active even when clients disconnect
+                    # This ensures we maintain historical data for all feeds
                     
                     # Remove empty feed subscriber set
                     if not self.feed_subscribers[feed_id]:
@@ -545,6 +586,33 @@ class PriceFeedWebsocketServer:
             feed_id: Pyth feed ID
             intervals: List of time intervals to subscribe to
         """
+        # Check if we have price data for this feed
+        has_price_data = feed_id in self.latest_pyth_data
+        if has_price_data:
+            self.logger.info(f"Feed {feed_id} has price data in the cache")
+        else:
+            self.logger.warning(f"Feed {feed_id} does not have any price data in the cache yet")
+        
+        # Check if feed is in active feeds and subscribe if not
+        is_active = feed_id in self.active_pyth_feeds
+        self.logger.info(f"Feed {feed_id} is {'active' if is_active else 'not active'} in Pyth subscriptions")
+        
+        # If feed is not active, subscribe to it now
+        if not is_active:
+            self.logger.info(f"Subscribing to feed {feed_id} now")
+            self.active_pyth_feeds.add(feed_id)
+            await self.pyth_client.subscribe_to_feed(feed_id)
+            
+            # Wait a moment for the first price update to come in
+            self.logger.info(f"Waiting for initial price data from feed {feed_id}...")
+            await asyncio.sleep(1)
+            
+            # Check if we received data
+            if feed_id in self.latest_pyth_data:
+                self.logger.info(f"Successfully received initial price data for feed {feed_id}")
+            else:
+                self.logger.warning(f"No initial price data received yet for feed {feed_id}")
+        
         # Initialize client's OHLC subscriptions if not already
         if client_id not in self.ohlc_subscriptions:
             self.ohlc_subscriptions[client_id] = set()
@@ -553,24 +621,99 @@ class PriceFeedWebsocketServer:
         subscription = OHLCSubscriptionInfo(feed_id=feed_id, intervals=tuple(intervals))
         self.ohlc_subscriptions[client_id].add(subscription)
         
-        # Ensure we're subscribed to the raw price feed for this feed_id
+        # Add client to the raw price feed subscribers list without reconnecting Pyth
         regular_sub = FeedSubscriptionInfo(feed_id=feed_id)
-        if client_id not in self.client_subscriptions or regular_sub not in self.client_subscriptions[client_id]:
-            await self.subscribe_client_to_feed(client_id, regular_sub)
+        if client_id not in self.client_subscriptions:
+            self.client_subscriptions[client_id] = set()
+        
+        self.client_subscriptions[client_id].add(regular_sub)
+        
+        # Add client to feed subscribers
+        if feed_id not in self.feed_subscribers:
+            self.feed_subscribers[feed_id] = set()
+        self.feed_subscribers[feed_id].add(client_id)
         
         # Get symbol for this feed if we have it
         symbol = self.feed_symbols.get(feed_id, feed_id)
         
+        # Check the OHLC service for existing bars for this feed
+        for interval in intervals:
+            # Directly access the bars without adding a subscription yet
+            interval_bars = []
+            if feed_id in self.ohlc_service.bars and interval in self.ohlc_service.bars[feed_id]:
+                interval_bars = self.ohlc_service.bars[feed_id][interval]
+                self.logger.info(f"OHLC service has {len(interval_bars)} bars for feed {feed_id}, interval {interval.value}")
+            else:
+                self.logger.warning(f"OHLC service has no bars for feed {feed_id}, interval {interval.value}")
+                
+                # If we have price data but no bars, trigger a bar creation now
+                if feed_id in self.latest_pyth_data:
+                    price_data = self.latest_pyth_data[feed_id]
+                    self.logger.info(f"Triggering immediate bar creation for feed {feed_id} using latest price")
+                    # Update OHLC service with the latest price data to create initial bar
+                    await self.ohlc_service.update_price(price_data, symbol)
+        
         # Subscribe to OHLC bars in the OHLC service
         await self.ohlc_service.subscribe(client_id, feed_id, intervals)
         
-        # Notify the client
+        # Fetch historical bars for each interval (use constant for default limit)
+        historical_bars_by_interval = {}
+        for interval in intervals:
+            bars = await self.ohlc_service.get_latest_bars(feed_id, interval, DEFAULT_HISTORY_LIMIT)
+            historical_bars_by_interval[interval.value] = [bar.model_dump(mode="json") for bar in bars]
+        
+        # Log the number of historical bars we're sending
+        for interval, bars in historical_bars_by_interval.items():
+            self.logger.info(f"Sending {len(bars)} historical bars for {feed_id}, interval {interval} to client {client_id}")
+            
+            if not bars:
+                # If we still don't have any bars, but we have price data, create a bar immediately
+                if feed_id in self.latest_pyth_data:
+                    price_data = self.latest_pyth_data[feed_id]
+                    price = price_data.price * (10 ** price_data.expo)
+                    
+                    self.logger.info(f"Creating a first bar now using current price {price} for feed {feed_id}")
+                    
+                    # Create a bar with current time
+                    current_time = datetime.now()
+                    interval_obj = next((i for i in intervals if i.value == interval), None)
+                    
+                    if interval_obj:
+                        # Create normalized timestamp for the interval
+                        normalized_time = self.ohlc_service._normalize_time(current_time, interval_obj)
+                        
+                        # Create a new bar
+                        new_bar = OHLCBar(
+                            feed_id=feed_id,
+                            symbol=symbol,
+                            interval=interval_obj,
+                            timestamp=normalized_time,
+                            open=price,
+                            high=price,
+                            low=price,
+                            close=price,
+                            confirmed=False
+                        )
+                        
+                        # Add to historical data response
+                        historical_bars_by_interval[interval] = [new_bar.model_dump(mode="json")]
+                        
+                        # Log the action
+                        self.logger.info(f"Created and added initial bar for {feed_id}, interval {interval}")
+                        
+                        # Add to OHLC service (this is a bit of a hack, but ensures consistency)
+                        if feed_id not in self.ohlc_service.bars:
+                            self.ohlc_service.bars[feed_id] = defaultdict(list)
+                        self.ohlc_service.bars[feed_id][interval_obj].append(new_bar)
+        
+        # Notify the client with subscription confirmation and historical bars
         await self.clients[client_id].send(json.dumps({
             "type": "subscription_confirmed",
             "ohlc": True,
             "feed_id": feed_id,
             "symbol": symbol,
-            "intervals": [interval.value for interval in intervals]
+            "intervals": [interval.value for interval in intervals],
+            "historical_data": historical_bars_by_interval
         }))
         
         self.logger.info(f"Client {client_id} subscribed to OHLC bars for feed {feed_id} with intervals {[i.value for i in intervals]}")
@@ -623,19 +766,15 @@ class PriceFeedWebsocketServer:
         
         Args:
             bar: The updated or new OHLC bar
-            event_type: Type of event ("bar_update", "new_bar", or "ohlc_history")
+            event_type: Type of event ("bar_update" or "new_bar")
             subscribers: Set of client IDs to notify
-            history_message: Optional pre-formatted history message (for ohlc_history event type)
+            history_message: Deprecated and unused
         """
-        # For ohlc_history event type, use the pre-formatted message
-        if event_type == "ohlc_history" and history_message:
-            update_json = json.dumps(history_message)
-        else:
-            # Create the regular update message
-            update_json = json.dumps({
-                "type": event_type,
-                "data": bar.model_dump(mode="json")
-            })
+        # Create the update message
+        update_json = json.dumps({
+            "type": event_type,
+            "data": bar.model_dump(mode="json")
+        })
         
         # Send to all subscribed clients
         send_tasks = []
@@ -656,12 +795,39 @@ class PriceFeedWebsocketServer:
         """
         feed_id = price_data.id
         
+        # Track if this is the first update for this feed
+        is_first_update = feed_id not in self.latest_pyth_data
+        
         # Store the latest Pyth data
         self.latest_pyth_data[feed_id] = price_data
         
+        # Log the first few updates we receive for each feed
+        # This helps us track when feeds start getting data
+        price_count = len(self.latest_pyth_data)
+        
+        # For the first 10 feeds, log when we first get their data
+        if is_first_update and price_count <= 10:
+            price_value = price_data.price * (10 ** price_data.expo)
+            self.logger.info(f"First price update for feed {feed_id}: ${price_value:.6f} (total feeds with data: {price_count})")
+            
         # Update OHLC bars if applicable
         symbol = self.feed_symbols.get(feed_id, feed_id)
+        
+        # Check OHLC service's bar count before update
+        before_bars_count = 0
+        if feed_id in self.ohlc_service.bars:
+            for interval, bars in self.ohlc_service.bars[feed_id].items():
+                before_bars_count += len(bars)
+                
+        # Update OHLC bars with the price data
         await self.ohlc_service.update_price(price_data, symbol)
+        
+        # Check if we created any new bars (only log for a low number of feeds to avoid excessive logging)
+        if price_count <= 10:
+            after_bars_count = 0
+            if feed_id in self.ohlc_service.bars:
+                for interval, bars in self.ohlc_service.bars[feed_id].items():
+                    after_bars_count += len(bars)
         
         # Check if any clients are subscribed to this feed
         if feed_id in self.feed_subscribers and self.feed_subscribers[feed_id]:

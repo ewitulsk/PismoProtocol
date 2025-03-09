@@ -40,6 +40,8 @@ next-env.d.ts
 *.swp
 *.swo
 
+package-lock.json
+
 # PWA files
 **/public/sw.js
 **/public/workbox-*.js
