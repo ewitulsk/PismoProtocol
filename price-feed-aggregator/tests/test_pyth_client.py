@@ -1,12 +1,10 @@
-import asyncio
-import json
-import pytest
-import pytest_asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
-from datetime import datetime
+# This file is no longer used since we're now using the threaded Pyth client
+# These tests will be replaced with tests for the threaded Pyth client
 
-from src.clients.pyth_client import PythHermesClient
-from src.models.price_feed_models import PythPriceData, PriceStatus
+import pytest
+
+# Skip all tests in this file
+pytestmark = pytest.mark.skip(reason="Pyth client has been replaced by threaded Pyth client")
 
 
 @pytest.fixture

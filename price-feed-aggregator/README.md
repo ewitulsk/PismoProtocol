@@ -1,13 +1,13 @@
-# Price Feed Aggregator
+# Pyth Price Feed Service
 
-A service that aggregates cryptocurrency price feeds from Pyth Network and provides a websocket interface for clients to subscribe to live price updates.
+A service that provides cryptocurrency price feeds from Pyth Network, providing a websocket interface for clients to subscribe to live price updates.
 
 ## Features
 
-- Connect to Pyth Network's Hermes Server-Sent Events (SSE) stream to receive price feed updates
+- Connect to Pyth Network's Hermes Server-Sent Events (SSE) stream to receive real-time price feed updates
 - Provide a WebSocket interface for clients to subscribe to specific price feeds
 - Handle multiple concurrent client connections and subscriptions
-- Robust error handling and automatic reconnection to Pyth
+- Robust error handling and automatic reconnection to data sources
 - REST API for metadata and status information
 
 ## Architecture
@@ -28,6 +28,7 @@ The service consists of several components:
   - pydantic
   - fastapi
   - uvicorn
+  - python-dotenv
 
 ## Installation
 
@@ -79,7 +80,7 @@ Connect to the websocket server at `ws://<host>:<port>`.
 
 **Available Messages:**
 
-1. **Subscribe to a Price Feed**
+1. **Subscribe to a Pyth Price Feed**
    ```json
    {
      "type": "subscribe",
@@ -95,7 +96,19 @@ Connect to the websocket server at `ws://<host>:<port>`.
    }
    ```
 
-3. **Get Available Feeds**
+3. **Subscribe to Multiple Feeds**
+   ```json
+   {
+     "type": "subscribe_multiple",
+     "subscriptions": [
+       {"feed_id": "<feed_id_1>"},
+       {"feed_id": "<feed_id_2>"},
+       {"feed_id": "<feed_id_3>"}
+     ]
+   }
+   ```
+
+4. **Get Available Feeds**
    ```json
    {
      "type": "get_available_feeds"
@@ -109,7 +122,7 @@ Connect to the websocket server at `ws://<host>:<port>`.
    {
      "type": "connection_established",
      "client_id": "<client_id>",
-     "message": "Connected to Price Feed Aggregator Websocket Server"
+     "message": "Connected to Pyth Price Feed Websocket Server"
    }
    ```
 
@@ -134,13 +147,14 @@ Connect to the websocket server at `ws://<host>:<port>`.
    {
      "type": "price_update",
      "data": {
-       "feed_id": "<feed_id>",
+       "id": "<feed_id>",
        "price": 50000.0,
-       "confidence": 10.0,
-       "exponent": -8,
+       "conf": 10.0,
+       "expo": -8,
        "status": "trading",
-       "timestamp": "2023-01-01T12:00:00.000Z",
-       "source": "pyth"
+       "publish_time": "2023-01-01T12:00:00.000Z",
+       "ema_price": 49950.0,
+       "ema_conf": 12.0
      }
    }
    ```
@@ -175,7 +189,13 @@ Connect to the websocket server at `ws://<host>:<port>`.
 
 - `GET /health` - Health check endpoint
 - `GET /feeds` - Get available price feeds
-- `GET /status` - Get aggregator status
+- `GET /status` - Get service status
+
+## Examples
+
+The `examples` directory contains an example client to demonstrate how to use the service:
+
+- `pyth_only_subscription.py` - Example client for Pyth price data
 
 ## Development
 

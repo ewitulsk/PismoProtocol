@@ -12,17 +12,20 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from src.clients.pyth_client import PythHermesClient
-from src.clients.polygon_client import PolygonStreamClient
+from src.clients.threaded_pyth_client import ThreadedPythClient
+from src.clients.threaded_pyth_adapter import ThreadedPythAdapter
+from src.utils.constants import PRICE_FEEDS
 from src.services.websocket_server import PriceFeedWebsocketServer
 from src.api.rest_api import PriceFeedAPI
 from src.utils.logging_config import setup_logging
 
 
-class PriceFeedAggregator:
+class PythPriceFeedService:
     """
-    Main application class that sets up and coordinates the price feed aggregator.
+    Main application class that sets up and coordinates the Pyth price feed service.
     """
+    
+    # Using the centralized price feeds definition
     
     def __init__(
         self,
@@ -31,48 +34,47 @@ class PriceFeedAggregator:
         api_host: str = "localhost",
         api_port: int = 8080,
         pyth_sse_url: str = "https://hermes.pyth.network/v2/updates/price/stream",
-        polygon_api_key: Optional[str] = None,
-        polygon_websocket_url: str = "wss://socket.polygon.io/crypto",
-        polygon_data_max_age: int = 300,  # Max age in seconds
         log_level: int = logging.INFO,
+        use_threaded_client: bool = True,
     ) -> None:
         self.host = host
         self.port = port
         self.api_host = api_host
         self.api_port = api_port
         self.pyth_sse_url = pyth_sse_url
-        self.polygon_api_key = polygon_api_key or os.environ.get("POLYGON_API_KEY")
-        self.polygon_websocket_url = polygon_websocket_url
-        self.polygon_data_max_age = polygon_data_max_age
         self.log_level = log_level
+        self.use_threaded_client = use_threaded_client
         
         # Setup logging
         setup_logging(level=log_level)
         
-        self.logger = logging.getLogger("price_feed_aggregator")
+        self.logger = logging.getLogger("pyth_price_feed_service")
         self.shutdown_event = asyncio.Event()
         
-        # Initialize components
-        self.pyth_client = PythHermesClient(hermes_sse_url=pyth_sse_url)
-        
-        # Initialize Polygon client if API key is available
-        if self.polygon_api_key:
-            self.polygon_client = PolygonStreamClient(
-                api_key=self.polygon_api_key,
-                websocket_url=self.polygon_websocket_url
+        # Initialize Pyth client based on configuration
+        if self.use_threaded_client:
+            # Create threaded client with auto-subscribe feeds
+            self.threaded_pyth_client = ThreadedPythClient(
+                hermes_sse_url=pyth_sse_url,
+                auto_subscribe_feeds=PRICE_FEEDS
             )
-            self.logger.info("Polygon client initialized with API key")
+            # Create adapter to make threaded client compatible with async API
+            self.pyth_client = ThreadedPythAdapter(self.threaded_pyth_client)
+            self.logger.info("Using threaded Pyth client with auto-subscription")
         else:
-            # Create a dummy client that won't be used (for type safety)
-            self.polygon_client = None
-            self.logger.warning("No Polygon API key found - running without Polygon data support")
+            # Always use threaded client, but log that we're using it without auto-subscription
+            self.threaded_pyth_client = ThreadedPythClient(
+                hermes_sse_url=pyth_sse_url,
+                auto_subscribe_feeds={}  # No auto-subscribe
+            )
+            self.pyth_client = ThreadedPythAdapter(self.threaded_pyth_client)
+            self.logger.info("Using threaded Pyth client without auto-subscription")
         
+        # Initialize other components
         self.websocket_server = PriceFeedWebsocketServer(
             pyth_client=self.pyth_client,
-            polygon_client=self.polygon_client,
             host=host,
-            port=port,
-            polygon_data_max_age=polygon_data_max_age
+            port=port
         )
         
         self.rest_api = PriceFeedAPI(
@@ -86,26 +88,18 @@ class PriceFeedAggregator:
     def get_websocket_status(self) -> Dict[str, Any]:
         """Get current status of the websocket server for API."""
         return {
-            "active_pyth_feeds": len(self.websocket_server.active_pyth_feeds),
-            "active_polygon_tickers": len(self.websocket_server.active_polygon_tickers),
+            "active_feeds": len(self.websocket_server.active_pyth_feeds),
             "connected_clients": len(self.websocket_server.clients),
+            "feed_subscribers": {feed_id: len(subscribers) for feed_id, subscribers in self.websocket_server.feed_subscribers.items()},
         }
 
     async def start(self) -> None:
-        """Start all components of the price feed aggregator."""
-        self.logger.info("Starting Price Feed Aggregator")
+        """Start all components of the price feed service."""
+        self.logger.info("Starting Pyth Price Feed Service")
         
         # Initialize the Pyth client but don't start the connection yet
         await self.pyth_client.start()
         self.logger.info("Pyth client started (will connect when clients subscribe to feeds)")
-        
-        # Initialize the Polygon client
-        # Initialize the Polygon client if available
-        if self.polygon_client:
-            await self.polygon_client.start()
-            self.logger.info("Polygon client started (will connect when clients subscribe to tickers)")
-        else:
-            self.logger.info("Skipping Polygon client initialization (not available)")
         
         # Start websocket server
         await self.websocket_server.start()
@@ -132,7 +126,7 @@ class PriceFeedAggregator:
 
     async def stop(self) -> None:
         """Stop all components gracefully."""
-        self.logger.info("Shutting down Price Feed Aggregator")
+        self.logger.info("Shutting down Pyth Price Feed Service")
         
         # Stop components in reverse order
         # Note: The API thread is a daemon thread so it will exit when the main process exits
@@ -141,16 +135,11 @@ class PriceFeedAggregator:
         await self.websocket_server.stop()
         self.logger.info("Websocket server stopped")
         
-        # Stop Polygon client if it exists
-        if self.polygon_client:
-            await self.polygon_client.stop()
-            self.logger.info("Polygon client stopped")
-        
         await self.pyth_client.stop()
         self.logger.info("Pyth client stopped")
         
         self.shutdown_event.set()
-        self.logger.info("Price Feed Aggregator shutdown complete")
+        self.logger.info("Pyth Price Feed Service shutdown complete")
 
     def handle_shutdown(self) -> None:
         """Handle shutdown signals."""
@@ -159,8 +148,8 @@ class PriceFeedAggregator:
 
 
 async def main() -> None:
-    """Main entry point for the price feed aggregator."""
-    parser = argparse.ArgumentParser(description="Price Feed Aggregator")
+    """Main entry point for the price feed service."""
+    parser = argparse.ArgumentParser(description="Pyth Price Feed Service")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind the websocket server to")
     parser.add_argument("--port", type=int, default=8765, help="Port to bind the websocket server to")
     parser.add_argument("--api-host", default="0.0.0.0", help="Host to bind the REST API to")
@@ -171,25 +160,15 @@ async def main() -> None:
         help="Pyth Hermes SSE stream URL"
     )
     parser.add_argument(
-        "--polygon-api-key",
-        help="Polygon.io API key (can also be set via POLYGON_API_KEY env var)"
-    )
-    parser.add_argument(
-        "--polygon-websocket-url",
-        default="wss://socket.polygon.io/crypto",
-        help="Polygon.io WebSocket URL"
-    )
-    parser.add_argument(
-        "--polygon-data-max-age",
-        type=int,
-        default=300,
-        help="Maximum age for Polygon data in seconds (default: 300)"
-    )
-    parser.add_argument(
         "--log-level", 
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging level"
+    )
+    parser.add_argument(
+        "--no-threaded-client",
+        action="store_true",
+        help="Disable threaded Pyth client and auto-subscription"
     )
     
     args = parser.parse_args()
@@ -197,30 +176,28 @@ async def main() -> None:
     # Convert string log level to numeric value
     log_level = getattr(logging, args.log_level)
     
-    # Create and run the aggregator
-    aggregator = PriceFeedAggregator(
+    # Create and run the service
+    service = PythPriceFeedService(
         host=args.host,
         port=args.port,
         api_host=args.api_host,
         api_port=args.api_port,
         pyth_sse_url=args.pyth_sse_url,
-        polygon_api_key=args.polygon_api_key,
-        polygon_websocket_url=args.polygon_websocket_url,
-        polygon_data_max_age=args.polygon_data_max_age,
         log_level=log_level,
+        use_threaded_client=not args.no_threaded_client,
     )
     
     # Setup signal handlers
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, aggregator.handle_shutdown)
+        loop.add_signal_handler(sig, service.handle_shutdown)
     
-    # Start the aggregator
-    await aggregator.start()
+    # Start the service
+    await service.start()
 
 
 def main_cli() -> None:
-    """CLI entry point for the aggregator."""
+    """CLI entry point for the Pyth price feed service."""
     asyncio.run(main())
 
 

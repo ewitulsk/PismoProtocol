@@ -434,7 +434,7 @@ class PolygonStreamClient:
                         
                         if message_type == "XA":  # Crypto Aggregate Minutes (Bar)
                             self.logger.info(f"Received bar data from Polygon ({len(data)} entries)")
-                            # await self._process_bar_messages(data)
+                            await self._process_bar_messages(data)
                             #We might need to handle time scales differently, but for now we'll just handle seconds
 
 
@@ -516,7 +516,7 @@ class PolygonStreamClient:
         # Add all timeframe subscriptions for each ticker
         for ticker in self.subscribed_tickers:            
             # Subscribe to second bars
-            params_list.append(f"XAS.{ticker}")
+            params_list.append(f"XA.{ticker}")
 
         # Create the message with the params list
         subscription_message = {
@@ -574,7 +574,7 @@ class PolygonStreamClient:
             # Unsubscribe message
             unsubscribe_message = {
                 "action": "unsubscribe",
-                "params": [f"XAS.{ticker}"]
+                "params": [f"XA.{ticker}"]
             }
             await self.websocket.send(json.dumps(unsubscribe_message))
     

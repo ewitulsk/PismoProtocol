@@ -168,6 +168,7 @@ class PythHermesClient:
             # SSE from Hermes has a different format - it has binary and parsed sections
             if "parsed" in message:
                 parsed_feeds = message.get("parsed", [])
+                processed_count = 0
                 
                 for feed_data in parsed_feeds:
                     feed_id = feed_data.get("id")
@@ -175,12 +176,18 @@ class PythHermesClient:
                     if feed_id and feed_id in self.subscribed_feeds:
                         # Create price data object from the feed data
                         price_obj = self._parse_price_data(feed_data)
+                        processed_count += 1
                         
                         # Notify all registered callbacks
                         await asyncio.gather(
                             *[callback(price_obj) for callback in self.price_callbacks],
                             return_exceptions=True
                         )
+                
+                # Log every 100 messages or when the batch is small for debugging
+                if processed_count > 0 and (processed_count < 5 or processed_count % 100 == 0):
+                    self.logger.debug(f"Processed {processed_count} price updates from batch of {len(parsed_feeds)} feeds")
+                    
         except json.JSONDecodeError:
             self.logger.error(f"Invalid JSON received: {message_data[:100]}...")
         except Exception as e:
@@ -248,6 +255,42 @@ class PythHermesClient:
             raw_price_data=data,
         )
 
+    async def subscribe_to_feeds(self, feed_ids: List[str]) -> None:
+        """
+        Subscribe to multiple price feeds at once.
+        More efficient than subscribing to feeds one by one.
+        
+        Args:
+            feed_ids: List of Pyth feed IDs to subscribe to
+        """
+        if not feed_ids:
+            return
+            
+        # Add all feeds to our subscription list
+        new_feeds = False
+        for feed_id in feed_ids:
+            if feed_id not in self.subscribed_feeds:
+                self.subscribed_feeds.add(feed_id)
+                new_feeds = True
+                
+        if not new_feeds:
+            # We're already subscribed to all these feeds
+            return
+            
+        self.logger.info(f"Added {len(feed_ids)} feeds to subscribed price feeds")
+        
+        # If we don't have an active connection, start one
+        if not self.sse_response:
+            # Start a connection with all feeds
+            asyncio.create_task(self._connect_sse())
+        else:
+            # Close current connection to force reconnect with the complete feed list
+            self.sse_response.close()
+            self.sse_response = None
+            
+            # Reconnect with the complete subscription list
+            asyncio.create_task(self._connect_sse())
+    
     async def subscribe_to_feed(self, feed_id: str) -> None:
         """Subscribe to a specific price feed."""
         # Check if we're already subscribed

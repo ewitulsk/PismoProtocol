@@ -21,14 +21,14 @@ class StatusResponse(BaseModel):
 
 class PriceFeedAPI:
     """
-    REST API for the Price Feed Aggregator.
+    REST API for the Pyth Price Feed Service.
     Provides endpoints for retrieving available feeds and status information.
     """
     
     def __init__(
         self,
         pyth_client: PythHermesClient,
-        websocket_server_status: Callable[[], Dict[str, Any]],
+        websocket_server_status: Callable[[], Dict[str, Any]] = None,
     ) -> None:
         """
         Initialize the REST API.
@@ -43,8 +43,8 @@ class PriceFeedAPI:
         
         # Create FastAPI application
         self.app = FastAPI(
-            title="Price Feed Aggregator API",
-            description="API for the Price Feed Aggregator service",
+            title="Pyth Price Feed API",
+            description="API for the Pyth Price Feed service",
             version="1.0.0",
         )
         
@@ -82,20 +82,27 @@ class PriceFeedAPI:
         @self.app.get(
             "/status",
             response_model=StatusResponse,
-            summary="Get aggregator status",
-            description="Returns the current status of the price feed aggregator.",
+            summary="Get service status",
+            description="Returns the current status of the price feed service.",
         )
         async def get_status() -> StatusResponse:
             """
-            Get the current status of the price feed aggregator.
+            Get the current status of the price feed service.
             """
             try:
-                status_info = self.get_websocket_status()
-                return StatusResponse(
-                    status="running",
-                    active_feeds=status_info.get("active_feeds", 0),
-                    connected_clients=status_info.get("connected_clients", 0),
-                )
+                if self.get_websocket_status:
+                    status_info = self.get_websocket_status()
+                    return StatusResponse(
+                        status="running",
+                        active_feeds=status_info.get("active_feeds", 0),
+                        connected_clients=status_info.get("connected_clients", 0),
+                    )
+                else:
+                    return StatusResponse(
+                        status="running",
+                        active_feeds=0,
+                        connected_clients=0,
+                    )
             except Exception as e:
                 self.logger.error(f"Error retrieving status: {e}")
                 raise HTTPException(
