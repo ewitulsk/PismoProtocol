@@ -1,8 +1,8 @@
 "use client";
 import React, { useState } from "react";
 import AssetSelector from "./AssetSelector";
-import TradingViewWidget from "./TradingViewWidget";
-import TimeFrameSelector, { timeframes } from "./TimeFrameSelector";
+import LightweightChartWidget from "./LightweightChartWidget";
+import TimeFrameSelector from "./TimeFrameSelector";
 import LivePriceOverlay from "./LivePriceOverlay";
 import { tradingPairs, TradingPair } from "@/data/mocks/tradingPairs";
 
@@ -23,14 +23,6 @@ const ChartContainer: React.FC = () => {
   const formatSymbol = (pair: TradingPair) => {
     return `${pair.baseAsset}${pair.quoteAsset}`;
   };
-  
-  // Get current price with formatting
-  const getFormattedPrice = (price: number) => {
-    return price.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  };
 
   return (
     <section className="trading-chart">
@@ -48,7 +40,7 @@ const ChartContainer: React.FC = () => {
         {/* Live price overlay component */}
         <LivePriceOverlay pair={selectedPair} />
         
-        <TradingViewWidget 
+        <LightweightChartWidget 
           symbol={formatSymbol(selectedPair)} 
           interval={selectedInterval} 
         />

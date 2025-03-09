@@ -12,9 +12,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from src.clients.pyth_client import PythHermesClient
 from src.clients.threaded_pyth_client import ThreadedPythClient
 from src.clients.threaded_pyth_adapter import ThreadedPythAdapter
+from src.utils.constants import PRICE_FEEDS
 from src.services.websocket_server import PriceFeedWebsocketServer
 from src.api.rest_api import PriceFeedAPI
 from src.utils.logging_config import setup_logging
@@ -25,15 +25,7 @@ class PythPriceFeedService:
     Main application class that sets up and coordinates the Pyth price feed service.
     """
     
-    # Define the standard Pyth feeds to auto-subscribe to
-    DEFAULT_PYTH_FEEDS = {
-        'BTCUSD': '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
-        'ETHUSD': '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
-        'SOLUSD': '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d',
-        'AVAXUSD': '0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7',
-        'LINKUSD': '0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221',
-        'DOGEUSD': '0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c',
-    }
+    # Using the centralized price feeds definition
     
     def __init__(
         self,
@@ -64,15 +56,19 @@ class PythPriceFeedService:
             # Create threaded client with auto-subscribe feeds
             self.threaded_pyth_client = ThreadedPythClient(
                 hermes_sse_url=pyth_sse_url,
-                auto_subscribe_feeds=self.DEFAULT_PYTH_FEEDS
+                auto_subscribe_feeds=PRICE_FEEDS
             )
             # Create adapter to make threaded client compatible with async API
             self.pyth_client = ThreadedPythAdapter(self.threaded_pyth_client)
             self.logger.info("Using threaded Pyth client with auto-subscription")
         else:
-            # Use standard async client
-            self.pyth_client = PythHermesClient(hermes_sse_url=pyth_sse_url)
-            self.logger.info("Using standard async Pyth client")
+            # Always use threaded client, but log that we're using it without auto-subscription
+            self.threaded_pyth_client = ThreadedPythClient(
+                hermes_sse_url=pyth_sse_url,
+                auto_subscribe_feeds={}  # No auto-subscribe
+            )
+            self.pyth_client = ThreadedPythAdapter(self.threaded_pyth_client)
+            self.logger.info("Using threaded Pyth client without auto-subscription")
         
         # Initialize other components
         self.websocket_server = PriceFeedWebsocketServer(

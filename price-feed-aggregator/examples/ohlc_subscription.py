@@ -89,41 +89,12 @@ async def subscribe_to_ohlc(
     logger.info(f"Sent OHLC subscription request for feed ID: {feed_id}, interval: {interval}")
 
 
-async def get_ohlc_history(
-    websocket: WebSocketClientProtocol,
-    feed_id: str,
-    interval: str,
-    limit: int = 100
-) -> None:
-    """
-    Request historical OHLC bars for a specific feed and interval.
-    
-    Args:
-        websocket: The websocket connection
-        feed_id: Pyth feed ID
-        interval: Time interval for the OHLC bars
-        limit: Maximum number of bars to retrieve
-    """
-    # Remove 0x prefix if present
-    if feed_id.startswith('0x'):
-        feed_id = feed_id[2:]
-        
-    # Create request message
-    request_msg = {
-        "type": "get_ohlc_history",
-        "feed_id": feed_id,
-        "interval": interval,
-        "limit": limit
-    }
-    
-    # Send request message
-    await websocket.send(json.dumps(request_msg))
-    logger.info(f"Requested OHLC history for feed ID: {feed_id}, interval: {interval}")
+# Removed get_ohlc_history function - historical data now comes with subscription confirmation
 
 
 async def handle_messages(
     websocket: WebSocketClientProtocol,
-    timeout: float = 30.0
+    timeout: float = 5.0
 ) -> None:
     """
     Handle messages from the websocket server.
@@ -161,51 +132,49 @@ async def handle_messages(
                     intervals_str = ", ".join(intervals)
                     symbol = data.get("symbol", feed_id)
                     logger.info(f"OHLC subscription confirmed for {symbol} ({feed_id}), intervals: {intervals_str}")
+                    
+                    # Process historical data that comes with subscription confirmation
+                    historical_data = data.get("historical_data", {})
+                    for interval, bars in historical_data.items():
+                        if bars:
+                            # Display summary of bars (oldest and newest)
+                            oldest_bar = bars[-1]  # Oldest bar
+                            latest_bar = bars[0]   # Newest bar (the bars should be in reverse order, newest first)
+                            
+                            # Latest bar details
+                            open_price = latest_bar.get("open", 0)
+                            high_price = latest_bar.get("high", 0)
+                            low_price = latest_bar.get("low", 0)
+                            close_price = latest_bar.get("close", 0)
+                            
+                            # Display bar count prominently
+                            bar_count = len(bars)
+                            bar_count_str = f"===== RECEIVED {bar_count} HISTORICAL BARS FOR {interval} ====="
+                            logger.info("=" * len(bar_count_str))
+                            logger.info(bar_count_str)
+                            logger.info("=" * len(bar_count_str))
+                            
+                            logger.info(f"Symbol: {symbol} ({interval})")
+                            oldest_time = oldest_bar.get("timestamp")
+                            newest_time = latest_bar.get("timestamp")
+                            logger.info(f"Date range: {oldest_time} to {newest_time}")
+                            logger.info(f"Latest bar: ${open_price:.2f}, ${high_price:.2f}, ${low_price:.2f}, ${close_price:.2f} (OHLC)")
+                            
+                            # Store this as the current bar
+                            current_bars[(feed_id, interval)] = latest_bar
+                            
+                            # Initialize bar counter for this feed/interval with number of bars received
+                            if not hasattr(run_client, "bar_counters"):
+                                run_client.bar_counters = {}
+                            
+                            key = (feed_id, interval)
+                            run_client.bar_counters[key] = bar_count
+                        else:
+                            logger.info(f"No historical OHLC bars available for {feed_id}, interval: {interval}")
                 else:
                     logger.info(f"Price feed subscription confirmed for feed ID: {feed_id}")
                 
-            elif message_type == "ohlc_history":
-                feed_id = data.get("feed_id")
-                interval = data.get("interval")
-                bars = data.get("bars", [])
-                
-                if bars:
-                    # Display summary of bars (oldest and newest)
-                    oldest_bar = bars[-1]  # Oldest bar
-                    latest_bar = bars[0]   # Newest bar (the bars should be in reverse order, newest first)
-                    
-                    symbol = latest_bar.get("symbol", feed_id)
-                    oldest_time = oldest_bar.get("timestamp")
-                    newest_time = latest_bar.get("timestamp")
-                    
-                    # Latest bar details
-                    open_price = latest_bar.get("open", 0)
-                    high_price = latest_bar.get("high", 0)
-                    low_price = latest_bar.get("low", 0)
-                    close_price = latest_bar.get("close", 0)
-                    
-                    # Display bar count prominently
-                    bar_count = len(bars)
-                    bar_count_str = f"===== RECEIVED {bar_count} HISTORICAL BARS ====="
-                    logger.info("=" * len(bar_count_str))
-                    logger.info(bar_count_str)
-                    logger.info("=" * len(bar_count_str))
-                    
-                    logger.info(f"Symbol: {symbol} ({interval})")
-                    logger.info(f"Date range: {oldest_time} to {newest_time}")
-                    logger.info(f"Latest bar: ${open_price:.2f}, ${high_price:.2f}, ${low_price:.2f}, ${close_price:.2f} (OHLC)")
-                    
-                    # Store this as the current bar
-                    current_bars[(feed_id, interval)] = latest_bar
-                    
-                    # Initialize bar counter for this feed/interval with number of bars received
-                    if not hasattr(run_client, "bar_counters"):
-                        run_client.bar_counters = {}
-                    
-                    key = (feed_id, interval)
-                    run_client.bar_counters[key] = bar_count
-                else:
-                    logger.info(f"No historical OHLC bars available for {feed_id}, interval: {interval}")
+            # Removed ohlc_history message handling
                 
             elif message_type == "bar_update":
                 # This is an update to an existing bar
@@ -357,14 +326,7 @@ async def run_client(args) -> None:
                     symbol
                 )
                 
-                # Request historical bars if needed
-                if args.history:
-                    await get_ohlc_history(
-                        websocket,
-                        feed_id,
-                        args.interval,
-                        args.history_limit
-                    )
+                # Historical bars are now automatically received with subscription confirmation
             
             # Handle incoming messages
             await handle_messages(websocket, args.timeout)

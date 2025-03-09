@@ -23,7 +23,7 @@ setup(
             "pytest-mock>=3.12.0",
         ]
     },
-    python_requires=">=3.11",
+    python_requires=">=3.8",
     entry_points={
         "console_scripts": [
             "pyth-price-feed=src.main:main_cli",

@@ -6,6 +6,7 @@ from typing import Dict, List, Set, Optional, Any, Callable, Awaitable, Union, C
 from collections import defaultdict
 
 from src.models.price_feed_models import OHLCBar, TimeInterval, PythPriceData
+from src.utils.constants import OHLC_TIME_INTERVALS, DEFAULT_HISTORY_LIMIT
 
 # Type for callbacks that might be sync or async - with optional history_message
 CallbackType = Callable[[OHLCBar, str, Set[str], Optional[Dict[str, Any]]], Union[None, Awaitable[None]]]

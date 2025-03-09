@@ -123,7 +123,7 @@ async def subscribe_to_multiple_feeds(
 async def handle_price_updates(
     websocket: WebSocketClientProtocol,
     max_updates: Optional[int] = None,
-    timeout: float = 5.0,
+    timeout: float = 30.0,
     feed_filter: Optional[Set[str]] = None
 ) -> None:
     """
