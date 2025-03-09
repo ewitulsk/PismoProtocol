@@ -1,0 +1,3 @@
+[console_scripts]
+price-feed-aggregator = src.main:main_cli
+
