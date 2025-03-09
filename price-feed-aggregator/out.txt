@@ -1,0 +1,79 @@
+[2025-03-08 20:22:29,579] [price_feed_aggregator] [INFO] Starting Price Feed Aggregator
+[2025-03-08 20:22:29,579] [pyth_client] [INFO] Connecting to Pyth Hermes SSE at https://hermes.pyth.network/v2/updates/price/stream
+[2025-03-08 20:22:29,939] [pyth_client] [ERROR] Failed to connect to SSE: 400, Failed to deserialize query string. Error: missing field `ids`
+[2025-03-08 20:22:30,849] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:30,849] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:30,849] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:30,849] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:30,849] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:30,849] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:30,849] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:31,221] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:31,221] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:31,221] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:31,221] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,221] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,221] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:31,221] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:31,364] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:31,364] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:31,364] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:31,364] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,365] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,365] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:31,365] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:31,491] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:31,491] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:31,492] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:31,492] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,492] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,492] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:31,492] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:31,615] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:31,616] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:31,616] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:31,616] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,616] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,616] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:31,616] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:31,759] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:31,760] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:31,760] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:31,760] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,760] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,760] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:31,760] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:31,901] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:31,901] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:31,901] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:31,901] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,901] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:31,901] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:31,901] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:33,168] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:33,168] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:33,168] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:33,168] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:33,168] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:33,168] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:33,168] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:33,328] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:33,329] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:33,329] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:33,329] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:33,329] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:33,329] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:33,329] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:33,486] [price_feed_aggregator] [INFO] Received shutdown signal
+[2025-03-08 20:22:33,486] [price_feed_aggregator] [INFO] Shutting down Price Feed Aggregator
+[2025-03-08 20:22:33,486] [price_feed_aggregator] [INFO] REST API will shut down with the main process
+[2025-03-08 20:22:33,486] [websocket_server] [INFO] Websocket server stopped
+[2025-03-08 20:22:33,486] [price_feed_aggregator] [INFO] Websocket server stopped
+[2025-03-08 20:22:33,486] [price_feed_aggregator] [INFO] Pyth client stopped
+[2025-03-08 20:22:33,486] [price_feed_aggregator] [INFO] Price Feed Aggregator shutdown complete
+[2025-03-08 20:22:34,939] [price_feed_aggregator] [INFO] Pyth client started
+[2025-03-08 20:22:34,940] [websocket_server] [INFO] Websocket server started on ws://0.0.0.0:8765
+[2025-03-08 20:22:34,940] [price_feed_aggregator] [INFO] Websocket server listening on ws://0.0.0.0:8765
+[2025-03-08 20:22:34,940] [price_feed_aggregator] [INFO] REST API started on http://0.0.0.0:8080
+[2025-03-08 20:22:35,273] [pyth_client] [ERROR] Failed to get price feeds: 
+[2025-03-08 20:22:35,273] [price_feed_aggregator] [INFO] Available price feeds: 0 feeds

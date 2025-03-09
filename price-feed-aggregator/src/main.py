@@ -3,10 +3,17 @@ import argparse
 import logging
 import signal
 import threading
+import os
 import uvicorn
+from pathlib import Path
 from typing import Optional, Set, Dict, Any, cast
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from src.clients.pyth_client import PythHermesClient
+from src.clients.polygon_client import PolygonStreamClient
 from src.services.websocket_server import PriceFeedWebsocketServer
 from src.api.rest_api import PriceFeedAPI
 from src.utils.logging_config import setup_logging
@@ -24,6 +31,9 @@ class PriceFeedAggregator:
         api_host: str = "localhost",
         api_port: int = 8080,
         pyth_sse_url: str = "https://hermes.pyth.network/v2/updates/price/stream",
+        polygon_api_key: Optional[str] = None,
+        polygon_websocket_url: str = "wss://socket.polygon.io/crypto",
+        polygon_data_max_age: int = 300,  # Max age in seconds
         log_level: int = logging.INFO,
     ) -> None:
         self.host = host
@@ -31,6 +41,9 @@ class PriceFeedAggregator:
         self.api_host = api_host
         self.api_port = api_port
         self.pyth_sse_url = pyth_sse_url
+        self.polygon_api_key = polygon_api_key or os.environ.get("POLYGON_API_KEY")
+        self.polygon_websocket_url = polygon_websocket_url
+        self.polygon_data_max_age = polygon_data_max_age
         self.log_level = log_level
         
         # Setup logging
@@ -41,11 +54,27 @@ class PriceFeedAggregator:
         
         # Initialize components
         self.pyth_client = PythHermesClient(hermes_sse_url=pyth_sse_url)
+        
+        # Initialize Polygon client if API key is available
+        if self.polygon_api_key:
+            self.polygon_client = PolygonStreamClient(
+                api_key=self.polygon_api_key,
+                websocket_url=self.polygon_websocket_url
+            )
+            self.logger.info("Polygon client initialized with API key")
+        else:
+            # Create a dummy client that won't be used (for type safety)
+            self.polygon_client = None
+            self.logger.warning("No Polygon API key found - running without Polygon data support")
+        
         self.websocket_server = PriceFeedWebsocketServer(
             pyth_client=self.pyth_client,
+            polygon_client=self.polygon_client,
             host=host,
             port=port,
+            polygon_data_max_age=polygon_data_max_age
         )
+        
         self.rest_api = PriceFeedAPI(
             pyth_client=self.pyth_client,
             websocket_server_status=self.get_websocket_status,
@@ -57,7 +86,8 @@ class PriceFeedAggregator:
     def get_websocket_status(self) -> Dict[str, Any]:
         """Get current status of the websocket server for API."""
         return {
-            "active_feeds": len(self.websocket_server.active_price_feeds),
+            "active_pyth_feeds": len(self.websocket_server.active_pyth_feeds),
+            "active_polygon_tickers": len(self.websocket_server.active_polygon_tickers),
             "connected_clients": len(self.websocket_server.clients),
         }
 
@@ -68,6 +98,10 @@ class PriceFeedAggregator:
         # Initialize the Pyth client but don't start the connection yet
         await self.pyth_client.start()
         self.logger.info("Pyth client started (will connect when clients subscribe to feeds)")
+        
+        # Initialize the Polygon client
+        await self.polygon_client.start()
+        self.logger.info("Polygon client started (will connect when clients subscribe to tickers)")
         
         # Start websocket server
         await self.websocket_server.start()
@@ -92,8 +126,6 @@ class PriceFeedAggregator:
         # Wait for shutdown signal
         await self.shutdown_event.wait()
 
-    # This method is no longer needed since we use asyncio.to_thread directly
-
     async def stop(self) -> None:
         """Stop all components gracefully."""
         self.logger.info("Shutting down Price Feed Aggregator")
@@ -104,6 +136,9 @@ class PriceFeedAggregator:
             
         await self.websocket_server.stop()
         self.logger.info("Websocket server stopped")
+        
+        await self.polygon_client.stop()
+        self.logger.info("Polygon client stopped")
         
         await self.pyth_client.stop()
         self.logger.info("Pyth client stopped")
@@ -130,6 +165,21 @@ async def main() -> None:
         help="Pyth Hermes SSE stream URL"
     )
     parser.add_argument(
+        "--polygon-api-key",
+        help="Polygon.io API key (can also be set via POLYGON_API_KEY env var)"
+    )
+    parser.add_argument(
+        "--polygon-websocket-url",
+        default="wss://socket.polygon.io/crypto",
+        help="Polygon.io WebSocket URL"
+    )
+    parser.add_argument(
+        "--polygon-data-max-age",
+        type=int,
+        default=300,
+        help="Maximum age for Polygon data in seconds (default: 300)"
+    )
+    parser.add_argument(
         "--log-level", 
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -148,6 +198,9 @@ async def main() -> None:
         api_host=args.api_host,
         api_port=args.api_port,
         pyth_sse_url=args.pyth_sse_url,
+        polygon_api_key=args.polygon_api_key,
+        polygon_websocket_url=args.polygon_websocket_url,
+        polygon_data_max_age=args.polygon_data_max_age,
         log_level=log_level,
     )
     
