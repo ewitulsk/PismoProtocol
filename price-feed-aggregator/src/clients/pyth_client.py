@@ -60,8 +60,18 @@ class PythHermesClient:
 
     async def _connect_sse(self) -> None:
         """Establish an SSE connection to the Hermes service."""
+        # Don't even try to connect if there are no feed subscriptions
+        if not self.subscribed_feeds:
+            self.logger.info("No subscribed feeds, skipping SSE connection")
+            return
+            
         while self.is_running:
             try:
+                # Check again if we still have subscriptions (might have changed while waiting)
+                if not self.subscribed_feeds:
+                    self.logger.info("No more subscribed feeds, stopping SSE connection")
+                    break
+                    
                 if not self.session:
                     self.session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False))
                 
@@ -80,6 +90,12 @@ class PythHermesClient:
                     self.logger.error(f"Failed to connect to SSE: {self.sse_response.status}, {error_text}")
                     self.sse_response.close()
                     self.sse_response = None
+                    
+                    # Before retrying, check if we still have subscriptions
+                    if not self.subscribed_feeds:
+                        self.logger.info("No more subscribed feeds, stopping SSE connection attempts")
+                        break
+                        
                     await asyncio.sleep(self.reconnect_delay)
                     continue
                 
@@ -95,13 +111,23 @@ class PythHermesClient:
                     self.sse_response.close()
                     self.sse_response = None
                 
+                # Before retrying, check if we still have subscriptions
+                if not self.subscribed_feeds:
+                    self.logger.info("No more subscribed feeds, stopping SSE connection attempts")
+                    break
+                    
                 await asyncio.sleep(self.reconnect_delay)
     
     def _build_sse_url(self) -> str:
         """Build the SSE URL with query parameters for subscribed feeds."""
         base_url = self.hermes_sse_url
+        
+        # If we have no subscribed feeds, we shouldn't connect at all
+        # But if the code gets here anyway, make sure we provide at least one ID parameter
+        # to avoid the "missing field `ids`" error
         if not self.subscribed_feeds:
-            return base_url
+            self.logger.warning("Attempting to build SSE URL with no subscribed feeds")
+            return f"{base_url}?ids[]=dummy-id-for-empty-subscription"
         
         # Add feed IDs as query parameters
         query_params = []
@@ -253,15 +279,24 @@ class PythHermesClient:
         self.subscribed_feeds.remove(feed_id)
         self.logger.info(f"Removed {feed_id} from subscribed price feeds")
         
-        # For SSE, we need to reconnect with the updated feed list
+        # Check if we have any remaining subscriptions
+        if not self.subscribed_feeds:
+            self.logger.info("No more subscribed feeds, closing the Pyth SSE connection")
+            # Close the SSE connection and don't reconnect
+            if self.sse_response:
+                self.sse_response.close()
+                self.sse_response = None
+            # No need to reconnect since we don't have any subscriptions
+            return
+            
+        # If we still have subscriptions, reconnect with the updated feed list
         if self.sse_response:
             # Close current connection to force reconnect with new feed list
             self.sse_response.close()
             self.sse_response = None
             
-            # Only reconnect if we still have feeds to subscribe to
-            if self.subscribed_feeds:
-                asyncio.create_task(self._connect_sse())
+            # Reconnect with the remaining feeds
+            asyncio.create_task(self._connect_sse())
 
     async def get_available_price_feeds(self) -> List[Dict[str, Any]]:
         """

@@ -425,8 +425,6 @@ class PolygonStreamClient:
                 try:
                     data = json.loads(message)
 
-                    self.logger.info(data)
-                    
                     # Log message preview at debug level
                     self.logger.debug(f"Received message from Polygon: {message[:50]}...")
                     
@@ -481,9 +479,6 @@ class PolygonStreamClient:
             # Format ticker as "X:BTCUSD" from "BTC-USD"
             ticker_parts = ticker.split("-")
             formatted_ticker = f"X:{ticker_parts[0]}-{ticker_parts[1]}" if len(ticker_parts) > 1 else ticker
-            
-            self.logger.info(f"Subscribed Tickers: {self.subscribed_tickers}")
-            self.logger.info(f"Formatted Ticker: {formatted_ticker}")
 
             # Check if this is a ticker we care about
             if formatted_ticker in self.subscribed_tickers:
@@ -503,7 +498,7 @@ class PolygonStreamClient:
                     number_of_trades=message.get("n", None),
                     raw_data=message
                 )
-                self.logger.info("Notifying Callbacks")
+
                 # Notify all registered callbacks
                 await asyncio.gather(
                     *[callback(bar_data) for callback in self.bar_callbacks],

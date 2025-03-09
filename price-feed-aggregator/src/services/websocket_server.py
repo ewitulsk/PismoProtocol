@@ -121,16 +121,27 @@ class PriceFeedWebsocketServer:
         
         try:
             # Send welcome message with connection info
-            await websocket.send(json.dumps({
-                "type": "connection_established",
-                "client_id": client_id,
-                "message": "Connected to Price Feed Aggregator Websocket Server"
-            }))
+            try:
+                await websocket.send(json.dumps({
+                    "type": "connection_established",
+                    "client_id": client_id,
+                    "message": "Connected to Price Feed Aggregator Websocket Server"
+                }))
+            except Exception as e:
+                self.logger.error(f"Failed to send welcome message to client {client_id}: {e}")
+                # If we can't send the welcome message, the connection might be broken
+                # Clean up and return
+                await self.handle_client_disconnect(client_id)
+                return
             
             # Process messages from this client
             async for message in websocket:
                 if isinstance(message, str):
-                    await self.process_client_message(client_id, message)
+                    try:
+                        await self.process_client_message(client_id, message)
+                    except Exception as e:
+                        self.logger.error(f"Error processing message from client {client_id}: {e}")
+                        # Continue processing messages even if one fails
                 else:
                     # Handle binary messages if needed or log a warning
                     self.logger.warning(f"Received binary message from client {client_id}, ignoring")
@@ -140,8 +151,18 @@ class PriceFeedWebsocketServer:
         except Exception as e:
             self.logger.error(f"Error handling client {client_id}: {e}")
         finally:
-            # Clean up when client disconnects
-            await self.handle_client_disconnect(client_id)
+            # Make sure client ID is removed from client dictionaries
+            try:
+                # This might throw exceptions if called multiple times,
+                # so we catch any errors during cleanup
+                await self.handle_client_disconnect(client_id)
+            except Exception as e:
+                self.logger.error(f"Error during client disconnect cleanup for {client_id}: {e}")
+                # Remove client directly if handle_client_disconnect fails
+                if client_id in self.clients:
+                    del self.clients[client_id]
+                if client_id in self.client_subscriptions:
+                    del self.client_subscriptions[client_id]
 
     async def process_client_message(self, client_id: str, message: str) -> None:
         """
@@ -314,12 +335,17 @@ class PriceFeedWebsocketServer:
                 if not self.feed_subscribers[feed_id]:
                     del self.feed_subscribers[feed_id]
             
-            # Notify client of successful unsubscription
-            await self.clients[client_id].send(json.dumps({
-                "type": "unsubscription_confirmed",
-                "feed_id": feed_id,
-                "ticker": ticker
-            }))
+            # Only notify client if they're still connected
+            if client_id in self.clients:
+                try:
+                    await self.clients[client_id].send(json.dumps({
+                        "type": "unsubscription_confirmed",
+                        "feed_id": feed_id,
+                        "ticker": ticker
+                    }))
+                except Exception as e:
+                    # Client might have disconnected during this operation
+                    self.logger.warning(f"Failed to send unsubscription confirmation to client {client_id}: {e}")
             
             self.logger.info(f"Client {client_id} unsubscribed from feed {feed_id} with ticker {ticker}")
 
@@ -330,15 +356,56 @@ class PriceFeedWebsocketServer:
         Args:
             client_id: The unique ID of the client that disconnected
         """
+        # Remove client from clients dictionary if present
         if client_id in self.clients:
             del self.clients[client_id]
         
-        # Clean up subscriptions
+        # Clean up feed subscribers directly
         if client_id in self.client_subscriptions:
-            subscribed_feeds = list(self.client_subscriptions[client_id])
-            for subscription in subscribed_feeds:
-                await self.unsubscribe_client_from_feed(client_id, subscription)
+            # Get all subscriptions for this client
+            subscriptions_to_remove = list(self.client_subscriptions[client_id])
             
+            # For each subscription, clean up the feed subscribers and data sources
+            for subscription in subscriptions_to_remove:
+                feed_id = subscription.feed_id
+                ticker = subscription.ticker
+                
+                # First remove from feed subscribers
+                if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
+                    self.feed_subscribers[feed_id].remove(client_id)
+                    
+                    # If no more clients are subscribed to this feed, unsubscribe from Pyth
+                    if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
+                        self.active_pyth_feeds.remove(feed_id)
+                        try:
+                            await self.pyth_client.unsubscribe_from_feed(feed_id)
+                        except Exception as e:
+                            self.logger.error(f"Error unsubscribing from Pyth feed {feed_id}: {e}")
+                        
+                        # Also unsubscribe from the corresponding Polygon ticker if no other feeds use it
+                        if ticker and self.polygon_client and feed_id in self.feed_to_ticker_map:
+                            # Check if any other feeds use this ticker
+                            ticker_in_use = False
+                            for other_feed_id, other_ticker in self.feed_to_ticker_map.items():
+                                if other_feed_id != feed_id and other_ticker == ticker:
+                                    ticker_in_use = True
+                                    break
+                                    
+                            if not ticker_in_use and ticker in self.active_polygon_tickers:
+                                self.active_polygon_tickers.remove(ticker)
+                                try:
+                                    await self.polygon_client.unsubscribe_from_ticker(ticker)
+                                except Exception as e:
+                                    self.logger.error(f"Error unsubscribing from Polygon ticker {ticker}: {e}")
+                                
+                            # Remove the mapping
+                            del self.feed_to_ticker_map[feed_id]
+                    
+                    # Remove empty feed subscriber set
+                    if not self.feed_subscribers[feed_id]:
+                        del self.feed_subscribers[feed_id]
+            
+            # Remove client from client_subscriptions
             del self.client_subscriptions[client_id]
             
         self.logger.info(f"Cleaned up resources for client {client_id}")
@@ -425,8 +492,6 @@ class PriceFeedWebsocketServer:
             bar_data: The bar data received from Polygon
         """
         ticker = bar_data.ticker
-
-        self.logger.info(f"Got Update: {bar_data}")
         
         # Store the latest Polygon data
         self.latest_polygon_data[ticker] = bar_data
@@ -488,14 +553,32 @@ class PriceFeedWebsocketServer:
             client_id: The unique ID of the client
             message: The message to send
         """
+        # Skip if client not in our active clients
+        if client_id not in self.clients:
+            return
+            
         try:
-            if client_id in self.clients:
-                await self.clients[client_id].send(message)
+            await self.clients[client_id].send(message)
         except ConnectionClosed:
             # Handle case where client disconnected but we haven't processed it yet
-            await self.handle_client_disconnect(client_id)
+            self.logger.info(f"Client {client_id} connection closed, cleaning up")
+            try:
+                await self.handle_client_disconnect(client_id)
+            except Exception as e:
+                self.logger.error(f"Error during client disconnect cleanup: {e}")
+                # Make sure client is removed even if cleanup fails
+                if client_id in self.clients:
+                    del self.clients[client_id]
         except Exception as e:
             self.logger.error(f"Error sending message to client {client_id}: {e}")
+            # The connection might be broken in unexpected ways
+            try:
+                await self.handle_client_disconnect(client_id)
+            except Exception as cleanup_error:
+                self.logger.error(f"Error during cleanup after send failure: {cleanup_error}")
+                # Make sure client is removed even if cleanup fails
+                if client_id in self.clients:
+                    del self.clients[client_id]
 
     async def send_available_feeds(self, client_id: str) -> None:
         """
