@@ -5,7 +5,9 @@ import {
   ColorType,
   Time,
   CandlestickData,
-  LineData
+  LineData,
+  ISeriesApi,
+  SeriesType
 } from 'lightweight-charts';
 import { priceFeedAggregatorService, PriceUpdate, PriceFeedBarData, PriceFeedAggregatorService } from '@/utils/priceFeedAggregator';
 
@@ -22,6 +24,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [lastBar, setLastBar] = useState<CandlestickData<Time> | null>(null);
   const [historicalData, setHistoricalData] = useState<CandlestickData<Time>[]>([]);
+  const [priceLineData, setPriceLineData] = useState<LineData[]>([]);
+  
+  // Use refs to store chart and series objects to prevent recreation
+  const chartRef = useRef<any>(null);
+  const candleSeriesRef = useRef<any>(null);
+  // const realTimePriceLineRef = useRef<any>(null);
 
   // Generate initial sample data
   const generateInitialData = (): CandlestickData<Time>[] => {
@@ -57,13 +65,85 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     return data;
   };
 
+  // Handle price updates without recreating the chart
+  const handlePriceUpdate = (update: PriceUpdate) => {
+    const price = update.price;
+    setLastPrice(price);
+    
+    console.log(`[LightweightChartWidget] Processing update for ${symbol}: $${price.toFixed(2)}`);
+
+    // Get current time from the update
+    const time = Math.floor(new Date(update.timestamp).getTime() / 1000) as Time;
+
+    // Handle OHLC data if available
+    if (update.polygon_data && candleSeriesRef.current) {
+      const bar = PriceFeedAggregatorService.createBarFromUpdate(update);
+      if (bar) {
+        const typedBar = {
+          ...bar,
+          time: bar.time as Time
+        };
+        candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
+        setLastBar(typedBar as CandlestickData<Time>);
+      }
+    } else if (lastBar && candleSeriesRef.current) {
+      // Update the last bar with the new price
+      const updatedBar = { ...lastBar };
+      
+      // Calculate the interval in seconds
+      const intervalInSeconds = parseInt(interval) || 60;
+      
+      // Determine if we should create a new bar based on time difference
+      const lastBarTime = typeof lastBar.time === 'number' ? lastBar.time : parseInt(lastBar.time.toString());
+      const currentTime = typeof time === 'number' ? time : parseInt(time.toString());
+      
+      // Check if we've moved to a new interval
+      const isNewInterval = Math.floor(currentTime / intervalInSeconds) > Math.floor(lastBarTime / intervalInSeconds);
+      
+      console.log(`Time check: current=${currentTime}, last=${lastBarTime}, interval=${intervalInSeconds}, isNew=${isNewInterval}`);
+      
+      if (!isNewInterval) {
+        // Update existing bar
+        updatedBar.close = price;
+        updatedBar.high = Math.max(lastBar.high, price);
+        updatedBar.low = Math.min(lastBar.low, price);
+        
+        candleSeriesRef.current.update(updatedBar);
+        setLastBar(updatedBar);
+      } else {
+        // Create a new bar for the new time interval
+        const newBar = {
+          time: currentTime as Time,
+          open: price,
+          high: price,
+          low: price,
+          close: price
+        };
+        
+        candleSeriesRef.current.update(newBar);
+        setLastBar(newBar);
+      }
+    } else if (candleSeriesRef.current) {
+      // Create a new bar from just the price
+      const partialBar = PriceFeedAggregatorService.createPartialBar(update);
+      const typedBar = {
+        ...partialBar,
+        time: partialBar.time as Time
+      };
+      candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
+      setLastBar(typedBar as CandlestickData<Time>);
+    }
+  };
+
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const handleResize = () => {
-      chart.applyOptions({
-        width: chartContainerRef.current?.clientWidth || 600
-      });
+      if (chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current?.clientWidth || 600
+        });
+      }
     };
 
     // Initialize chart
@@ -83,6 +163,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         secondsVisible: interval.includes('S'),
       },
     });
+    chartRef.current = chart;
 
     // Create and style the candlestick series
     const candleSeries = chart.addCandlestickSeries({
@@ -92,16 +173,8 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       wickUpColor: '#26a69a',
       wickDownColor: '#ef5350',
     });
-
-    // Create price line for real-time price
-    const priceLine = chart.addLineSeries({
-      color: '#2962FF',
-      lineWidth: 2,
-      crosshairMarkerVisible: true,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    });
-
+    candleSeriesRef.current = candleSeries;
+    
     // Initialize with sample data
     const initialData = generateInitialData();
     setHistoricalData(initialData);
@@ -109,63 +182,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
 
     // Fit content to show all data
     chart.timeScale().fitContent();
-
-    // Subscribe to price feed updates
-    const handlePriceUpdate = (update: PriceUpdate) => {
-      const price = update.price;
-      setLastPrice(price);
-      
-      console.log(`[LightweightChartWidget] Processing update for ${symbol}: $${price.toFixed(2)}`);
-
-      // Update price line with latest price
-      const time = Math.floor(new Date(update.timestamp).getTime() / 1000) as Time;
-      priceLine.update({ time, value: price } as LineData);
-
-      // Handle OHLC data if available
-      if (update.polygon_data) {
-        const bar = PriceFeedAggregatorService.createBarFromUpdate(update);
-        if (bar) {
-          const typedBar = {
-            ...bar,
-            time: bar.time as Time
-          };
-          console.log('[LightweightChartWidget] Updating candlestick with new bar:', typedBar);
-          candleSeries.update(typedBar as CandlestickData<Time>);
-          setLastBar(typedBar as CandlestickData<Time>);
-        }
-      } else if (lastBar) {
-        // Update the last bar with the new price
-        const updatedBar = { ...lastBar };
-        
-        // If time is the same as the last bar, update it
-        if (time === lastBar.time) {
-          updatedBar.close = price;
-          updatedBar.high = Math.max(lastBar.high, price);
-          updatedBar.low = Math.min(lastBar.low, price);
-        } else {
-          // Create a new bar
-          updatedBar.time = time;
-          updatedBar.open = lastBar.close;
-          updatedBar.high = Math.max(price, lastBar.close);
-          updatedBar.low = Math.min(price, lastBar.close);
-          updatedBar.close = price;
-        }
-        
-        console.log('[LightweightChartWidget] Updating existing bar:', updatedBar);
-        candleSeries.update(updatedBar);
-        setLastBar(updatedBar);
-      } else {
-        // Create a new bar from just the price
-        const partialBar = PriceFeedAggregatorService.createPartialBar(update);
-        const typedBar = {
-          ...partialBar,
-          time: partialBar.time as Time
-        };
-        console.log('[LightweightChartWidget] Creating new bar:', typedBar);
-        candleSeries.update(typedBar as CandlestickData<Time>);
-        setLastBar(typedBar as CandlestickData<Time>);
-      }
-    };
 
     // Subscribe to price feed
     console.log("The chart is making the subscription...");
@@ -179,9 +195,14 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       priceFeedAggregatorService.unsubscribe(symbol);
-      chart.remove();
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+        candleSeriesRef.current = null;
+        // realTimePriceLineRef.current = null;
+      }
     };
-  }, [symbol, interval, lastBar]);
+  }, [symbol, interval]); // Removed lastBar from dependencies
 
   return (
     <div 
