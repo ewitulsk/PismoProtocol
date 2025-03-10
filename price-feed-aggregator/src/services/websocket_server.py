@@ -538,39 +538,44 @@ class PriceFeedWebsocketServer:
             # Get corresponding Pyth data if available
             pyth_data = self.latest_pyth_data.get(feed_id)
             
-            # Only send update if we have Pyth data (wait for Pyth data as required by the spec)
+            # Extract symbol from ticker for aggregation
+            symbol_parts = ticker.split(":")
+            if len(symbol_parts) > 1:
+                base = symbol_parts[1][:3]  # First 3 chars for base currency
+                quote = symbol_parts[1][3:]  # Rest for quote currency
+                symbol = f"{base}/{quote}"
+            else:
+                symbol = ticker
+            
+            # Create aggregated price data
             if pyth_data:
-                # Extract symbol from ticker for aggregation
-                symbol_parts = ticker.split(":")
-                if len(symbol_parts) > 1:
-                    base = symbol_parts[1][:3]  # First 3 chars for base currency
-                    quote = symbol_parts[1][3:]  # Rest for quote currency
-                    symbol = f"{base}/{quote}"
-                else:
-                    symbol = ticker
-                
-                # Create aggregated price data with both sources
+                # We have both Pyth and Polygon data, combine them
                 aggregated_data = AggregatedPriceData.combine_sources(
                     symbol=symbol,
                     pyth_data=pyth_data,
                     polygon_data=bar_data
                 )
-                
-                # Convert to JSON with datetime serialization
-                update_json = json.dumps({
-                    "type": "price_update",
-                    "data": aggregated_data.model_dump(mode="json")
-                })
-                
-                # Send to all subscribed clients
-                send_tasks = []
-                for client_id in self.feed_subscribers[feed_id]:
-                    if client_id in self.clients:
-                        send_tasks.append(self.send_to_client(client_id, update_json))
-                
-                # Send messages in parallel
-                if send_tasks:
-                    await asyncio.gather(*send_tasks, return_exceptions=True)
+            else:
+                # We only have Polygon data
+                aggregated_data = AggregatedPriceData.from_polygon(
+                    polygon_data=bar_data
+                )
+            
+            # Convert to JSON with datetime serialization
+            update_json = json.dumps({
+                "type": "price_update",
+                "data": aggregated_data.model_dump(mode="json")
+            })
+            
+            # Send to all subscribed clients
+            send_tasks = []
+            for client_id in self.feed_subscribers[feed_id]:
+                if client_id in self.clients:
+                    send_tasks.append(self.send_to_client(client_id, update_json))
+            
+            # Send messages in parallel
+            if send_tasks:
+                await asyncio.gather(*send_tasks, return_exceptions=True)
 
     async def send_to_client(self, client_id: str, message: str) -> None:
         """
