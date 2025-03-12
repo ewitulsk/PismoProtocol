@@ -14,6 +14,16 @@ class PriceStatus(str, Enum):
 class PriceSource(str, Enum):
     PYTH = "pyth"
     POLYGON = "polygon"
+    
+    
+class MessageType(str, Enum):
+    PRICE_UPDATE = "price_update"
+    POLYGON_CANDLE_UPDATE = "polygon_candle_update"
+    CONNECTION_ESTABLISHED = "connection_established"
+    SUBSCRIPTION_CONFIRMED = "subscription_confirmed"
+    UNSUBSCRIPTION_CONFIRMED = "unsubscription_confirmed"
+    AVAILABLE_FEEDS = "available_feeds"
+    ERROR = "error"
 
 
 class PythPriceData(BaseModel):
@@ -66,6 +76,66 @@ class PriceFeedUpdate(BaseModel):
     status: PriceStatus
     timestamp: datetime
     source: str = PriceSource.PYTH
+
+
+class PolygonCandleData(BaseModel):
+    """
+    Model representing candlestick data specifically for Polygon.io data.
+    This is designed to be used for chart rendering with candlestick data.
+    """
+    symbol: str  # Symbol identifier (e.g., BTC/USD)
+    ticker: str  # Original ticker from Polygon (e.g., X:BTCUSD)
+    timestamp: datetime  # Timestamp of the candle
+    
+    # OHLC data
+    open: float
+    high: float
+    low: float
+    close: float
+    
+    # Additional data
+    volume: float
+    vwap: Optional[float] = None
+    number_of_trades: Optional[int] = None
+    
+    @classmethod
+    def from_polygon_bar(cls, bar_data: "PolygonBarData") -> "PolygonCandleData":
+        """Create a candle data object from Polygon bar data."""
+        # Extract the symbol from ticker (e.g., "X:BTCUSD" -> "BTC/USD")
+        symbol_parts = bar_data.ticker.split(":")
+        if len(symbol_parts) > 1:
+            # Special case for test symbol "X:TESTUSD" -> "TEST/USD"
+            if bar_data.ticker == "X:TESTUSD":
+                symbol = "TEST/USD"
+            else:
+                # Regular handling for normal tickers like "X:BTCUSD" -> "BTC/USD"
+                symbol_part = symbol_parts[1]
+                if len(symbol_part) == 7:  # Format like BTCUSD (3+4)
+                    base = symbol_part[:3]
+                    quote = symbol_part[3:]
+                elif len(symbol_part) == 8:  # Format like TESTUSD (4+4)
+                    base = symbol_part[:4]
+                    quote = symbol_part[4:]
+                else:
+                    # Default split for other cases
+                    base = symbol_part[:len(symbol_part)//2]
+                    quote = symbol_part[len(symbol_part)//2:]
+                symbol = f"{base}/{quote}"
+        else:
+            symbol = bar_data.ticker
+            
+        return cls(
+            symbol=symbol,
+            ticker=bar_data.ticker,
+            timestamp=bar_data.timestamp,
+            open=bar_data.open,
+            high=bar_data.high,
+            low=bar_data.low,
+            close=bar_data.close,
+            volume=bar_data.volume,
+            vwap=bar_data.vwap,
+            number_of_trades=bar_data.number_of_trades
+        )
 
 
 class AggregatedPriceData(BaseModel):

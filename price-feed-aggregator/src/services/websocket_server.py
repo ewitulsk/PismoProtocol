@@ -4,6 +4,7 @@ import logging
 import uuid
 from typing import Dict, Set, Optional, Any, List, Tuple, cast, NamedTuple
 from datetime import datetime, timedelta
+from enum import Enum
 
 import websockets
 import websockets.server
@@ -17,15 +18,24 @@ from src.models.price_feed_models import (
     PolygonBarData, 
     PriceFeedUpdate,
     AggregatedPriceData,
-    PriceSource
+    PolygonCandleData,
+    PriceSource,
+    MessageType
 )
+
+
+class SubscriptionType(str, Enum):
+    """Defines the type of subscription."""
+    AGGREGATED = "aggregated"  # Combined Pyth and Polygon data
+    POLYGON_ONLY = "polygon_only"  # Polygon-only data for charts
 
 
 class FeedSubscription(NamedTuple):
     """Represents a feed subscription with parameters for both Pyth and Polygon."""
-    feed_id: str  # Pyth feed ID
+    feed_id: str  # Pyth feed ID, optional if subscription_type is POLYGON_ONLY
     ticker: Optional[str] = None  # Polygon ticker
     timespan: str = "minute"  # Polygon timeframe
+    subscription_type: SubscriptionType = SubscriptionType.AGGREGATED  # Type of subscription
 
 
 def sanitize_feed_id(feed_id: str) -> str:
@@ -68,6 +78,9 @@ class PriceFeedWebsocketServer:
         self.clients: Dict[str, WebSocketServerProtocol] = {}
         self.client_subscriptions: Dict[str, Set[FeedSubscription]] = {}
         self.feed_subscribers: Dict[str, Set[str]] = {}  # feed_id -> client_ids
+        
+        # Track polygon-only subscriptions
+        self.polygon_only_subscribers: Dict[str, Set[str]] = {}  # ticker -> client_ids
         
         # Track active price feeds for both data sources
         self.active_pyth_feeds: Set[str] = set()
@@ -194,32 +207,78 @@ class PriceFeedWebsocketServer:
             if message_type == "subscribe":
                 # Handle subscription request with combined parameters
                 feed_id = data.get("feed_id")
-                
-                # Sanitize feed ID by removing 0x prefix if present
-                feed_id = sanitize_feed_id(feed_id)
-
                 ticker = data.get("ticker")  # Optional Polygon ticker
                 timespan = data.get("timespan", "minute")  # Default to minute bars
+                subscription_type_str = data.get("subscription_type", SubscriptionType.AGGREGATED.value)
                 
-                if feed_id:
+                try:
+                    subscription_type = SubscriptionType(subscription_type_str)
+                except ValueError:
+                    subscription_type = SubscriptionType.AGGREGATED
+                
+                if subscription_type == SubscriptionType.POLYGON_ONLY:
+                    # For polygon-only subscriptions, we need a ticker but feed_id is optional
+                    if not ticker:
+                        await self.clients[client_id].send(json.dumps({
+                            "type": "error",
+                            "message": "Ticker is required for Polygon-only subscriptions"
+                        }))
+                        return
+                        
+                    # Use ticker as the feed_id for simplicity in subscription tracking
+                    subscription = FeedSubscription(
+                        feed_id=ticker,  # Use ticker as feed_id for Polygon-only subs
+                        ticker=ticker,
+                        timespan=timespan,
+                        subscription_type=SubscriptionType.POLYGON_ONLY
+                    )
+                    await self.subscribe_client_to_feed(client_id, subscription)
+                    
+                else:
+                    # For aggregated subscriptions, we need a feed_id
+                    if not feed_id:
+                        await self.clients[client_id].send(json.dumps({
+                            "type": "error",
+                            "message": "Feed ID is required for aggregated subscriptions"
+                        }))
+                        return
+                        
+                    # Sanitize feed ID by removing 0x prefix if present
+                    feed_id = sanitize_feed_id(feed_id)
+                    
                     # Create a subscription with parameters for both data sources
                     subscription = FeedSubscription(
                         feed_id=feed_id,
                         ticker=ticker,
-                        timespan=timespan
+                        timespan=timespan,
+                        subscription_type=SubscriptionType.AGGREGATED
                     )
                     await self.subscribe_client_to_feed(client_id, subscription)
                     
             elif message_type == "unsubscribe":
                 # Handle unsubscription request
                 feed_id = data.get("feed_id")
-                # Sanitize feed ID by removing 0x prefix if present
-                feed_id = sanitize_feed_id(feed_id)
+                ticker = data.get("ticker")
+                subscription_type_str = data.get("subscription_type", SubscriptionType.AGGREGATED.value)
                 
-                if feed_id:
+                try:
+                    subscription_type = SubscriptionType(subscription_type_str)
+                except ValueError:
+                    subscription_type = SubscriptionType.AGGREGATED
+                
+                if subscription_type == SubscriptionType.POLYGON_ONLY and ticker:
+                    # For polygon-only subscriptions, find by ticker
+                    for subscription in self.client_subscriptions.get(client_id, set()):
+                        if subscription.ticker == ticker and subscription.subscription_type == SubscriptionType.POLYGON_ONLY:
+                            await self.unsubscribe_client_from_feed(client_id, subscription)
+                            break
+                elif feed_id:
+                    # Sanitize feed ID by removing 0x prefix if present
+                    feed_id = sanitize_feed_id(feed_id)
+                    
                     # Find the subscription with this feed_id
                     for subscription in self.client_subscriptions.get(client_id, set()):
-                        if subscription.feed_id == feed_id:
+                        if subscription.feed_id == feed_id and subscription.subscription_type == SubscriptionType.AGGREGATED:
                             await self.unsubscribe_client_from_feed(client_id, subscription)
                             break
                 
@@ -229,23 +288,72 @@ class PriceFeedWebsocketServer:
                 if subscriptions and isinstance(subscriptions, list):
                     for sub_data in subscriptions:
                         feed_id = sub_data.get("feed_id")
-                        # Sanitize feed ID by removing 0x prefix if present
-                        feed_id = sanitize_feed_id(feed_id)
-                        
                         ticker = sub_data.get("ticker")
                         timespan = sub_data.get("timespan", "minute")
+                        subscription_type_str = sub_data.get("subscription_type", SubscriptionType.AGGREGATED.value)
                         
-                        if feed_id:
+                        try:
+                            subscription_type = SubscriptionType(subscription_type_str)
+                        except ValueError:
+                            subscription_type = SubscriptionType.AGGREGATED
+                        
+                        if subscription_type == SubscriptionType.POLYGON_ONLY:
+                            # For polygon-only subscriptions, we need a ticker
+                            if not ticker:
+                                continue
+                                
+                            subscription = FeedSubscription(
+                                feed_id=ticker,  # Use ticker as feed_id for Polygon-only subs
+                                ticker=ticker,
+                                timespan=timespan,
+                                subscription_type=SubscriptionType.POLYGON_ONLY
+                            )
+                            await self.subscribe_client_to_feed(client_id, subscription)
+                            
+                        else:
+                            # For aggregated subscriptions, we need a feed_id
+                            if not feed_id:
+                                continue
+                                
+                            # Sanitize feed ID by removing 0x prefix if present
+                            feed_id = sanitize_feed_id(feed_id)
+                            
                             subscription = FeedSubscription(
                                 feed_id=feed_id,
                                 ticker=ticker,
-                                timespan=timespan
+                                timespan=timespan,
+                                subscription_type=SubscriptionType.AGGREGATED
                             )
                             await self.subscribe_client_to_feed(client_id, subscription)
                 
             elif message_type == "get_available_feeds":
                 # Handle request for available feeds
                 await self.send_available_feeds(client_id)
+                
+            elif message_type == "get_available_polygon_tickers":
+                # Handle request for available Polygon tickers
+                if self.polygon_client:
+                    # In a real implementation, you might fetch this from Polygon
+                    # For now, we'll just return a predefined list of common crypto tickers
+                    common_tickers = [
+                        {"ticker": "X:BTCUSD", "name": "Bitcoin/USD", "symbol": "BTC/USD"},
+                        {"ticker": "X:ETHUSD", "name": "Ethereum/USD", "symbol": "ETH/USD"},
+                        {"ticker": "X:SOLUSD", "name": "Solana/USD", "symbol": "SOL/USD"},
+                        {"ticker": "X:DOTUSD", "name": "Polkadot/USD", "symbol": "DOT/USD"},
+                        {"ticker": "X:AVAXUSD", "name": "Avalanche/USD", "symbol": "AVAX/USD"},
+                        {"ticker": "X:NEARUSD", "name": "NEAR Protocol/USD", "symbol": "NEAR/USD"},
+                        {"ticker": "X:MATICUSD", "name": "Polygon/USD", "symbol": "MATIC/USD"},
+                    ]
+                    
+                    await self.clients[client_id].send(json.dumps({
+                        "type": "available_polygon_tickers",
+                        "tickers": common_tickers
+                    }))
+                else:
+                    await self.clients[client_id].send(json.dumps({
+                        "type": "error",
+                        "message": "Polygon client is not available"
+                    }))
                 
             else:
                 # Unknown message type
@@ -280,42 +388,71 @@ class PriceFeedWebsocketServer:
 
         feed_id = subscription.feed_id
         ticker = subscription.ticker
+        subscription_type = subscription.subscription_type
         
         # Add subscription for this client
         if client_id in self.client_subscriptions:
             self.client_subscriptions[client_id].add(subscription)
 
-            # Add client to feed subscribers
-            if feed_id not in self.feed_subscribers:
-                self.feed_subscribers[feed_id] = set()
-            self.feed_subscribers[feed_id].add(client_id)
-            
-            # Subscribe to Pyth feed if this is the first client for this feed
-            if feed_id not in self.active_pyth_feeds:
-                self.active_pyth_feeds.add(feed_id)
-                await self.pyth_client.subscribe_to_feed(feed_id)
+            # For polygon-only subscriptions, handle differently
+            if subscription_type == SubscriptionType.POLYGON_ONLY:
+                # Add client to polygon-only subscribers
+                if ticker not in self.polygon_only_subscribers:
+                    self.polygon_only_subscribers[ticker] = set()
+                self.polygon_only_subscribers[ticker].add(client_id)
+                
+                # Subscribe to Polygon ticker if Polygon client is available
+                if self.polygon_client and ticker not in self.active_polygon_tickers:
+                    try:
+                        self.active_polygon_tickers.add(ticker)
+                        await self.polygon_client.subscribe_to_ticker(ticker)
+                    except Exception as e:
+                        self.logger.error(f"Failed to subscribe to Polygon ticker {ticker}: {e}")
+                        # Remove from active tickers if subscription failed
+                        self.active_polygon_tickers.discard(ticker)
+                
+                # Notify client of successful subscription
+                await self.clients[client_id].send(json.dumps({
+                    "type": MessageType.SUBSCRIPTION_CONFIRMED.value,
+                    "subscription_type": SubscriptionType.POLYGON_ONLY.value,
+                    "ticker": ticker
+                }))
+                
+                self.logger.info(f"Client {client_id} subscribed to Polygon-only ticker {ticker}")
+            else:
+                # For aggregated subscriptions, handle the traditional way
+                # Add client to feed subscribers
+                if feed_id not in self.feed_subscribers:
+                    self.feed_subscribers[feed_id] = set()
+                self.feed_subscribers[feed_id].add(client_id)
+                
+                # Subscribe to Pyth feed if this is the first client for this feed
+                if feed_id not in self.active_pyth_feeds:
+                    self.active_pyth_feeds.add(feed_id)
+                    await self.pyth_client.subscribe_to_feed(feed_id)
 
-            # Subscribe to Polygon ticker if Polygon client is available
-            if ticker and self.polygon_client and ticker not in self.active_polygon_tickers:
-                try:
-                    self.active_polygon_tickers.add(ticker)
-                    await self.polygon_client.subscribe_to_ticker(ticker)
-                    
-                    # Store the mapping between feed_id and ticker
-                    self.feed_to_ticker_map[feed_id] = ticker
-                except Exception as e:
-                    self.logger.error(f"Failed to subscribe to Polygon ticker {ticker}: {e}")
-                    # Remove from active tickers if subscription failed
-                    self.active_polygon_tickers.discard(ticker)
-            
-            # Notify client of successful subscription
-            await self.clients[client_id].send(json.dumps({
-                "type": "subscription_confirmed",
-                "feed_id": feed_id,
-                "ticker": ticker
-            }))
-            
-            self.logger.info(f"Client {client_id} subscribed to feed {feed_id} with ticker {ticker}")
+                # Subscribe to Polygon ticker if Polygon client is available
+                if ticker and self.polygon_client and ticker not in self.active_polygon_tickers:
+                    try:
+                        self.active_polygon_tickers.add(ticker)
+                        await self.polygon_client.subscribe_to_ticker(ticker)
+                        
+                        # Store the mapping between feed_id and ticker
+                        self.feed_to_ticker_map[feed_id] = ticker
+                    except Exception as e:
+                        self.logger.error(f"Failed to subscribe to Polygon ticker {ticker}: {e}")
+                        # Remove from active tickers if subscription failed
+                        self.active_polygon_tickers.discard(ticker)
+                
+                # Notify client of successful subscription
+                await self.clients[client_id].send(json.dumps({
+                    "type": MessageType.SUBSCRIPTION_CONFIRMED.value,
+                    "subscription_type": SubscriptionType.AGGREGATED.value,
+                    "feed_id": feed_id,
+                    "ticker": ticker
+                }))
+                
+                self.logger.info(f"Client {client_id} subscribed to aggregated feed {feed_id} with ticker {ticker}")
 
     async def unsubscribe_client_from_feed(self, client_id: str, subscription: FeedSubscription) -> None:
         """
@@ -327,53 +464,98 @@ class PriceFeedWebsocketServer:
         """
         feed_id = subscription.feed_id
         ticker = subscription.ticker
+        subscription_type = subscription.subscription_type
         
         # Remove subscription for this client
         if client_id in self.client_subscriptions:
             self.client_subscriptions[client_id].discard(subscription)
             
-            # Remove client from feed subscribers
-            if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
-                self.feed_subscribers[feed_id].remove(client_id)
-                
-                # If no more clients are subscribed to this feed, unsubscribe from Pyth
-                if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
-                    self.active_pyth_feeds.remove(feed_id)
-                    await self.pyth_client.unsubscribe_from_feed(feed_id)
+            # For polygon-only subscriptions, handle differently
+            if subscription_type == SubscriptionType.POLYGON_ONLY:
+                # Remove client from polygon-only subscribers
+                if ticker in self.polygon_only_subscribers and client_id in self.polygon_only_subscribers[ticker]:
+                    self.polygon_only_subscribers[ticker].remove(client_id)
                     
-                    # Also unsubscribe from the corresponding Polygon ticker if there are no other feeds using it
-                    if ticker and self.polygon_client and feed_id in self.feed_to_ticker_map:
-                        # Check if any other feeds use this ticker
+                    # If no more clients are subscribed to this ticker (and no aggregated subscriptions use it),
+                    # unsubscribe from Polygon
+                    if not self.polygon_only_subscribers[ticker]:
+                        # Check if any aggregated subscriptions use this ticker
                         ticker_in_use = False
-                        for other_feed_id, other_ticker in self.feed_to_ticker_map.items():
-                            if other_feed_id != feed_id and other_ticker == ticker:
+                        for mapped_ticker in self.feed_to_ticker_map.values():
+                            if mapped_ticker == ticker:
                                 ticker_in_use = True
                                 break
                                 
-                        if not ticker_in_use and ticker in self.active_polygon_tickers:
+                        # If no aggregated subscriptions use this ticker, unsubscribe
+                        if not ticker_in_use and ticker in self.active_polygon_tickers and self.polygon_client:
                             self.active_polygon_tickers.remove(ticker)
                             await self.polygon_client.unsubscribe_from_ticker(ticker)
-                            
-                        # Remove the mapping
-                        del self.feed_to_ticker_map[feed_id]
+                        
+                        # Remove empty subscriber set
+                        del self.polygon_only_subscribers[ticker]
+                        
+                # Notify client of successful unsubscription
+                if client_id in self.clients:
+                    try:
+                        await self.clients[client_id].send(json.dumps({
+                            "type": MessageType.UNSUBSCRIPTION_CONFIRMED.value,
+                            "subscription_type": SubscriptionType.POLYGON_ONLY.value,
+                            "ticker": ticker
+                        }))
+                    except Exception as e:
+                        # Client might have disconnected during this operation
+                        self.logger.warning(f"Failed to send unsubscription confirmation to client {client_id}: {e}")
                 
-                # Remove empty feed subscriber set
-                if not self.feed_subscribers[feed_id]:
-                    del self.feed_subscribers[feed_id]
-            
-            # Only notify client if they're still connected
-            if client_id in self.clients:
-                try:
-                    await self.clients[client_id].send(json.dumps({
-                        "type": "unsubscription_confirmed",
-                        "feed_id": feed_id,
-                        "ticker": ticker
-                    }))
-                except Exception as e:
-                    # Client might have disconnected during this operation
-                    self.logger.warning(f"Failed to send unsubscription confirmation to client {client_id}: {e}")
-            
-            self.logger.info(f"Client {client_id} unsubscribed from feed {feed_id} with ticker {ticker}")
+                self.logger.info(f"Client {client_id} unsubscribed from Polygon-only ticker {ticker}")
+            else:
+                # For aggregated subscriptions, handle the traditional way
+                # Remove client from feed subscribers
+                if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
+                    self.feed_subscribers[feed_id].remove(client_id)
+                    
+                    # If no more clients are subscribed to this feed, unsubscribe from Pyth
+                    if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
+                        self.active_pyth_feeds.remove(feed_id)
+                        await self.pyth_client.unsubscribe_from_feed(feed_id)
+                        
+                        # Also unsubscribe from the corresponding Polygon ticker if there are no other feeds using it
+                        if ticker and self.polygon_client and feed_id in self.feed_to_ticker_map:
+                            # Check if any other feeds use this ticker
+                            ticker_in_use = False
+                            for other_feed_id, other_ticker in self.feed_to_ticker_map.items():
+                                if other_feed_id != feed_id and other_ticker == ticker:
+                                    ticker_in_use = True
+                                    break
+                            
+                            # Check if any polygon-only subscribers use this ticker
+                            if ticker in self.polygon_only_subscribers and self.polygon_only_subscribers[ticker]:
+                                ticker_in_use = True
+                                    
+                            if not ticker_in_use and ticker in self.active_polygon_tickers:
+                                self.active_polygon_tickers.remove(ticker)
+                                await self.polygon_client.unsubscribe_from_ticker(ticker)
+                                
+                            # Remove the mapping
+                            del self.feed_to_ticker_map[feed_id]
+                    
+                    # Remove empty feed subscriber set
+                    if not self.feed_subscribers[feed_id]:
+                        del self.feed_subscribers[feed_id]
+                
+                # Only notify client if they're still connected
+                if client_id in self.clients:
+                    try:
+                        await self.clients[client_id].send(json.dumps({
+                            "type": MessageType.UNSUBSCRIPTION_CONFIRMED.value,
+                            "subscription_type": SubscriptionType.AGGREGATED.value,
+                            "feed_id": feed_id,
+                            "ticker": ticker
+                        }))
+                    except Exception as e:
+                        # Client might have disconnected during this operation
+                        self.logger.warning(f"Failed to send unsubscription confirmation to client {client_id}: {e}")
+                
+                self.logger.info(f"Client {client_id} unsubscribed from aggregated feed {feed_id} with ticker {ticker}")
 
     async def handle_client_disconnect(self, client_id: str) -> None:
         """
@@ -395,41 +577,74 @@ class PriceFeedWebsocketServer:
             for subscription in subscriptions_to_remove:
                 feed_id = subscription.feed_id
                 ticker = subscription.ticker
+                subscription_type = subscription.subscription_type
                 
-                # First remove from feed subscribers
-                if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
-                    self.feed_subscribers[feed_id].remove(client_id)
-                    
-                    # If no more clients are subscribed to this feed, unsubscribe from Pyth
-                    if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
-                        self.active_pyth_feeds.remove(feed_id)
-                        try:
-                            await self.pyth_client.unsubscribe_from_feed(feed_id)
-                        except Exception as e:
-                            self.logger.error(f"Error unsubscribing from Pyth feed {feed_id}: {e}")
+                # Handle polygon-only subscriptions differently
+                if subscription_type == SubscriptionType.POLYGON_ONLY:
+                    # Remove from polygon-only subscribers
+                    if ticker in self.polygon_only_subscribers and client_id in self.polygon_only_subscribers[ticker]:
+                        self.polygon_only_subscribers[ticker].remove(client_id)
                         
-                        # Also unsubscribe from the corresponding Polygon ticker if no other feeds use it
-                        if ticker and self.polygon_client and feed_id in self.feed_to_ticker_map:
-                            # Check if any other feeds use this ticker
+                        # If no more clients are subscribed to this ticker (and no aggregated subscriptions use it),
+                        # unsubscribe from Polygon
+                        if not self.polygon_only_subscribers[ticker]:
+                            # Check if any aggregated subscriptions use this ticker
                             ticker_in_use = False
-                            for other_feed_id, other_ticker in self.feed_to_ticker_map.items():
-                                if other_feed_id != feed_id and other_ticker == ticker:
+                            for mapped_ticker in self.feed_to_ticker_map.values():
+                                if mapped_ticker == ticker:
                                     ticker_in_use = True
                                     break
                                     
-                            if not ticker_in_use and ticker in self.active_polygon_tickers:
+                            # If no aggregated subscriptions use this ticker, unsubscribe
+                            if not ticker_in_use and ticker in self.active_polygon_tickers and self.polygon_client:
                                 self.active_polygon_tickers.remove(ticker)
                                 try:
                                     await self.polygon_client.unsubscribe_from_ticker(ticker)
                                 except Exception as e:
                                     self.logger.error(f"Error unsubscribing from Polygon ticker {ticker}: {e}")
+                            
+                            # Remove empty subscriber set
+                            del self.polygon_only_subscribers[ticker]
+                else:
+                    # For aggregated subscriptions, handle the traditional way
+                    # First remove from feed subscribers
+                    if feed_id in self.feed_subscribers and client_id in self.feed_subscribers[feed_id]:
+                        self.feed_subscribers[feed_id].remove(client_id)
+                        
+                        # If no more clients are subscribed to this feed, unsubscribe from Pyth
+                        if not self.feed_subscribers[feed_id] and feed_id in self.active_pyth_feeds:
+                            self.active_pyth_feeds.remove(feed_id)
+                            try:
+                                await self.pyth_client.unsubscribe_from_feed(feed_id)
+                            except Exception as e:
+                                self.logger.error(f"Error unsubscribing from Pyth feed {feed_id}: {e}")
+                            
+                            # Also unsubscribe from the corresponding Polygon ticker if no other feeds use it
+                            if ticker and self.polygon_client and feed_id in self.feed_to_ticker_map:
+                                # Check if any other feeds use this ticker
+                                ticker_in_use = False
+                                for other_feed_id, other_ticker in self.feed_to_ticker_map.items():
+                                    if other_feed_id != feed_id and other_ticker == ticker:
+                                        ticker_in_use = True
+                                        break
                                 
-                            # Remove the mapping
-                            del self.feed_to_ticker_map[feed_id]
-                    
-                    # Remove empty feed subscriber set
-                    if not self.feed_subscribers[feed_id]:
-                        del self.feed_subscribers[feed_id]
+                                # Check if any polygon-only subscribers use this ticker
+                                if ticker in self.polygon_only_subscribers and self.polygon_only_subscribers[ticker]:
+                                    ticker_in_use = True
+                                        
+                                if not ticker_in_use and ticker in self.active_polygon_tickers:
+                                    self.active_polygon_tickers.remove(ticker)
+                                    try:
+                                        await self.polygon_client.unsubscribe_from_ticker(ticker)
+                                    except Exception as e:
+                                        self.logger.error(f"Error unsubscribing from Polygon ticker {ticker}: {e}")
+                                    
+                                # Remove the mapping
+                                del self.feed_to_ticker_map[feed_id]
+                        
+                        # Remove empty feed subscriber set
+                        if not self.feed_subscribers[feed_id]:
+                            del self.feed_subscribers[feed_id]
             
             # Remove client from client_subscriptions
             del self.client_subscriptions[client_id]
@@ -523,6 +738,16 @@ class PriceFeedWebsocketServer:
         # Store the latest Polygon data
         self.latest_polygon_data[ticker] = bar_data
         
+        # Process both aggregated and polygon-only subscribers
+        await asyncio.gather(
+            self._process_aggregated_updates(bar_data),
+            self._process_polygon_only_updates(bar_data)
+        )
+    
+    async def _process_aggregated_updates(self, bar_data: PolygonBarData) -> None:
+        """Process updates for clients subscribed to aggregated feeds with Polygon data."""
+        ticker = bar_data.ticker
+        
         # Find all feeds that use this ticker
         related_feeds = []
         for feed_id, mapped_ticker in self.feed_to_ticker_map.items():
@@ -563,7 +788,7 @@ class PriceFeedWebsocketServer:
             
             # Convert to JSON with datetime serialization
             update_json = json.dumps({
-                "type": "price_update",
+                "type": MessageType.PRICE_UPDATE.value,
                 "data": aggregated_data.model_dump(mode="json")
             })
             
@@ -576,6 +801,33 @@ class PriceFeedWebsocketServer:
             # Send messages in parallel
             if send_tasks:
                 await asyncio.gather(*send_tasks, return_exceptions=True)
+    
+    async def _process_polygon_only_updates(self, bar_data: PolygonBarData) -> None:
+        """Process updates for clients subscribed to Polygon-only feeds."""
+        ticker = bar_data.ticker
+        
+        # Check if any clients are subscribed to this ticker
+        if ticker not in self.polygon_only_subscribers or not self.polygon_only_subscribers[ticker]:
+            return
+            
+        # Create a dedicated polygon candle data object
+        candle_data = PolygonCandleData.from_polygon_bar(bar_data)
+        
+        # Convert to JSON with datetime serialization
+        update_json = json.dumps({
+            "type": MessageType.POLYGON_CANDLE_UPDATE.value,
+            "data": candle_data.model_dump(mode="json")
+        })
+        
+        # Send to all subscribed clients
+        send_tasks = []
+        for client_id in self.polygon_only_subscribers[ticker]:
+            if client_id in self.clients:
+                send_tasks.append(self.send_to_client(client_id, update_json))
+        
+        # Send messages in parallel
+        if send_tasks:
+            await asyncio.gather(*send_tasks, return_exceptions=True)
 
     async def send_to_client(self, client_id: str, message: str) -> None:
         """

@@ -77,6 +77,7 @@ class PriceFeedAggregator:
         
         self.rest_api = PriceFeedAPI(
             pyth_client=self.pyth_client,
+            polygon_client=self.polygon_client,
             websocket_server_status=self.get_websocket_status,
         )
         
@@ -86,7 +87,7 @@ class PriceFeedAggregator:
     def get_websocket_status(self) -> Dict[str, Any]:
         """Get current status of the websocket server for API."""
         return {
-            "active_pyth_feeds": len(self.websocket_server.active_pyth_feeds),
+            "active_feeds": len(self.websocket_server.active_pyth_feeds),
             "active_polygon_tickers": len(self.websocket_server.active_polygon_tickers),
             "connected_clients": len(self.websocket_server.clients),
         }

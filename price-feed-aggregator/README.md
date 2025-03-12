@@ -1,13 +1,15 @@
 # Price Feed Aggregator
 
-A service that aggregates cryptocurrency price feeds from Pyth Network and provides a websocket interface for clients to subscribe to live price updates.
+A service that aggregates cryptocurrency price feeds from Pyth Network and Polygon.io, providing a websocket interface for clients to subscribe to live price updates and candlestick data.
 
 ## Features
 
-- Connect to Pyth Network's Hermes Server-Sent Events (SSE) stream to receive price feed updates
+- Connect to Pyth Network's Hermes Server-Sent Events (SSE) stream to receive real-time price feed updates
+- Connect to Polygon.io's WebSocket API to receive candlestick data for cryptocurrencies
 - Provide a WebSocket interface for clients to subscribe to specific price feeds
+- Support dedicated Polygon-only subscriptions for candlestick chart data
 - Handle multiple concurrent client connections and subscriptions
-- Robust error handling and automatic reconnection to Pyth
+- Robust error handling and automatic reconnection to data sources
 - REST API for metadata and status information
 
 ## Architecture
@@ -15,19 +17,22 @@ A service that aggregates cryptocurrency price feeds from Pyth Network and provi
 The service consists of several components:
 
 1. **Pyth Hermes Client**: Connects to Pyth's Hermes Server-Sent Events (SSE) stream, subscribes to price feeds, and processes incoming price data.
-2. **WebSocket Server**: Handles client connections, subscriptions, and broadcasts price updates to subscribed clients.
-3. **REST API**: Provides HTTP endpoints for retrieving available feeds and service status.
-4. **Main Application**: Coordinates all components and handles lifecycle management.
+2. **Polygon Stream Client**: Connects to Polygon.io's WebSocket API, subscribes to ticker streams, and processes real-time candlestick data.
+3. **WebSocket Server**: Handles client connections, subscriptions, and broadcasts price updates to subscribed clients.
+4. **REST API**: Provides HTTP endpoints for retrieving available feeds and service status.
+5. **Main Application**: Coordinates all components and handles lifecycle management.
 
 ## Requirements
 
 - Python 3.8 or higher
+- Polygon.io API key (set as environment variable `POLYGON_API_KEY`)
 - Required packages (included in requirements.txt):
   - aiohttp
   - websockets
   - pydantic
   - fastapi
   - uvicorn
+  - python-dotenv
 
 ## Installation
 
@@ -62,6 +67,10 @@ python -m src.main
 python -m src.main --host 0.0.0.0 --port 8765 --api-host 0.0.0.0 --api-port 8080
 ```
 
+### Environment Variables
+
+- `POLYGON_API_KEY`: Your Polygon.io API key (required for Polygon data)
+
 ### Command Line Options
 
 - `--host`: Host to bind the websocket server to (default: 0.0.0.0)
@@ -69,6 +78,7 @@ python -m src.main --host 0.0.0.0 --port 8765 --api-host 0.0.0.0 --api-port 8080
 - `--api-host`: Host to bind the REST API to (default: 0.0.0.0)
 - `--api-port`: Port to bind the REST API to (default: 8080)
 - `--pyth-sse-url`: Pyth Hermes SSE stream URL (default: https://hermes.pyth.network/v2/updates/price/stream)
+- `--polygon-ws-url`: Polygon WebSocket URL (default: wss://socket.polygon.io/crypto)
 - `--log-level`: Logging level (default: INFO)
 
 ## API
@@ -79,26 +89,55 @@ Connect to the websocket server at `ws://<host>:<port>`.
 
 **Available Messages:**
 
-1. **Subscribe to a Price Feed**
+1. **Subscribe to an Aggregated Price Feed** (combined Pyth and Polygon data)
    ```json
    {
      "type": "subscribe",
-     "feed_id": "<feed_id>"
+     "subscription_type": "aggregated",
+     "feed_id": "<feed_id>",
+     "ticker": "<polygon_ticker>"
    }
    ```
 
-2. **Unsubscribe from a Price Feed**
+2. **Subscribe to Polygon-only Candlestick Data**
+   ```json
+   {
+     "type": "subscribe",
+     "subscription_type": "polygon_only",
+     "ticker": "<polygon_ticker>",
+     "timespan": "minute"
+   }
+   ```
+
+3. **Unsubscribe from an Aggregated Price Feed**
    ```json
    {
      "type": "unsubscribe",
+     "subscription_type": "aggregated",
      "feed_id": "<feed_id>"
    }
    ```
 
-3. **Get Available Feeds**
+4. **Unsubscribe from Polygon-only Data**
+   ```json
+   {
+     "type": "unsubscribe",
+     "subscription_type": "polygon_only",
+     "ticker": "<polygon_ticker>"
+   }
+   ```
+
+5. **Get Available Feeds**
    ```json
    {
      "type": "get_available_feeds"
+   }
+   ```
+
+6. **Get Available Polygon Tickers**
+   ```json
+   {
+     "type": "get_available_polygon_tickers"
    }
    ```
 
@@ -117,35 +156,91 @@ Connect to the websocket server at `ws://<host>:<port>`.
    ```json
    {
      "type": "subscription_confirmed",
-     "feed_id": "<feed_id>"
+     "subscription_type": "aggregated",
+     "feed_id": "<feed_id>",
+     "ticker": "<ticker>"
    }
    ```
 
-3. **Unsubscription Confirmed**
+3. **Polygon-only Subscription Confirmed**
+   ```json
+   {
+     "type": "subscription_confirmed",
+     "subscription_type": "polygon_only",
+     "ticker": "<ticker>"
+   }
+   ```
+
+4. **Unsubscription Confirmed**
    ```json
    {
      "type": "unsubscription_confirmed",
-     "feed_id": "<feed_id>"
+     "subscription_type": "aggregated",
+     "feed_id": "<feed_id>",
+     "ticker": "<ticker>"
    }
    ```
 
-4. **Price Update**
+5. **Polygon-only Unsubscription Confirmed**
+   ```json
+   {
+     "type": "unsubscription_confirmed",
+     "subscription_type": "polygon_only",
+     "ticker": "<ticker>"
+   }
+   ```
+
+6. **Aggregated Price Update**
    ```json
    {
      "type": "price_update",
      "data": {
-       "feed_id": "<feed_id>",
+       "symbol": "BTC/USD",
+       "timestamp": "2023-01-01T12:00:00.000Z",
        "price": 50000.0,
        "confidence": 10.0,
-       "exponent": -8,
-       "status": "trading",
-       "timestamp": "2023-01-01T12:00:00.000Z",
-       "source": "pyth"
+       "source_priority": "pyth",
+       "pyth_data": {
+         "id": "<feed_id>",
+         "price": 50000.0,
+         "conf": 10.0,
+         "expo": -8,
+         "status": "trading",
+         "publish_time": "2023-01-01T12:00:00.000Z"
+       },
+       "polygon_data": {
+         "ticker": "X:BTCUSD",
+         "timestamp": "2023-01-01T12:00:00.000Z",
+         "open": 49800.0,
+         "high": 50200.0,
+         "low": 49700.0,
+         "close": 50000.0,
+         "volume": 123.45
+       }
      }
    }
    ```
 
-5. **Available Feeds**
+7. **Polygon Candle Update**
+   ```json
+   {
+     "type": "polygon_candle_update",
+     "data": {
+       "symbol": "BTC/USD",
+       "ticker": "X:BTCUSD",
+       "timestamp": "2023-01-01T12:00:00.000Z",
+       "open": 49800.0,
+       "high": 50200.0,
+       "low": 49700.0,
+       "close": 50000.0,
+       "volume": 123.45,
+       "vwap": 49950.0,
+       "number_of_trades": 42
+     }
+   }
+   ```
+
+8. **Available Feeds**
    ```json
    {
      "type": "available_feeds",
@@ -156,26 +251,54 @@ Connect to the websocket server at `ws://<host>:<port>`.
          "price": 50000.0,
          "conf": 10.0,
          "expo": -8,
-         "status": "trading"
+         "status": "trading",
+         "has_polygon_data": true,
+         "polygon_ticker": "X:BTCUSD"
        },
        ...
      ]
    }
    ```
 
-6. **Error**
+9. **Available Polygon Tickers**
    ```json
    {
-     "type": "error",
-     "message": "<error_message>"
+     "type": "available_polygon_tickers",
+     "tickers": [
+       {
+         "ticker": "X:BTCUSD",
+         "name": "Bitcoin/USD",
+         "symbol": "BTC/USD"
+       },
+       ...
+     ]
    }
    ```
+
+10. **Error**
+    ```json
+    {
+      "type": "error",
+      "message": "<error_message>"
+    }
+    ```
 
 ### HTTP REST API
 
 - `GET /health` - Health check endpoint
 - `GET /feeds` - Get available price feeds
+- `GET /polygon/tickers` - Get available Polygon tickers
 - `GET /status` - Get aggregator status
+
+## Examples
+
+The `examples` directory contains several example clients to demonstrate how to use the service:
+
+- `aggregated_data_example.py` - Example client for aggregated price data
+- `polygon_example.py` - Example client for Polygon-specific data
+- `combined_client_example.py` - Example client that uses both Pyth and Polygon data
+- `polygon_candles_example.py` - Example client for Polygon-only candlestick data
+- `websocket_client.py` - Generic WebSocket client for testing
 
 ## Development
 
