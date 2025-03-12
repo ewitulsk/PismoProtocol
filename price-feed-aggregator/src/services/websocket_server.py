@@ -11,9 +11,13 @@ from websockets.server import WebSocketServerProtocol, WebSocketServer
 from websockets.exceptions import ConnectionClosed
 
 from src.clients.pyth_client import PythHermesClient
+from src.services.ohlc import OHLCService
 from src.models.price_feed_models import (
-    PythPriceData, 
+    PythPriceData,
     FeedSubscription,
+    OHLCSubscription,
+    OHLCBar,
+    TimeInterval,
     MessageType
 )
 
@@ -38,10 +42,16 @@ def sanitize_feed_id(feed_id: str) -> str:
     return feed_id
 
 
+class OHLCSubscriptionInfo(NamedTuple):
+    """Represents an OHLC subscription for a client."""
+    feed_id: str                      # Pyth feed ID
+    intervals: Tuple[TimeInterval, ...] # Time intervals as a tuple (hashable)
+
+
 class PriceFeedWebsocketServer:
     """
     Websocket server that allows clients to connect and subscribe to Pyth price feeds.
-    It forwards price updates from Pyth to subscribed clients.
+    It forwards price updates from Pyth to subscribed clients and supports OHLC bars.
     """
 
     def __init__(
@@ -60,11 +70,18 @@ class PriceFeedWebsocketServer:
         self.client_subscriptions: Dict[str, Set[FeedSubscriptionInfo]] = {}
         self.feed_subscribers: Dict[str, Set[str]] = {}  # feed_id -> client_ids
         
+        # OHLC-specific variables
+        self.ohlc_service = OHLCService()
+        self.ohlc_subscriptions: Dict[str, Set[OHLCSubscriptionInfo]] = {}  # client_id -> set of subscriptions
+        
         # Track active price feeds
         self.active_pyth_feeds: Set[str] = set()
         
         # Cache to store last received data
         self.latest_pyth_data: Dict[str, PythPriceData] = {}
+        
+        # Feed symbol mappings (for nicer display names)
+        self.feed_symbols: Dict[str, str] = {}  # feed_id -> symbol name
         
         # Server instance
         self.server: Optional[WebSocketServer] = None
@@ -73,6 +90,12 @@ class PriceFeedWebsocketServer:
         """Start the websocket server and register callbacks for Pyth."""
         # Register callback for Pyth price updates
         self.pyth_client.register_price_callback(self.handle_pyth_price_update)
+        
+        # Register OHLC bar update callback
+        self.ohlc_service.register_callback(self.handle_ohlc_bar_update)
+        
+        # Start the OHLC service
+        await self.ohlc_service.start()
         
         # Start the websocket server
         self.server = await websockets.server.serve(
@@ -93,10 +116,14 @@ class PriceFeedWebsocketServer:
             await self.server.wait_closed()
             self.server = None
             
+        # Stop the OHLC service
+        await self.ohlc_service.stop()
+            
         # Clear client data
         self.clients = {}
         self.client_subscriptions = {}
         self.feed_subscribers = {}
+        self.ohlc_subscriptions = {}
         self.latest_pyth_data = {}
         
         self.logger.info("Websocket server stopped")
@@ -186,19 +213,90 @@ class PriceFeedWebsocketServer:
                 # Sanitize feed ID by removing 0x prefix if present
                 feed_id = sanitize_feed_id(feed_id)
                 
-                # Create a subscription
-                subscription = FeedSubscriptionInfo(feed_id=feed_id)
-                await self.subscribe_client_to_feed(client_id, subscription)
+                # Check if this is an OHLC subscription
+                is_ohlc = data.get("ohlc", False)
+                
+                if is_ohlc:
+                    # OHLC subscription
+                    intervals_str = data.get("intervals", ["1m"])
+                    if isinstance(intervals_str, str):
+                        intervals_str = [intervals_str]
+                        
+                    # Convert string interval names to TimeInterval enum values
+                    intervals = []
+                    for interval_str in intervals_str:
+                        try:
+                            # Match the interval string to an enum value
+                            found = False
+                            for interval in TimeInterval:
+                                if interval.value == interval_str:
+                                    intervals.append(interval)
+                                    found = True
+                                    break
+                            
+                            if not found:
+                                self.logger.warning(f"Invalid interval: {interval_str}, ignoring")
+                        except Exception as e:
+                            self.logger.error(f"Error parsing interval: {interval_str}: {e}")
+                    
+                    if not intervals:
+                        # Default to 1-minute interval if none were valid
+                        intervals = [TimeInterval.ONE_MINUTE]
+                        
+                    # Get symbol for this feed if available
+                    symbol = data.get("symbol")
+                    if symbol:
+                        self.feed_symbols[feed_id] = symbol
+                        
+                    # Subscribe to OHLC bars
+                    await self.subscribe_client_to_ohlc(client_id, feed_id, intervals)
+                else:
+                    # Regular price feed subscription
+                    subscription = FeedSubscriptionInfo(feed_id=feed_id)
+                    await self.subscribe_client_to_feed(client_id, subscription)
                     
             elif message_type == "unsubscribe":
                 # Handle unsubscription request
                 feed_id = data.get("feed_id")
                 
-                if feed_id:
-                    # Sanitize feed ID by removing 0x prefix if present
-                    feed_id = sanitize_feed_id(feed_id)
+                if not feed_id:
+                    await self.clients[client_id].send(json.dumps({
+                        "type": "error",
+                        "message": "Feed ID is required for unsubscribe"
+                    }))
+                    return
+                
+                # Sanitize feed ID by removing 0x prefix if present
+                feed_id = sanitize_feed_id(feed_id)
+                
+                # Check if this is an OHLC unsubscription
+                is_ohlc = data.get("ohlc", False)
+                
+                if is_ohlc:
+                    # OHLC unsubscription
+                    intervals_str = data.get("intervals")
                     
-                    # Find the subscription with this feed_id
+                    if intervals_str:
+                        if isinstance(intervals_str, str):
+                            intervals_str = [intervals_str]
+                            
+                        # Convert string interval names to TimeInterval enum values
+                        intervals = []
+                        for interval_str in intervals_str:
+                            try:
+                                for interval in TimeInterval:
+                                    if interval.value == interval_str:
+                                        intervals.append(interval)
+                                        break
+                            except Exception:
+                                pass
+                        
+                        await self.unsubscribe_client_from_ohlc(client_id, feed_id, intervals)
+                    else:
+                        # Unsubscribe from all intervals
+                        await self.unsubscribe_client_from_ohlc(client_id, feed_id)
+                else:
+                    # Regular feed unsubscription
                     for subscription in self.client_subscriptions.get(client_id, set()):
                         if subscription.feed_id == feed_id:
                             await self.unsubscribe_client_from_feed(client_id, subscription)
@@ -218,12 +316,86 @@ class PriceFeedWebsocketServer:
                         # Sanitize feed ID by removing 0x prefix if present
                         feed_id = sanitize_feed_id(feed_id)
                         
-                        subscription = FeedSubscriptionInfo(feed_id=feed_id)
-                        await self.subscribe_client_to_feed(client_id, subscription)
+                        # Check if this is an OHLC subscription
+                        is_ohlc = sub_data.get("ohlc", False)
+                        
+                        if is_ohlc:
+                            # OHLC subscription
+                            intervals_str = sub_data.get("intervals", ["1m"])
+                            if isinstance(intervals_str, str):
+                                intervals_str = [intervals_str]
+                                
+                            # Convert string interval names to TimeInterval enum values
+                            intervals = []
+                            for interval_str in intervals_str:
+                                try:
+                                    for interval in TimeInterval:
+                                        if interval.value == interval_str:
+                                            intervals.append(interval)
+                                            break
+                                except Exception:
+                                    pass
+                            
+                            if not intervals:
+                                # Default to 1-minute interval if none were valid
+                                intervals = [TimeInterval.ONE_MINUTE]
+                                
+                            # Get symbol for this feed if available
+                            symbol = sub_data.get("symbol")
+                            if symbol:
+                                self.feed_symbols[feed_id] = symbol
+                                
+                            # Subscribe to OHLC bars
+                            await self.subscribe_client_to_ohlc(client_id, feed_id, intervals)
+                        else:
+                            # Regular price feed subscription
+                            subscription = FeedSubscriptionInfo(feed_id=feed_id)
+                            await self.subscribe_client_to_feed(client_id, subscription)
                 
             elif message_type == "get_available_feeds":
                 # Handle request for available feeds
                 await self.send_available_feeds(client_id)
+                
+            elif message_type == "get_ohlc_history":
+                # Handle request for OHLC history
+                feed_id = data.get("feed_id")
+                interval_str = data.get("interval", "1m")
+                limit = data.get("limit", 100)
+                
+                if not feed_id:
+                    await self.clients[client_id].send(json.dumps({
+                        "type": "error",
+                        "message": "Feed ID is required for OHLC history"
+                    }))
+                    return
+                
+                # Sanitize feed ID by removing 0x prefix if present
+                feed_id = sanitize_feed_id(feed_id)
+                
+                # Convert interval string to TimeInterval enum
+                interval = None
+                for ti in TimeInterval:
+                    if ti.value == interval_str:
+                        interval = ti
+                        break
+                
+                if not interval:
+                    await self.clients[client_id].send(json.dumps({
+                        "type": "error",
+                        "message": f"Invalid interval: {interval_str}"
+                    }))
+                    return
+                
+                # Get OHLC bars
+                bars = self.ohlc_service.get_latest_bars(feed_id, interval, limit)
+                
+                # Send the bars
+                await self.clients[client_id].send(json.dumps({
+                    "type": "ohlc_history",
+                    "feed_id": feed_id,
+                    "interval": interval.value,
+                    "bars": [bar.model_dump(mode="json") for bar in bars]
+                }))
                 
             else:
                 # Unknown message type
@@ -360,6 +532,112 @@ class PriceFeedWebsocketServer:
             
         self.logger.info(f"Cleaned up resources for client {client_id}")
 
+    async def subscribe_client_to_ohlc(self, client_id: str, feed_id: str, intervals: List[TimeInterval]) -> None:
+        """
+        Subscribe a client to OHLC bars for a specific feed and intervals.
+        
+        Args:
+            client_id: The unique ID of the client
+            feed_id: Pyth feed ID
+            intervals: List of time intervals to subscribe to
+        """
+        # Initialize client's OHLC subscriptions if not already
+        if client_id not in self.ohlc_subscriptions:
+            self.ohlc_subscriptions[client_id] = set()
+            
+        # Create and add the subscription (convert list to tuple for hashability)
+        subscription = OHLCSubscriptionInfo(feed_id=feed_id, intervals=tuple(intervals))
+        self.ohlc_subscriptions[client_id].add(subscription)
+        
+        # Ensure we're subscribed to the raw price feed for this feed_id
+        regular_sub = FeedSubscriptionInfo(feed_id=feed_id)
+        if client_id not in self.client_subscriptions or regular_sub not in self.client_subscriptions[client_id]:
+            await self.subscribe_client_to_feed(client_id, regular_sub)
+        
+        # Get symbol for this feed if we have it
+        symbol = self.feed_symbols.get(feed_id, feed_id)
+        
+        # Subscribe to OHLC bars in the OHLC service
+        self.ohlc_service.subscribe(client_id, feed_id, intervals)
+        
+        # Notify the client
+        await self.clients[client_id].send(json.dumps({
+            "type": "subscription_confirmed",
+            "ohlc": True,
+            "feed_id": feed_id,
+            "symbol": symbol,
+            "intervals": [interval.value for interval in intervals]
+        }))
+        
+        self.logger.info(f"Client {client_id} subscribed to OHLC bars for feed {feed_id} with intervals {[i.value for i in intervals]}")
+    
+    async def unsubscribe_client_from_ohlc(self, client_id: str, feed_id: str, intervals: List[TimeInterval] = None) -> None:
+        """
+        Unsubscribe a client from OHLC bars.
+        
+        Args:
+            client_id: The unique ID of the client
+            feed_id: Pyth feed ID
+            intervals: Optional list of time intervals to unsubscribe from (if None, unsubscribe from all intervals)
+        """
+        if client_id not in self.ohlc_subscriptions:
+            return
+            
+        # Find the subscription for this feed
+        existing_sub = None
+        for sub in self.ohlc_subscriptions[client_id]:
+            if sub.feed_id == feed_id:
+                existing_sub = sub
+                break
+                
+        if not existing_sub:
+            return
+            
+        # Remove the subscription
+        self.ohlc_subscriptions[client_id].remove(existing_sub)
+        
+        # Unsubscribe from the OHLC service
+        self.ohlc_service.unsubscribe(client_id, feed_id, intervals)
+        
+        # Notify the client
+        await self.clients[client_id].send(json.dumps({
+            "type": "unsubscription_confirmed",
+            "ohlc": True,
+            "feed_id": feed_id,
+            "intervals": [interval.value for interval in (intervals or [])]
+        }))
+        
+        self.logger.info(f"Client {client_id} unsubscribed from OHLC bars for feed {feed_id}")
+        
+        # Clean up empty sets
+        if not self.ohlc_subscriptions[client_id]:
+            del self.ohlc_subscriptions[client_id]
+    
+    async def handle_ohlc_bar_update(self, bar: OHLCBar, event_type: str, subscribers: Set[str]) -> None:
+        """
+        Handle an OHLC bar update and forward to subscribed clients.
+        
+        Args:
+            bar: The updated or new OHLC bar
+            event_type: Type of event ("bar_update" or "new_bar")
+            subscribers: Set of client IDs to notify
+        """
+        # Create the update message
+        update_json = json.dumps({
+            "type": event_type,
+            "data": bar.model_dump(mode="json")
+        })
+        
+        # Send to all subscribed clients
+        send_tasks = []
+        for client_id in subscribers:
+            if client_id in self.clients:
+                send_tasks.append(self.send_to_client(client_id, update_json))
+        
+        # Send messages in parallel
+        if send_tasks:
+            await asyncio.gather(*send_tasks, return_exceptions=True)
+            
     async def handle_pyth_price_update(self, price_data: PythPriceData) -> None:
         """
         Handle a price update from Pyth and forward to clients.
@@ -371,6 +649,11 @@ class PriceFeedWebsocketServer:
         
         # Store the latest Pyth data
         self.latest_pyth_data[feed_id] = price_data
+        
+        # Update OHLC bars if applicable
+        symbol = self.feed_symbols.get(feed_id, feed_id)
+        self.logger.info(f"Attempting Update For: {symbol}")
+        self.ohlc_service.update_price(price_data, symbol)
         
         # Check if any clients are subscribed to this feed
         if feed_id in self.feed_subscribers and self.feed_subscribers[feed_id]:
