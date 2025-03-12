@@ -558,7 +558,7 @@ class PriceFeedWebsocketServer:
         symbol = self.feed_symbols.get(feed_id, feed_id)
         
         # Subscribe to OHLC bars in the OHLC service
-        self.ohlc_service.subscribe(client_id, feed_id, intervals)
+        await self.ohlc_service.subscribe(client_id, feed_id, intervals)
         
         # Notify the client
         await self.clients[client_id].send(json.dumps({
@@ -597,7 +597,7 @@ class PriceFeedWebsocketServer:
         self.ohlc_subscriptions[client_id].remove(existing_sub)
         
         # Unsubscribe from the OHLC service
-        self.ohlc_service.unsubscribe(client_id, feed_id, intervals)
+        await self.ohlc_service.unsubscribe(client_id, feed_id, intervals)
         
         # Notify the client
         await self.clients[client_id].send(json.dumps({
@@ -652,8 +652,7 @@ class PriceFeedWebsocketServer:
         
         # Update OHLC bars if applicable
         symbol = self.feed_symbols.get(feed_id, feed_id)
-        self.logger.info(f"Attempting Update For: {symbol}")
-        self.ohlc_service.update_price(price_data, symbol)
+        await self.ohlc_service.update_price(price_data, symbol)
         
         # Check if any clients are subscribed to this feed
         if feed_id in self.feed_subscribers and self.feed_subscribers[feed_id]:

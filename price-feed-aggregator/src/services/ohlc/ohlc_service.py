@@ -2,10 +2,13 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Set, Optional, Any, Callable
+from typing import Dict, List, Set, Optional, Any, Callable, Awaitable, Union, Coroutine
 from collections import defaultdict
 
 from src.models.price_feed_models import OHLCBar, TimeInterval, PythPriceData
+
+# Type for callbacks that might be sync or async
+CallbackType = Callable[[OHLCBar, str, Set[str]], Union[None, Awaitable[None]]]
 
 
 class OHLCService:
@@ -19,9 +22,14 @@ class OHLCService:
         self.last_prices: Dict[str, float] = {}  # feed_id -> price
         self.feed_symbols: Dict[str, str] = {}  # feed_id -> symbol
         self.subscribers: Dict[str, Dict[str, Set[TimeInterval]]] = defaultdict(lambda: defaultdict(set))
-        self.callbacks: List[Callable] = []
+        self.callbacks: List[CallbackType] = []
         self._running = False
         self._task = None
+        
+        # Track which intervals have been updated and need notification
+        self.updated_intervals: Dict[str, Dict[TimeInterval, str]] = defaultdict(dict)
+        # Track when a new bar is created for an interval
+        self.new_bar_intervals: Dict[str, Set[TimeInterval]] = defaultdict(set)
         
         # Populate interval durations
         self.interval_durations = {
@@ -59,16 +67,16 @@ class OHLCService:
         
         self.logger.info("OHLC service stopped")
     
-    def register_callback(self, callback: Callable):
+    def register_callback(self, callback: CallbackType):
         """
         Register a callback function to be called when bars are updated or new bars are created.
         
         Args:
-            callback: Callable function that will receive the updated bar, event type, and subscribers
+            callback: Callable function (sync or async) that will receive the updated bar, event type, and subscribers
         """
         self.callbacks.append(callback)
     
-    def subscribe(self, client_id: str, feed_id: str, intervals: List[TimeInterval]):
+    async def subscribe(self, client_id: str, feed_id: str, intervals: List[TimeInterval]):
         """
         Subscribe a client to OHLC bars for a specific feed and intervals.
         
@@ -86,9 +94,10 @@ class OHLCService:
         for interval in intervals:
             current_bars = self.get_latest_bars(feed_id, interval, 50)
             for bar in current_bars:
-                self._notify_bar(bar, "new_bar", {client_id})
+                # Use the historical data notification method for initial data
+                await self._notify_bar(bar, "new_bar", {client_id})
 
-    def unsubscribe(self, client_id: str, feed_id: str = None, intervals: List[TimeInterval] = None):
+    async def unsubscribe(self, client_id: str, feed_id: str = None, intervals: List[TimeInterval] = None):
         """
         Unsubscribe a client from OHLC bars.
         
@@ -123,8 +132,7 @@ class OHLCService:
                     
         self.logger.info(f"Client {client_id} unsubscribed from feed: {feed_id or 'all'}, intervals: {intervals or 'all'}")
     
-    def update_price(self, price_data: PythPriceData, symbol: str = None):
-        self.logger.info(f"OHLC Updating Price: {symbol}")
+    async def update_price(self, price_data: PythPriceData, symbol: str = None):
         """
         Update the OHLC bars with a new price update.
         
@@ -150,9 +158,16 @@ class OHLCService:
         # Get the current time
         current_time = price_data.publish_time
         
+        # Reset the tracking for this update
+        self.updated_intervals[feed_id].clear()
+        self.new_bar_intervals[feed_id].clear()
+        
         # Update all interval bars
         for interval in TimeInterval:
             self._update_interval_bar(feed_id, interval, price, current_time)
+        
+        # After all intervals are updated, send notifications
+        await self._send_interval_notifications(feed_id)
     
     def get_latest_bars(self, feed_id: str, interval: TimeInterval, limit: int = 100) -> List[OHLCBar]:
         """
@@ -220,8 +235,8 @@ class OHLCService:
         if current_bar:
             # Update existing bar
             if current_bar.update_with_price(price):
-                # Notify subscribers of bar update
-                self._notify_bar(current_bar, "bar_update")
+                # Mark this interval as having an updated bar
+                self.updated_intervals[feed_id][interval] = "bar_update"
         else:
             # Create new bar
             symbol = self.feed_symbols.get(feed_id, feed_id)
@@ -241,8 +256,8 @@ class OHLCService:
                 prev_bar = self.bars[feed_id][interval][-1]
                 if not prev_bar.confirmed:
                     prev_bar.confirmed = True
-                    # Notify subscribers of confirmed bar
-                    self._notify_bar(prev_bar, "bar_update")
+                    # Mark this interval as having an updated bar (confirmation)
+                    self.updated_intervals[feed_id][interval] = "bar_update"
             
             # Add the new bar
             self.bars[feed_id][interval].append(new_bar)
@@ -251,8 +266,9 @@ class OHLCService:
             if len(self.bars[feed_id][interval]) > 1000:
                 self.bars[feed_id][interval] = self.bars[feed_id][interval][-1000:]
             
-            # Notify subscribers of new bar
-            self._notify_bar(new_bar, "new_bar")
+            # Mark this interval as having a new bar
+            self.updated_intervals[feed_id][interval] = "new_bar"
+            self.new_bar_intervals[feed_id].add(interval)
     
     def _normalize_time(self, timestamp: datetime, interval: TimeInterval) -> datetime:
         """
@@ -294,33 +310,71 @@ class OHLCService:
             # Unsupported interval
             raise ValueError(f"Unsupported interval: {interval}")
     
-    def _notify_bar(self, bar: OHLCBar, event_type: str, specific_clients: Set[str] = None):
+    async def _send_interval_notifications(self, feed_id: str):
         """
-        Notify subscribers of a bar update.
+        Send notifications for all updated intervals of a feed.
         
         Args:
-            bar: Updated or new bar
-            event_type: Type of event ("bar_update" or "new_bar")
-            specific_clients: Optional set of client IDs to notify (if None, notify all subscribers)
+            feed_id: The Pyth feed ID
         """
-        feed_id = bar.feed_id
-        interval = bar.interval
+        # Skip if no intervals were updated
+        if feed_id not in self.updated_intervals or not self.updated_intervals[feed_id]:
+            return
+            
+        # Process each updated interval
+        for interval, event_type in self.updated_intervals[feed_id].items():
+            # Get the latest bar for this interval
+            if feed_id in self.bars and interval in self.bars[feed_id] and self.bars[feed_id][interval]:
+                bar = self.bars[feed_id][interval][-1]
+                
+                # Get subscribers for this feed and interval
+                subscribers = set()
+                if feed_id in self.subscribers:
+                    for client_id, intervals in self.subscribers[feed_id].items():
+                        if interval in intervals:
+                            subscribers.add(client_id)
+                
+                # Execute callbacks only if there are subscribers
+                if subscribers:
+                    tasks = []
+                    for callback in self.callbacks:
+                        try:
+                            result = callback(bar, event_type, subscribers)
+                            if asyncio.iscoroutine(result):
+                                tasks.append(result)
+                        except Exception as e:
+                            self.logger.error(f"Error executing callback for interval {interval}: {e}")
+                    
+                    # Wait for all async callbacks to complete
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+    
+    async def _notify_bar(self, bar: OHLCBar, event_type: str, specific_clients: Set[str] = None):
+        """
+        Notify specific clients about a bar update.
+        Used primarily for sending historical data when a client subscribes.
         
-        # Get subscribers for this feed and interval
-        subscribers = set()
-        if specific_clients is not None:
-            subscribers = specific_clients
-        elif feed_id in self.subscribers:
-            for client_id, intervals in self.subscribers[feed_id].items():
-                if interval in intervals:
-                    subscribers.add(client_id)
-        
-        # Execute callbacks
+        Args:
+            bar: The bar to notify about
+            event_type: Type of event ("bar_update" or "new_bar")
+            specific_clients: Set of client IDs to notify
+        """
+        if specific_clients is None or not specific_clients:
+            return
+            
+        # Execute callbacks for the specific clients
+        tasks = []
         for callback in self.callbacks:
             try:
-                callback(bar, event_type, subscribers)
+                result = callback(bar, event_type, specific_clients)
+                if asyncio.iscoroutine(result):
+                    tasks.append(result)
             except Exception as e:
                 self.logger.error(f"Error executing callback: {e}")
+        
+        # Wait for all async callbacks to complete
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
     
     async def _check_bar_expiry(self):
         """
@@ -330,7 +384,13 @@ class OHLCService:
             try:
                 current_time = datetime.now()
                 
+                # Track which feeds and intervals need notifications
+                feeds_to_notify = set()
+                
                 for feed_id, intervals in self.bars.items():
+                    # Reset tracking for this feed
+                    self.updated_intervals[feed_id].clear()
+                    
                     for interval, bars in intervals.items():
                         if not bars:
                             continue
@@ -342,7 +402,13 @@ class OHLCService:
                         # If the bar's end time has passed and it's not confirmed yet
                         if current_time >= bar_end_time and not latest_bar.confirmed:
                             latest_bar.confirmed = True
-                            self._notify_bar(latest_bar, "bar_update")
+                            # Mark this interval as having an updated bar
+                            self.updated_intervals[feed_id][interval] = "bar_update"
+                            feeds_to_notify.add(feed_id)
+                
+                # Send notifications for all updated feeds
+                for feed_id in feeds_to_notify:
+                    await self._send_interval_notifications(feed_id)
                 
                 # Sleep for a short time
                 await asyncio.sleep(1)
