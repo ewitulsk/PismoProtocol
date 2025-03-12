@@ -569,11 +569,14 @@ export class PriceFeedAggregatorService {
       console.log(`[PriceFeedAggregator] Generated fallback symbol: ${symbol}`);
     }
     
-    console.log(`Got price update for: ${symbol}`)
+    console.log(`Got price update for symbol: ${symbol}`)
+    
+    // Log available handlers for debugging
+    console.log(`Available message handlers: ${Array.from(this.messageHandlers.keys()).join(', ')}`)
     
     const handlers = this.messageHandlers.get(symbol);
 
-    console.log(`handlers: ${handlers === undefined} size: ${handlers?.size}`)
+    console.log(`Handlers found: ${handlers !== undefined}, size: ${handlers?.size || 'undefined'}`)
 
     if (handlers && handlers.size > 0) {
       // Call each registered handler
@@ -595,7 +598,11 @@ export class PriceFeedAggregatorService {
       return;
     }
     
+    // Clean and normalize the feed ID for consistent matching
     const feedId = data.feed_id;
+    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+    const normalizedFeedId = cleanFeedId.toLowerCase();
+    
     let symbol: string;
     
     // Determine the symbol - try multiple methods
@@ -614,15 +621,104 @@ export class PriceFeedAggregatorService {
     }
     
     const interval = data.interval;
+    const normalizedInterval = interval.toLowerCase();
     
     console.log(`Got OHLC ${eventType} for ${symbol} (${interval}): ${data.timestamp || 'unknown time'}`);
     
     // Get handlers for this feed and interval
-    const feedHandlers = this.ohlcBarHandlers.get(feedId);
-    if (!feedHandlers) return;
+    // Log detailed debugging info
+    console.log(`Looking for handlers with feedId: ${feedId} and interval: ${interval}`);
+    console.log(`Available feed handlers: ${Array.from(this.ohlcBarHandlers.keys()).join(', ')}`);
     
-    const intervalHandlers = feedHandlers.get(interval);
-    if (!intervalHandlers || intervalHandlers.size === 0) return;
+    // Find matching feed ID with normalized comparison
+    let matchedFeedId = null;
+    
+    for (const key of this.ohlcBarHandlers.keys()) {
+      const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
+      if (normalizedKey === normalizedFeedId) {
+        matchedFeedId = key;
+        console.log(`Found normalized feed ID match: ${key} for ID: ${feedId}`);
+        break;
+      }
+    }
+    
+    const feedHandlers = matchedFeedId ? this.ohlcBarHandlers.get(matchedFeedId) : null;
+    if (!feedHandlers) {
+      console.log(`No primary handlers found for feed ID: ${feedId}, trying symbol lookup`);
+      
+      // Try another approach - look for handlers by symbol
+      if (symbol && symbol !== feedId) {
+        console.log(`Trying to find handlers using symbol: ${symbol} instead of feed ID`);
+        
+        // Normalize symbol for comparison
+        const lowerSymbol = symbol.toLowerCase().replace(/[^a-z0-9]/g, ''); // Remove non-alphanumeric
+        
+        // Attempt to find feed ID from symbol
+        for (const [handlerFeedId, handlers] of this.ohlcBarHandlers.entries()) {
+          // Try multiple matching strategies
+          const handlerSymbol = this.getSymbolFromFeedId(handlerFeedId) || '';
+          const normalizedHandlerFeedId = handlerFeedId.startsWith('0x') ? 
+                                         handlerFeedId.substring(2).toLowerCase() : 
+                                         handlerFeedId.toLowerCase();
+          const lowerHandlerSymbol = handlerSymbol.toLowerCase().replace(/[^a-z0-9]/g, '');
+          
+          if (normalizedHandlerFeedId.includes(lowerSymbol) || 
+              lowerSymbol.includes(normalizedHandlerFeedId) ||
+              lowerHandlerSymbol === lowerSymbol ||
+              lowerHandlerSymbol.includes(lowerSymbol) ||
+              lowerSymbol.includes(lowerHandlerSymbol)) {
+            console.log(`Found alternative handlers using symbol match with feed ID: ${handlerFeedId}`);
+            
+            // Look for matching interval
+            let matchedAltInterval = null;
+            for (const intervalKey of handlers.keys()) {
+              if (intervalKey.toLowerCase() === normalizedInterval) {
+                matchedAltInterval = intervalKey;
+                console.log(`Found case-insensitive interval match: ${intervalKey}`);
+                break;
+              }
+            }
+            
+            if (matchedAltInterval) {
+              const altIntervalHandlers = handlers.get(matchedAltInterval);
+              if (altIntervalHandlers && altIntervalHandlers.size > 0) {
+                console.log(`Found ${altIntervalHandlers.size} handlers via symbol matching for ${symbol}, interval: ${matchedAltInterval}`);
+                // Call the found handlers
+                altIntervalHandlers.forEach(callback => {
+                  try {
+                    callback(data);
+                  } catch (error) {
+                    console.error(`[PriceFeedAggregator] Error in OHLC bar update handler via symbol lookup:`, error);
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+      return;
+    }
+    
+    console.log(`Found handlers for feed. Available intervals: ${Array.from(feedHandlers.keys()).join(', ')}`);
+    
+    // Try to match interval with case insensitivity
+    let matchedInterval = null;
+    
+    for (const key of feedHandlers.keys()) {
+      if (key.toLowerCase() === normalizedInterval) {
+        matchedInterval = key;
+        console.log(`Found case-insensitive interval match: ${key}`);
+        break;
+      }
+    }
+    
+    const intervalHandlers = matchedInterval ? feedHandlers.get(matchedInterval) : null;
+    if (!intervalHandlers || intervalHandlers.size === 0) {
+      console.log(`No handlers found for interval: ${interval}, available intervals: ${Array.from(feedHandlers.keys()).join(', ')}`);
+      return;
+    }
+    
+    console.log(`Found ${intervalHandlers.size} handlers for feedId: ${matchedFeedId}, interval: ${matchedInterval}`);
     
     // Call each registered handler
     intervalHandlers.forEach(callback => {
@@ -888,18 +984,54 @@ export class PriceFeedAggregatorService {
       }
     }
     
+    // Remove 0x prefix if present
+    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+    
+    // Convert feed ID to lowercase for consistent comparison
+    const normalizedFeedId = cleanFeedId.toLowerCase();
+    
     // Initialize nested maps if they don't exist
-    if (!this.ohlcBarHandlers.has(feedId)) {
-      this.ohlcBarHandlers.set(feedId, new Map());
+    // First check if we already have handlers for this feed ID (case insensitive)
+    let existingFeedId = null;
+    for (const key of this.ohlcBarHandlers.keys()) {
+      const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
+      if (normalizedKey === normalizedFeedId) {
+        existingFeedId = key;
+        console.log(`Found existing feed ID key: ${key} for normalized ID: ${normalizedFeedId}`);
+        break;
+      }
     }
     
-    const feedHandlers = this.ohlcBarHandlers.get(feedId)!;
-    if (!feedHandlers.has(interval)) {
-      feedHandlers.set(interval, new Set());
+    // Use existing key or create new entry
+    const keyToUse = existingFeedId || cleanFeedId;
+    if (!this.ohlcBarHandlers.has(keyToUse)) {
+      this.ohlcBarHandlers.set(keyToUse, new Map());
+    }
+    
+    // Normalize the interval for case-insensitive matching
+    const normalizedInterval = interval.toLowerCase();
+    
+    // Check if we already have handlers for this interval (case insensitive)
+    const feedHandlers = this.ohlcBarHandlers.get(keyToUse)!;
+    let existingInterval = null;
+    for (const intervalKey of feedHandlers.keys()) {
+      if (intervalKey.toLowerCase() === normalizedInterval) {
+        existingInterval = intervalKey;
+        console.log(`Found existing interval key: ${intervalKey} for normalized interval: ${normalizedInterval}`);
+        break;
+      }
+    }
+    
+    // Use existing interval key or create new entry
+    const intervalToUse = existingInterval || interval;
+    if (!feedHandlers.has(intervalToUse)) {
+      feedHandlers.set(intervalToUse, new Set());
     }
     
     // Add the callback to handlers
-    feedHandlers.get(interval)!.add(callback);
+    feedHandlers.get(intervalToUse)!.add(callback);
+    
+    console.log(`Registered OHLC handler for ${keyToUse}, interval: ${intervalToUse}. Total handlers: ${feedHandlers.get(intervalToUse)!.size}`);
     
     // Connect if not already connected
     if (!this.isConnected) {
@@ -915,9 +1047,6 @@ export class PriceFeedAggregatorService {
     }
     
     try {
-      // Remove 0x prefix if present
-      const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
-      
       this.socket.send(JSON.stringify({
         type: 'subscribe',
         feed_id: cleanFeedId,
@@ -950,17 +1079,64 @@ export class PriceFeedAggregatorService {
     console.log(`[PriceFeedAggregator] Unsubscribing from OHLC bars for ${symbol}, interval: ${interval}`);
     
     // Get the feed ID for this symbol
-    const feedId = PRICE_FEED_IDS[symbol];
+    let feedId = PRICE_FEED_IDS[symbol];
     if (!feedId) {
-      console.error(`[PriceFeedAggregator] No feed ID found for symbol: ${symbol}`);
-      return false;
+      // Try uppercase
+      feedId = PRICE_FEED_IDS[symbol.toUpperCase()];
+      
+      if (!feedId) {
+        // Try with USD suffix if not already present
+        if (!symbol.toUpperCase().endsWith('USD')) {
+          feedId = PRICE_FEED_IDS[symbol.toUpperCase() + 'USD'];
+        }
+        
+        if (!feedId) {
+          console.error(`[PriceFeedAggregator] No feed ID found for symbol: ${symbol}`);
+          return false;
+        }
+      }
     }
     
-    // Remove handler
-    const feedHandlers = this.ohlcBarHandlers.get(feedId);
+    // Remove 0x prefix if present
+    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+    
+    // Convert feed ID to lowercase for consistent comparison
+    const normalizedFeedId = cleanFeedId.toLowerCase();
+    
+    // Find the feed ID in our handler map (case-insensitive)
+    let matchedFeedId = null;
+    for (const key of this.ohlcBarHandlers.keys()) {
+      const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
+      if (normalizedKey === normalizedFeedId) {
+        matchedFeedId = key;
+        break;
+      }
+    }
+    
+    if (!matchedFeedId) {
+      console.log(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId}`);
+      return true; // Already unsubscribed
+    }
+    
+    const feedHandlers = this.ohlcBarHandlers.get(matchedFeedId);
     if (!feedHandlers) return true; // Already unsubscribed
     
-    const intervalHandlers = feedHandlers.get(interval);
+    // Find the interval in our handler map (case-insensitive)
+    const normalizedInterval = interval.toLowerCase();
+    let matchedInterval = null;
+    for (const intervalKey of feedHandlers.keys()) {
+      if (intervalKey.toLowerCase() === normalizedInterval) {
+        matchedInterval = intervalKey;
+        break;
+      }
+    }
+    
+    if (!matchedInterval) {
+      console.log(`[PriceFeedAggregator] No handlers found for interval: ${interval}`);
+      return true; // Already unsubscribed
+    }
+    
+    const intervalHandlers = feedHandlers.get(matchedInterval);
     if (!intervalHandlers) return true; // Already unsubscribed
     
     if (callback) {
@@ -973,19 +1149,16 @@ export class PriceFeedAggregatorService {
     
     // Clean up empty maps
     if (intervalHandlers.size === 0) {
-      feedHandlers.delete(interval);
+      feedHandlers.delete(matchedInterval);
     }
     
     if (feedHandlers.size === 0) {
-      this.ohlcBarHandlers.delete(feedId);
+      this.ohlcBarHandlers.delete(matchedFeedId);
     }
     
     // Send unsubscribe message if no handlers left
     if (this.isConnected && this.socket && (!feedHandlers || feedHandlers.size === 0)) {
       try {
-        // Remove 0x prefix if present
-        const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
-        
         this.socket.send(JSON.stringify({
           type: 'unsubscribe',
           feed_id: cleanFeedId,
