@@ -9,7 +9,13 @@ import {
   ISeriesApi,
   SeriesType
 } from 'lightweight-charts';
-import { priceFeedAggregatorService, PriceUpdate, PriceFeedBarData, PriceFeedAggregatorService } from '@/utils/priceFeedAggregator';
+import { 
+  priceFeedAggregatorService, 
+  PriceUpdate, 
+  PolygonCandleUpdate,
+  PriceFeedBarData, 
+  PriceFeedAggregatorService 
+} from '@/utils/priceFeedAggregator';
 
 interface LightweightChartWidgetProps {
   symbol?: string;
@@ -65,74 +71,27 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     return data;
   };
 
-  // Handle price updates without recreating the chart
-  const handlePriceUpdate = (update: PriceUpdate) => {
-    const price = update.price;
-    setLastPrice(price);
+  // Handle polygon candle updates directly
+  const handlePolygonCandleUpdate = (update: PolygonCandleUpdate) => {
+    if (!candleSeriesRef.current) return;
     
-    console.log(`[LightweightChartWidget] Processing update for ${symbol}: $${price.toFixed(2)}`);
-
-    // Get current time from the update
-    const time = Math.floor(new Date(update.timestamp).getTime() / 1000) as Time;
-
-    // Handle OHLC data if available
-    if (update.polygon_data && candleSeriesRef.current) {
-      const bar = PriceFeedAggregatorService.createBarFromUpdate(update);
-      if (bar) {
-        const typedBar = {
-          ...bar,
-          time: bar.time as Time
-        };
-        candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
-        setLastBar(typedBar as CandlestickData<Time>);
-      }
-    } else if (lastBar && candleSeriesRef.current) {
-      // Update the last bar with the new price
-      const updatedBar = { ...lastBar };
-      
-      // Calculate the interval in seconds
-      const intervalInSeconds = parseInt(interval) || 60;
-      
-      // Determine if we should create a new bar based on time difference
-      const lastBarTime = typeof lastBar.time === 'number' ? lastBar.time : parseInt(lastBar.time.toString());
-      const currentTime = typeof time === 'number' ? time : parseInt(time.toString());
-      
-      // Check if we've moved to a new interval
-      const isNewInterval = Math.floor(currentTime / intervalInSeconds) > Math.floor(lastBarTime / intervalInSeconds);
-      
-      console.log(`Time check: current=${currentTime}, last=${lastBarTime}, interval=${intervalInSeconds}, isNew=${isNewInterval}`);
-      
-      if (!isNewInterval) {
-        // Update existing bar
-        updatedBar.close = price;
-        updatedBar.high = Math.max(lastBar.high, price);
-        updatedBar.low = Math.min(lastBar.low, price);
-        
-        candleSeriesRef.current.update(updatedBar);
-        setLastBar(updatedBar);
-      } else {
-        // Create a new bar for the new time interval
-        const newBar = {
-          time: currentTime as Time,
-          open: price,
-          high: price,
-          low: price,
-          close: price
-        };
-        
-        candleSeriesRef.current.update(newBar);
-        setLastBar(newBar);
-      }
-    } else if (candleSeriesRef.current) {
-      // Create a new bar from just the price
-      const partialBar = PriceFeedAggregatorService.createPartialBar(update);
-      const typedBar = {
-        ...partialBar,
-        time: partialBar.time as Time
-      };
-      candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
-      setLastBar(typedBar as CandlestickData<Time>);
-    }
+    console.log(`[LightweightChartWidget] Processing Polygon candle for ${symbol}`);
+    
+    // Create a bar from the Polygon candle data
+    const bar = PriceFeedAggregatorService.createBarFromPolygonCandle(update);
+    
+    // Convert to the format expected by the chart
+    const typedBar = {
+      ...bar,
+      time: bar.time as Time
+    };
+    
+    // Update the chart
+    candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
+    setLastBar(typedBar as CandlestickData<Time>);
+    
+    // Update the last price
+    setLastPrice(update.close);
   };
 
   useEffect(() => {
@@ -183,10 +142,10 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     // Fit content to show all data
     chart.timeScale().fitContent();
 
-    // Subscribe to price feed
-    console.log("The chart is making the subscription...");
-    priceFeedAggregatorService.subscribe(symbol, handlePriceUpdate)
-      .catch(err => console.error(`Error subscribing to price feed for ${symbol}:`, err));
+    // Subscribe to Polygon candles only
+    console.log("The chart is subscribing to Polygon candles only...");
+    priceFeedAggregatorService.subscribeToPolygonCandles(symbol, handlePolygonCandleUpdate)
+      .catch(err => console.error(`Error subscribing to Polygon candles for ${symbol}:`, err));
 
     // Handle window resize
     window.addEventListener('resize', handleResize);
@@ -194,7 +153,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
-      priceFeedAggregatorService.unsubscribe(symbol);
+      priceFeedAggregatorService.unsubscribeFromPolygonCandles(symbol);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;

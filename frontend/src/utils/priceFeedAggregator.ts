@@ -44,7 +44,21 @@ export interface PriceUpdate {
   };
 }
 
+export interface PolygonCandleUpdate {
+  symbol: string;
+  ticker: string;
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  vwap?: number;
+  number_of_trades?: number;
+}
+
 type PriceUpdateCallback = (update: PriceUpdate) => void;
+type PolygonCandleCallback = (update: PolygonCandleUpdate) => void;
 
 export class PriceFeedAggregatorService {
   private socket: WebSocket | null = null;
@@ -55,7 +69,13 @@ export class PriceFeedAggregatorService {
   private reconnectInterval = 2000; // 2 seconds
   private clientId: string | null = null;
   private messageHandlers: Map<string, Set<PriceUpdateCallback>> = new Map();
-  private pendingSubscriptions: Array<{ feedId: string; ticker?: string; timespan?: string }> = [];
+  private candleHandlers: Map<string, Set<PolygonCandleCallback>> = new Map();
+  private pendingSubscriptions: Array<{ 
+    feedId: string; 
+    ticker?: string; 
+    timespan?: string;
+    subscriptionType?: string;
+  }> = [];
   private url = 'ws://localhost:8765'; // Default URL, can be changed
 
   // Connect to the WebSocket server
@@ -172,14 +192,20 @@ export class PriceFeedAggregatorService {
   public async subscribeToFeed(
     feedId: string,
     ticker?: string,
-    timespan: string = 'minute'
+    timespan: string = 'minute',
+    subscriptionType: string = 'aggregated'
   ): Promise<boolean> {
     // Remove "0x" prefix from feedId if present
     const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
     
     // If not connected, store subscription for later
     if (!this.isConnected) {
-      this.pendingSubscriptions.push({ feedId: cleanFeedId, ticker, timespan });
+      this.pendingSubscriptions.push({ 
+        feedId: cleanFeedId, 
+        ticker, 
+        timespan,
+        subscriptionType 
+      });
       
       // Try to connect
       const connected = await this.connect();
@@ -194,16 +220,28 @@ export class PriceFeedAggregatorService {
     try {
       const subscriptionMsg: any = {
         type: 'subscribe',
-        feed_id: cleanFeedId,
+        subscription_type: subscriptionType,
         timespan
       };
 
-      // Add ticker if provided
-      if (ticker) {
+      // For polygon_only subscription
+      if (subscriptionType === 'polygon_only') {
+        if (!ticker) {
+          console.error('[PriceFeedAggregator] Ticker is required for polygon_only subscription');
+          return false;
+        }
         subscriptionMsg.ticker = ticker;
+      } else {
+        // For aggregated subscription
+        subscriptionMsg.feed_id = cleanFeedId;
+        
+        // Add ticker if provided
+        if (ticker) {
+          subscriptionMsg.ticker = ticker;
+        }
       }
       
-      console.log(`[PriceFeedAggregator] Sending subscription with feed_id: ${cleanFeedId}`);
+      console.log(`[PriceFeedAggregator] Sending ${subscriptionType} subscription for ${ticker || cleanFeedId}`);
       const jsonSubscriptionMsg = JSON.stringify(subscriptionMsg);
       this.socket.send(jsonSubscriptionMsg);
       return true;
@@ -215,7 +253,7 @@ export class PriceFeedAggregatorService {
 
   // Subscribe to multiple feeds at once
   private subscribeToMultipleFeeds(
-    subscriptions: Array<{ feedId: string; ticker?: string; timespan?: string }>
+    subscriptions: Array<{ feedId: string; ticker?: string; timespan?: string; subscriptionType?: string }>
   ): boolean {
     if (!this.isConnected || !this.socket) {
       console.warn('[PriceFeedAggregator] Cannot subscribe, not connected');
@@ -227,11 +265,22 @@ export class PriceFeedAggregatorService {
         // Remove "0x" prefix from feedId if present
         const cleanFeedId = sub.feedId.startsWith('0x') ? sub.feedId.substring(2) : sub.feedId;
         
-        return {
-          feed_id: cleanFeedId,
-          ticker: sub.ticker,
-          timespan: sub.timespan || 'minute'
-        };
+        const subscriptionType = sub.subscriptionType || 'aggregated';
+        
+        if (subscriptionType === 'polygon_only') {
+          return {
+            subscription_type: 'polygon_only',
+            ticker: sub.ticker,
+            timespan: sub.timespan || 'minute'
+          };
+        } else {
+          return {
+            subscription_type: 'aggregated',
+            feed_id: cleanFeedId,
+            ticker: sub.ticker,
+            timespan: sub.timespan || 'minute'
+          };
+        }
       });
 
       this.socket.send(JSON.stringify({
@@ -247,9 +296,9 @@ export class PriceFeedAggregatorService {
   }
 
   // Unsubscribe from a price feed
-  public unsubscribeFromFeed(feedId: string): boolean {
-    // Remove "0x" prefix from feedId if present
-    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+  public unsubscribeFromFeed(feedIdOrTicker: string, subscriptionType: string = 'aggregated'): boolean {
+    // Remove "0x" prefix from feedId if present (only for aggregated subscriptions)
+    const cleanId = feedIdOrTicker.startsWith('0x') ? feedIdOrTicker.substring(2) : feedIdOrTicker;
     
     if (!this.isConnected || !this.socket) {
       console.warn('[PriceFeedAggregator] Cannot unsubscribe, not connected');
@@ -257,14 +306,23 @@ export class PriceFeedAggregatorService {
     }
 
     try {
-      this.socket.send(JSON.stringify({
-        type: 'unsubscribe',
-        feed_id: cleanFeedId
-      }));
+      if (subscriptionType === 'polygon_only') {
+        this.socket.send(JSON.stringify({
+          type: 'unsubscribe',
+          subscription_type: 'polygon_only',
+          ticker: cleanId
+        }));
+      } else {
+        this.socket.send(JSON.stringify({
+          type: 'unsubscribe',
+          subscription_type: 'aggregated',
+          feed_id: cleanId
+        }));
+      }
 
       return true;
     } catch (error) {
-      console.error('[PriceFeedAggregator] Error unsubscribing from feed:', error);
+      console.error('[PriceFeedAggregator] Error unsubscribing:', error);
       return false;
     }
   }
@@ -282,11 +340,21 @@ export class PriceFeedAggregatorService {
           break;
 
         case 'subscription_confirmed':
-          console.log(`[PriceFeedAggregator] Subscription confirmed: ${message.feed_id}`);
+          const subscriptionType = message.subscription_type || 'aggregated';
+          if (subscriptionType === 'polygon_only') {
+            console.log(`[PriceFeedAggregator] Polygon subscription confirmed: ${message.ticker}`);
+          } else {
+            console.log(`[PriceFeedAggregator] Subscription confirmed: ${message.feed_id}`);
+          }
           break;
 
         case 'unsubscription_confirmed':
-          console.log(`[PriceFeedAggregator] Unsubscription confirmed: ${message.feed_id}`);
+          const unsubType = message.subscription_type || 'aggregated';
+          if (unsubType === 'polygon_only') {
+            console.log(`[PriceFeedAggregator] Polygon unsubscription confirmed: ${message.ticker}`);
+          } else {
+            console.log(`[PriceFeedAggregator] Unsubscription confirmed: ${message.feed_id}`);
+          }
           break;
 
         case 'available_feeds':
@@ -295,6 +363,10 @@ export class PriceFeedAggregatorService {
 
         case 'price_update':
           this.handlePriceUpdate(message.data);
+          break;
+          
+        case 'polygon_candle_update':
+          this.handlePolygonCandleUpdate(message.data);
           break;
 
         case 'error':
@@ -331,6 +403,45 @@ export class PriceFeedAggregatorService {
       });
     }
   }
+  
+  // Handle Polygon candle updates
+  private handlePolygonCandleUpdate(data: PolygonCandleUpdate): void {
+    // Find handlers for this symbol/ticker
+    const ticker = data.ticker;
+    const symbol = data.symbol.replace('/', '').replace('-', '');
+    
+    console.log(`Got polygon candle update for ticker: ${ticker}, symbol: ${symbol}`);
+    
+    // Try both ticker and symbol for handlers
+    const tickerHandlers = this.candleHandlers.get(ticker);
+    const symbolHandlers = this.candleHandlers.get(symbol);
+    
+    // Combine handlers from both sources
+    const allHandlers = new Set<PolygonCandleCallback>();
+    
+    if (tickerHandlers) {
+      tickerHandlers.forEach(handler => allHandlers.add(handler));
+    }
+    
+    if (symbolHandlers) {
+      symbolHandlers.forEach(handler => allHandlers.add(handler));
+    }
+    
+    if (allHandlers.size > 0) {
+      console.log(`Found ${allHandlers.size} handlers for polygon update`);
+      
+      // Call each registered handler
+      allHandlers.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`[PriceFeedAggregator] Error in polygon candle update handler:`, error);
+        }
+      });
+    } else {
+      console.log(`No handlers found for polygon update ${ticker}/${symbol}`);
+    }
+  }
 
   // Subscribe to price updates for a trading pair
   public async subscribe(
@@ -363,6 +474,36 @@ export class PriceFeedAggregatorService {
     console.log(`[PriceFeedAggregator] Subscription ${result ? 'successful' : 'failed'} for ${symbol}`);
     return result;
   }
+  
+  // Subscribe to Polygon-only candlestick data for a trading pair
+  public async subscribeToPolygonCandles(
+    symbol: string,
+    callback: PolygonCandleCallback
+  ): Promise<boolean> {
+    console.log(`[PriceFeedAggregator] Subscribing to Polygon candles for ${symbol}`);
+    
+    // Generate the Polygon ticker from the symbol (e.g., BTCUSD -> X:BTC-USD)
+    const ticker = `X:${symbol.substring(0, 3)}-${symbol.substring(3)}`;
+    
+    // Add the callback to our candle handlers (using both symbol and ticker as keys)
+    if (!this.candleHandlers.has(symbol)) {
+      this.candleHandlers.set(symbol, new Set());
+    }
+    
+    if (!this.candleHandlers.has(ticker)) {
+      this.candleHandlers.set(ticker, new Set());
+    }
+    
+    this.candleHandlers.get(symbol)?.add(callback);
+    this.candleHandlers.get(ticker)?.add(callback);
+    
+    console.log(`[PriceFeedAggregator] Subscribing to Polygon candles: ${symbol} (Ticker: ${ticker})`);
+    
+    // Subscribe to polygon-only feed
+    const result = await this.subscribeToFeed('', ticker, 'minute', 'polygon_only');
+    console.log(`[PriceFeedAggregator] Polygon subscription ${result ? 'successful' : 'failed'} for ${symbol}`);
+    return result;
+  }
 
   // Unsubscribe from price updates for a trading pair
   public unsubscribe(symbol: string, callback?: PriceUpdateCallback): boolean {
@@ -392,6 +533,61 @@ export class PriceFeedAggregatorService {
 
     // Unsubscribe from the feed
     return this.unsubscribeFromFeed(feedId);
+  }
+  
+  // Unsubscribe from Polygon candlestick updates
+  public unsubscribeFromPolygonCandles(symbol: string, callback?: PolygonCandleCallback): boolean {
+    const ticker = `X:${symbol.substring(0, 3)}-${symbol.substring(3)}`;
+    
+    // Remove handlers from both the symbol and ticker maps
+    const symbolHandlers = this.candleHandlers.get(symbol);
+    const tickerHandlers = this.candleHandlers.get(ticker);
+    
+    // Track if we need to unsubscribe
+    let shouldUnsubscribe = false;
+    
+    if (symbolHandlers) {
+      if (callback) {
+        // Remove specific handler
+        symbolHandlers.delete(callback);
+        
+        // If there are no more handlers, mark for unsubscription
+        if (symbolHandlers.size === 0) {
+          this.candleHandlers.delete(symbol);
+          shouldUnsubscribe = true;
+        }
+      } else {
+        // Remove all handlers
+        this.candleHandlers.delete(symbol);
+        shouldUnsubscribe = true;
+      }
+    }
+    
+    if (tickerHandlers) {
+      if (callback) {
+        // Remove specific handler
+        tickerHandlers.delete(callback);
+        
+        // If there are no more handlers, mark for unsubscription
+        if (tickerHandlers.size === 0) {
+          this.candleHandlers.delete(ticker);
+          shouldUnsubscribe = true;
+        }
+      } else {
+        // Remove all handlers
+        this.candleHandlers.delete(ticker);
+        shouldUnsubscribe = true;
+      }
+    }
+    
+    // If we should unsubscribe and there are no other handlers for this symbol/ticker
+    if (shouldUnsubscribe && 
+        (!this.candleHandlers.has(symbol) || this.candleHandlers.get(symbol)?.size === 0) &&
+        (!this.candleHandlers.has(ticker) || this.candleHandlers.get(ticker)?.size === 0)) {
+      return this.unsubscribeFromFeed(ticker, 'polygon_only');
+    }
+    
+    return true;
   }
 
   // Disconnect from the WebSocket server
@@ -437,6 +633,20 @@ export class PriceFeedAggregatorService {
       high: price,
       low: price,
       close: price
+    };
+  }
+  
+  // Create a bar from a Polygon candle update
+  public static createBarFromPolygonCandle(candle: PolygonCandleUpdate): PriceFeedBarData {
+    // Convert ISO timestamp to seconds timestamp
+    const time = Math.floor(new Date(candle.timestamp).getTime() / 1000);
+    
+    return {
+      time, 
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close
     };
   }
 }
