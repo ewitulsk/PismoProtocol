@@ -13,9 +13,10 @@ import {
   priceFeedAggregatorService, 
   PriceUpdate, 
   PolygonCandleUpdate,
+  OHLCBarUpdate,
   PriceFeedBarData, 
   PriceFeedAggregatorService 
-} from '@/utils/priceFeedAggregator';
+} from '../../utils/priceFeedAggregator';
 
 interface LightweightChartWidgetProps {
   symbol?: string;
@@ -75,23 +76,60 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const handlePolygonCandleUpdate = (update: PolygonCandleUpdate) => {
     if (!candleSeriesRef.current) return;
     
-    console.log(`[LightweightChartWidget] Processing Polygon candle for ${symbol}`);
+    try {
+      console.log(`[LightweightChartWidget] Processing Polygon candle for ${symbol}`);
+      
+      // Create a bar from the Polygon candle data
+      const bar = PriceFeedAggregatorService.createBarFromPolygonCandle(update);
+      
+      // Convert to the format expected by the chart
+      const typedBar = {
+        ...bar,
+        time: bar.time as Time
+      };
+      
+      // Update the chart
+      candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
+      setLastBar(typedBar as CandlestickData<Time>);
+      
+      // Update the last price if available
+      if (typeof update.close === 'number') {
+        setLastPrice(update.close);
+      }
+    } catch (error) {
+      console.error('[LightweightChartWidget] Error handling Polygon candle update:', error);
+    }
+  };
+  
+  // Handle OHLC bar updates directly
+  const handleOHLCBarUpdate = (update: OHLCBarUpdate) => {
+    if (!candleSeriesRef.current) return;
     
-    // Create a bar from the Polygon candle data
-    const bar = PriceFeedAggregatorService.createBarFromPolygonCandle(update);
-    
-    // Convert to the format expected by the chart
-    const typedBar = {
-      ...bar,
-      time: bar.time as Time
-    };
-    
-    // Update the chart
-    candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
-    setLastBar(typedBar as CandlestickData<Time>);
-    
-    // Update the last price
-    setLastPrice(update.close);
+    try {
+      // Safely check confirmed status with optional chaining
+      const confirmationStatus = update?.confirmed ? 'confirmed' : 'update';
+      console.log(`[LightweightChartWidget] Processing OHLC ${confirmationStatus} for ${symbol}, interval: ${interval}`);
+      
+      // Create a bar from the OHLC bar data
+      const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
+      
+      // Convert to the format expected by the chart
+      const typedBar = {
+        ...bar,
+        time: bar.time as Time
+      };
+      
+      // Update the chart
+      candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
+      setLastBar(typedBar as CandlestickData<Time>);
+      
+      // Update the last price if available
+      if (typeof update.close === 'number') {
+        setLastPrice(update.close);
+      }
+    } catch (error) {
+      console.error('[LightweightChartWidget] Error handling OHLC bar update:', error);
+    }
   };
 
   useEffect(() => {
@@ -142,10 +180,34 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     // Fit content to show all data
     chart.timeScale().fitContent();
 
-    // Subscribe to Polygon candles only
-    console.log("The chart is subscribing to Polygon candles only...");
-    priceFeedAggregatorService.subscribeToPolygonCandles(symbol, handlePolygonCandleUpdate)
-      .catch(err => console.error(`Error subscribing to Polygon candles for ${symbol}:`, err));
+    // Subscribe to OHLC bars (from Pyth network) and/or Polygon candles based on availability
+    console.log(`The chart is subscribing to OHLC bars for ${symbol}, interval: ${interval}...`);
+    
+    // Map lightweight-chart interval to OHLC service interval
+    const ohlcInterval = interval === '60' ? '1m' : 
+                         interval === '300' ? '5m' : 
+                         interval === '900' ? '15m' : 
+                         interval === '1800' ? '30m' : 
+                         interval === '3600' ? '1h' : 
+                         interval === '14400' ? '4h' : 
+                         interval === '86400' ? '1d' : '1m';
+                         
+    // Try to subscribe to OHLC bars first (these come from Pyth network)
+    priceFeedAggregatorService.subscribeToOHLCBars(symbol, ohlcInterval, handleOHLCBarUpdate)
+      .then(success => {
+        if (!success) {
+          // Fallback to Polygon candles if OHLC subscription fails
+          console.log("Falling back to Polygon candles...");
+          return priceFeedAggregatorService.subscribeToPolygonCandles(symbol, handlePolygonCandleUpdate);
+        }
+        return success;
+      })
+      .catch(err => {
+        console.error(`Error subscribing to data feeds for ${symbol}:`, err);
+        // As a last resort, try to subscribe to Polygon candles if OHLC subscription throws an error
+        priceFeedAggregatorService.subscribeToPolygonCandles(symbol, handlePolygonCandleUpdate)
+          .catch(err2 => console.error(`Error subscribing to Polygon candles as fallback:`, err2));
+      });
 
     // Handle window resize
     window.addEventListener('resize', handleResize);
@@ -153,12 +215,16 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
+      
+      // Unsubscribe from both data sources
+      priceFeedAggregatorService.unsubscribeFromOHLCBars(symbol, ohlcInterval);
       priceFeedAggregatorService.unsubscribeFromPolygonCandles(symbol);
+      
+      // Clean up chart
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
         candleSeriesRef.current = null;
-        // realTimePriceLineRef.current = null;
       }
     };
   }, [symbol, interval]); // Removed lastBar from dependencies

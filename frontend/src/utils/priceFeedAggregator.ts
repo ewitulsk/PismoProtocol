@@ -57,8 +57,22 @@ export interface PolygonCandleUpdate {
   number_of_trades?: number;
 }
 
+export interface OHLCBarUpdate {
+  feed_id: string;
+  symbol: string;
+  interval: string;
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+  confirmed: boolean;
+}
+
 type PriceUpdateCallback = (update: PriceUpdate) => void;
 type PolygonCandleCallback = (update: PolygonCandleUpdate) => void;
+type OHLCBarCallback = (update: OHLCBarUpdate) => void;
 
 export class PriceFeedAggregatorService {
   private socket: WebSocket | null = null;
@@ -70,6 +84,7 @@ export class PriceFeedAggregatorService {
   private clientId: string | null = null;
   private messageHandlers: Map<string, Set<PriceUpdateCallback>> = new Map();
   private candleHandlers: Map<string, Set<PolygonCandleCallback>> = new Map();
+  private ohlcBarHandlers: Map<string, Map<string, Set<OHLCBarCallback>>> = new Map(); // feedId -> interval -> handlers
   private pendingSubscriptions: Array<{ 
     feedId: string; 
     ticker?: string; 
@@ -331,6 +346,14 @@ export class PriceFeedAggregatorService {
   private handleMessage(data: string): void {
     try {
       const message = JSON.parse(data);
+      
+      // Check if message has a valid type
+      if (!message || typeof message !== 'object' || !message.type) {
+        console.warn('[PriceFeedAggregator] Received message with invalid format:', 
+          typeof message === 'object' ? JSON.stringify(message).substring(0, 100) : typeof message);
+        return;
+      }
+      
       const messageType = message.type;
 
       switch (messageType) {
@@ -343,6 +366,8 @@ export class PriceFeedAggregatorService {
           const subscriptionType = message.subscription_type || 'aggregated';
           if (subscriptionType === 'polygon_only') {
             console.log(`[PriceFeedAggregator] Polygon subscription confirmed: ${message.ticker}`);
+          } else if (message.ohlc) {
+            console.log(`[PriceFeedAggregator] OHLC subscription confirmed: ${message.feed_id}, intervals: ${message.intervals.join(', ')}`);
           } else {
             console.log(`[PriceFeedAggregator] Subscription confirmed: ${message.feed_id}`);
           }
@@ -352,21 +377,80 @@ export class PriceFeedAggregatorService {
           const unsubType = message.subscription_type || 'aggregated';
           if (unsubType === 'polygon_only') {
             console.log(`[PriceFeedAggregator] Polygon unsubscription confirmed: ${message.ticker}`);
+          } else if (message.ohlc) {
+            console.log(`[PriceFeedAggregator] OHLC unsubscription confirmed: ${message.feed_id}`);
           } else {
             console.log(`[PriceFeedAggregator] Unsubscription confirmed: ${message.feed_id}`);
           }
           break;
 
         case 'available_feeds':
-          console.log(`[PriceFeedAggregator] Received ${message.feeds.length} available feeds`);
+          // Safely access feeds array with optional chaining
+          const feedCount = message.feeds?.length || 0;
+          console.log(`[PriceFeedAggregator] Received ${feedCount} available feeds`);
           break;
 
         case 'price_update':
-          this.handlePriceUpdate(message.data);
+          if (message.data) {
+            try {
+              // Log the price update structure for debugging (always log for now)
+              try {
+                const keysInUpdate = Object.keys(message.data);
+                console.debug('[PriceFeedAggregator] Price update contains fields:', keysInUpdate);
+                
+                // Log special nested structures
+                if (message.data.pyth_data) {
+                  console.debug('[PriceFeedAggregator] Pyth data fields:', Object.keys(message.data.pyth_data));
+                }
+                if (message.data.polygon_data) {
+                  console.debug('[PriceFeedAggregator] Polygon data fields:', Object.keys(message.data.polygon_data));
+                }
+              } catch (err) {
+                console.warn('[PriceFeedAggregator] Error logging price update fields:', err);
+              }
+              
+              this.handlePriceUpdate(message.data);
+            } catch (error) {
+              console.error('[PriceFeedAggregator] Error processing price update:', error);
+            }
+          } else {
+            console.warn('[PriceFeedAggregator] Received price_update message with no data');
+          }
           break;
           
-        case 'polygon_candle_update':
-          this.handlePolygonCandleUpdate(message.data);
+        case 'bar_update':
+          if (message.data) {
+            try {
+              this.handleOHLCBarUpdate(message.data, 'bar_update');
+            } catch (error) {
+              console.error('[PriceFeedAggregator] Error processing bar update:', error);
+            }
+          }
+          break;
+          
+        case 'new_bar':
+          if (message.data) {
+            try {
+              this.handleOHLCBarUpdate(message.data, 'new_bar');
+            } catch (error) {
+              console.error('[PriceFeedAggregator] Error processing new bar:', error);
+            }
+          }
+          break;
+
+        case 'ohlc_history':
+          console.log(`[PriceFeedAggregator] Received ${message.bars?.length || 0} historical OHLC bars for ${message.feed_id}`);
+          if (message.bars && message.bars.length > 0) {
+            try {
+              message.bars.forEach((bar: OHLCBarUpdate) => {
+                if (bar) {
+                  this.handleOHLCBarUpdate(bar, 'new_bar');
+                }
+              });
+            } catch (error) {
+              console.error('[PriceFeedAggregator] Error processing OHLC history bars:', error);
+            }
+          }
           break;
 
         case 'error':
@@ -383,9 +467,108 @@ export class PriceFeedAggregatorService {
 
   // Handle price updates
   private handlePriceUpdate(data: PriceUpdate): void {
-    // Find handlers for this symbol
-    const symbol = data.symbol.replace('/', '').replace('-', '');
+    // Check if data exists
+    if (!data) {
+      console.warn('[PriceFeedAggregator] Received empty price update');
+      return;
+    }
+    
+    // Debug the raw data structure to help diagnose issues
+    try {
+      console.debug('[PriceFeedAggregator] Price update data:', 
+        JSON.stringify(data, (key, value) => {
+          // Truncate long strings
+          if (typeof value === 'string' && value.length > 50) {
+            return value.substring(0, 50) + '...';
+          }
+          return value;
+        }).substring(0, 500)
+      );
+    } catch (err) {
+      console.warn('[PriceFeedAggregator] Error stringifying price data:', err);
+    }
+    
+    // If symbol is missing, try to determine it from any available identifier
+    let symbol: string;
+    
+    if (data.symbol) {
+      // Use the provided symbol
+      symbol = data.symbol.replace('/', '').replace('-', '');
+    } else if (data.pyth_data?.id) {
+      // Try to get symbol from Pyth feed ID mapping
+      // Reverse lookup the symbol from feed ID
+      symbol = this.getSymbolFromFeedId(data.pyth_data.id);
+      
+      // If we couldn't find a symbol, just use the feed ID as the symbol
+      if (!symbol) {
+        symbol = data.pyth_data.id;
+        console.log(`[PriceFeedAggregator] Using feed ID as symbol: ${symbol}`);
+      }
+    } else if (data.polygon_data?.ticker) {
+      // Try to extract symbol from Polygon ticker (e.g., X:BTC-USD -> BTCUSD)
+      const ticker = data.polygon_data.ticker;
+      symbol = ticker.replace('X:', '').replace('-', '');
+      console.log(`[PriceFeedAggregator] Extracted symbol ${symbol} from Polygon ticker ${ticker}`);
+    } else if (typeof data === 'object' && data !== null) {
+      // Try to find any object property that might be an identifier
+      let foundId = false;
+      let idSymbol = '';
+      
+      // Try to iterate through all properties to find feed IDs or tickers
+      for (const [key, value] of Object.entries(data as Record<string, any>)) {
+        if (typeof value === 'string' && 
+            (key.includes('id') || key.includes('feed') || key.includes('ticker') || key.includes('symbol'))) {
+          idSymbol = value;
+          console.log(`[PriceFeedAggregator] Found potential identifier in property ${key}: ${value}`);
+          foundId = true;
+          break;
+        } else if (typeof value === 'object' && value !== null) {
+          // Check nested objects
+          const nestedId = this.findIdentifierInObject(value);
+          if (nestedId) {
+            idSymbol = nestedId;
+            console.log(`[PriceFeedAggregator] Found potential identifier in nested object ${key}: ${nestedId}`);
+            foundId = true;
+            break;
+          }
+        }
+      }
+      
+      if (foundId) {
+        symbol = idSymbol;
+      }
+      
+      if (!foundId) {
+        // Try to find any property that might serve as an identifier
+        const typedData = data as Record<string, any>;
+        const possibleIds = [
+          typedData.source_priority, 
+          typedData.has_pyth_data ? 'pyth' : '',
+          typedData.has_polygon_data ? 'polygon' : ''
+        ].filter(Boolean);
+        
+        if (possibleIds.length > 0) {
+          // Use the available identifiers as symbol
+          symbol = `unknown_${possibleIds.join('_')}`;
+          console.log(`[PriceFeedAggregator] Using generic identifier as symbol: ${symbol}`);
+        } else {
+          // Last resort - use a timestamp-based identifier
+          symbol = `unknown_${Date.now()}`;
+          console.log(`[PriceFeedAggregator] Using timestamp-based identifier as symbol: ${symbol}`);
+        }
+      }
+    } else {
+      // Non-object data, use a fallback identifier
+      symbol = `unknown_${Date.now()}`;
+      console.log('[PriceFeedAggregator] Unable to extract symbol from non-object data');
+    }
 
+    // Make sure symbol is defined at this point
+    if (!symbol) {
+      symbol = `unknown_${Date.now()}`;
+      console.log(`[PriceFeedAggregator] Generated fallback symbol: ${symbol}`);
+    }
+    
     console.log(`Got price update for: ${symbol}`)
     
     const handlers = this.messageHandlers.get(symbol);
@@ -404,43 +587,51 @@ export class PriceFeedAggregatorService {
     }
   }
   
-  // Handle Polygon candle updates
-  private handlePolygonCandleUpdate(data: PolygonCandleUpdate): void {
-    // Find handlers for this symbol/ticker
-    const ticker = data.ticker;
-    const symbol = data.symbol.replace('/', '').replace('-', '');
-    
-    console.log(`Got polygon candle update for ticker: ${ticker}, symbol: ${symbol}`);
-    
-    // Try both ticker and symbol for handlers
-    const tickerHandlers = this.candleHandlers.get(ticker);
-    const symbolHandlers = this.candleHandlers.get(symbol);
-    
-    // Combine handlers from both sources
-    const allHandlers = new Set<PolygonCandleCallback>();
-    
-    if (tickerHandlers) {
-      tickerHandlers.forEach(handler => allHandlers.add(handler));
+  // Handle OHLC bar updates
+  private handleOHLCBarUpdate(data: OHLCBarUpdate, eventType: string): void {
+    // Check if data exists and has required fields
+    if (!data || !data.feed_id || !data.interval) {
+      console.warn('[PriceFeedAggregator] Received OHLC update with missing required fields', data);
+      return;
     }
     
-    if (symbolHandlers) {
-      symbolHandlers.forEach(handler => allHandlers.add(handler));
-    }
+    const feedId = data.feed_id;
+    let symbol: string;
     
-    if (allHandlers.size > 0) {
-      console.log(`Found ${allHandlers.size} handlers for polygon update`);
-      
-      // Call each registered handler
-      allHandlers.forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error(`[PriceFeedAggregator] Error in polygon candle update handler:`, error);
-        }
-      });
+    // Determine the symbol - try multiple methods
+    if (data.symbol) {
+      // Use the provided symbol
+      symbol = data.symbol;
     } else {
-      console.log(`No handlers found for polygon update ${ticker}/${symbol}`);
+      // Try to get symbol from our feed ID mapping
+      const mappedSymbol = this.getSymbolFromFeedId(feedId);
+      if (mappedSymbol) {
+        symbol = mappedSymbol;
+      } else {
+        // Fallback to using the feed ID as symbol
+        symbol = feedId;
+      }
     }
+    
+    const interval = data.interval;
+    
+    console.log(`Got OHLC ${eventType} for ${symbol} (${interval}): ${data.timestamp || 'unknown time'}`);
+    
+    // Get handlers for this feed and interval
+    const feedHandlers = this.ohlcBarHandlers.get(feedId);
+    if (!feedHandlers) return;
+    
+    const intervalHandlers = feedHandlers.get(interval);
+    if (!intervalHandlers || intervalHandlers.size === 0) return;
+    
+    // Call each registered handler
+    intervalHandlers.forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`[PriceFeedAggregator] Error in OHLC bar update handler:`, error);
+      }
+    });
   }
 
   // Subscribe to price updates for a trading pair
@@ -638,16 +829,242 @@ export class PriceFeedAggregatorService {
   
   // Create a bar from a Polygon candle update
   public static createBarFromPolygonCandle(candle: PolygonCandleUpdate): PriceFeedBarData {
-    // Convert ISO timestamp to seconds timestamp
-    const time = Math.floor(new Date(candle.timestamp).getTime() / 1000);
+    // Convert ISO timestamp to seconds timestamp, using current time as fallback
+    const time = candle.timestamp 
+      ? Math.floor(new Date(candle.timestamp).getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
     
     return {
       time, 
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close
+      open: candle.open || 0,
+      high: candle.high || 0,
+      low: candle.low || 0,
+      close: candle.close || 0
     };
+  }
+  
+  // Create a bar from an OHLC bar update
+  public static createBarFromOHLCUpdate(ohlcBar: OHLCBarUpdate): PriceFeedBarData {
+    // Convert ISO timestamp to seconds timestamp, using current time as fallback
+    const time = ohlcBar.timestamp 
+      ? Math.floor(new Date(ohlcBar.timestamp).getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+    
+    return {
+      time,
+      open: ohlcBar.open || 0,
+      high: ohlcBar.high || 0,
+      low: ohlcBar.low || 0,
+      close: ohlcBar.close || 0
+    };
+  }
+  
+  // Subscribe to OHLC bars for a specific feed and interval
+  public async subscribeToOHLCBars(
+    symbol: string,
+    interval: string,
+    callback: OHLCBarCallback
+  ): Promise<boolean> {
+    console.log(`[PriceFeedAggregator] Subscribing to OHLC bars for ${symbol}, interval: ${interval}`);
+    
+    // Try to get the feed ID for this symbol
+    let feedId = PRICE_FEED_IDS[symbol];
+    
+    // If not found directly, try some common transformations
+    if (!feedId) {
+      // Try uppercase
+      feedId = PRICE_FEED_IDS[symbol.toUpperCase()];
+      
+      if (!feedId) {
+        // Try with USD suffix if not already present
+        if (!symbol.toUpperCase().endsWith('USD')) {
+          feedId = PRICE_FEED_IDS[symbol.toUpperCase() + 'USD'];
+        }
+        
+        if (!feedId) {
+          console.error(`[PriceFeedAggregator] No feed ID found for symbol: ${symbol}`);
+          return false;
+        }
+      }
+    }
+    
+    // Initialize nested maps if they don't exist
+    if (!this.ohlcBarHandlers.has(feedId)) {
+      this.ohlcBarHandlers.set(feedId, new Map());
+    }
+    
+    const feedHandlers = this.ohlcBarHandlers.get(feedId)!;
+    if (!feedHandlers.has(interval)) {
+      feedHandlers.set(interval, new Set());
+    }
+    
+    // Add the callback to handlers
+    feedHandlers.get(interval)!.add(callback);
+    
+    // Connect if not already connected
+    if (!this.isConnected) {
+      const connected = await this.connect();
+      if (!connected) {
+        return false;
+      }
+    }
+    
+    // Send subscription message
+    if (!this.socket) {
+      return false;
+    }
+    
+    try {
+      // Remove 0x prefix if present
+      const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+      
+      this.socket.send(JSON.stringify({
+        type: 'subscribe',
+        feed_id: cleanFeedId,
+        ohlc: true,
+        intervals: [interval],
+        symbol: symbol
+      }));
+      
+      // Request historical bars
+      this.socket.send(JSON.stringify({
+        type: 'get_ohlc_history',
+        feed_id: cleanFeedId,
+        interval: interval,
+        limit: 100
+      }));
+      
+      return true;
+    } catch (error) {
+      console.error('[PriceFeedAggregator] Error subscribing to OHLC bars:', error);
+      return false;
+    }
+  }
+  
+  // Unsubscribe from OHLC bars
+  public unsubscribeFromOHLCBars(
+    symbol: string,
+    interval: string,
+    callback?: OHLCBarCallback
+  ): boolean {
+    console.log(`[PriceFeedAggregator] Unsubscribing from OHLC bars for ${symbol}, interval: ${interval}`);
+    
+    // Get the feed ID for this symbol
+    const feedId = PRICE_FEED_IDS[symbol];
+    if (!feedId) {
+      console.error(`[PriceFeedAggregator] No feed ID found for symbol: ${symbol}`);
+      return false;
+    }
+    
+    // Remove handler
+    const feedHandlers = this.ohlcBarHandlers.get(feedId);
+    if (!feedHandlers) return true; // Already unsubscribed
+    
+    const intervalHandlers = feedHandlers.get(interval);
+    if (!intervalHandlers) return true; // Already unsubscribed
+    
+    if (callback) {
+      // Remove specific callback
+      intervalHandlers.delete(callback);
+    } else {
+      // Remove all callbacks
+      intervalHandlers.clear();
+    }
+    
+    // Clean up empty maps
+    if (intervalHandlers.size === 0) {
+      feedHandlers.delete(interval);
+    }
+    
+    if (feedHandlers.size === 0) {
+      this.ohlcBarHandlers.delete(feedId);
+    }
+    
+    // Send unsubscribe message if no handlers left
+    if (this.isConnected && this.socket && (!feedHandlers || feedHandlers.size === 0)) {
+      try {
+        // Remove 0x prefix if present
+        const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+        
+        this.socket.send(JSON.stringify({
+          type: 'unsubscribe',
+          feed_id: cleanFeedId,
+          ohlc: true,
+          intervals: [interval]
+        }));
+        
+        return true;
+      } catch (error) {
+        console.error('[PriceFeedAggregator] Error unsubscribing from OHLC bars:', error);
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  // Helper method to reverse lookup symbol from feed ID
+  private getSymbolFromFeedId(feedId: string): string | null {
+    // Remove 0x prefix if present
+    const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+    
+    // Find the symbol that maps to this feed ID
+    for (const [symbol, id] of Object.entries(PRICE_FEED_IDS)) {
+      // Normalize the stored feed ID for comparison
+      const normalizedId = id.startsWith('0x') ? id.substring(2) : id;
+      
+      if (normalizedId.toLowerCase() === cleanFeedId.toLowerCase()) {
+        return symbol;
+      }
+    }
+    
+    return null;
+  }
+  
+  // Helper method to recursively find potential identifiers in nested objects
+  private findIdentifierInObject(obj: any): string | null {
+    // Safety check
+    if (!obj || typeof obj !== 'object') {
+      return null;
+    }
+    
+    // Look for common identifier field names in the object
+    const identifierFields = ['id', 'feedId', 'feed_id', 'ticker', 'symbol'];
+    
+    for (const field of identifierFields) {
+      if (obj[field] && typeof obj[field] === 'string') {
+        return obj[field];
+      }
+    }
+    
+    // Recursively check nested objects (limited depth to avoid infinite recursion)
+    try {
+      for (const [key, value] of Object.entries(obj)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          // Check if the key itself might be an identifier
+          if (identifierFields.some(field => key.includes(field))) {
+            if (typeof value === 'string') {
+              return value;
+            } else if (typeof value === 'object' && value !== null && 
+                       'id' in value && typeof (value as any).id === 'string') {
+              return (value as any).id;
+            }
+          }
+          
+          // Recurse into the nested object (but only if it's not the same object to avoid loops)
+          if (value !== obj) {
+            const nestedId = this.findIdentifierInObject(value);
+            if (nestedId) {
+              return nestedId;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[PriceFeedAggregator] Error searching for identifiers in object:', error);
+    }
+    
+    return null;
   }
 }
 
