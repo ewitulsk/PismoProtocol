@@ -1,9 +1,9 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="price-feed-aggregator",
+    name="pyth-price-feed",
     version="0.1.0",
-    description="A service that aggregates price feeds from Pyth Network",
+    description="A service that provides price feeds from Pyth Network",
     author="Pismo Synthetics",
     packages=find_packages(include=["src", "src.*"]),
     package_data={},
@@ -26,7 +26,7 @@ setup(
     python_requires=">=3.8",
     entry_points={
         "console_scripts": [
-            "price-feed-aggregator=src.main:main_cli",
+            "pyth-price-feed=src.main:main_cli",
         ],
     },
 )
