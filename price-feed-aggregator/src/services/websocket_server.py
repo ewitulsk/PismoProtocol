@@ -396,6 +396,7 @@ class PriceFeedWebsocketServer:
 
             # For polygon-only subscriptions, handle differently
             if subscription_type == SubscriptionType.POLYGON_ONLY:
+
                 # Add client to polygon-only subscribers
                 if ticker not in self.polygon_only_subscribers:
                     self.polygon_only_subscribers[ticker] = set()
@@ -726,6 +727,7 @@ class PriceFeedWebsocketServer:
                 await asyncio.gather(*send_tasks, return_exceptions=True)
 
     async def handle_polygon_bar_update(self, bar_data: PolygonBarData) -> None:
+        self.logger.info("Handling Bar Update...")
         """
         Handle a bar update from Polygon, combine with Pyth data if available, and forward to clients.
         
