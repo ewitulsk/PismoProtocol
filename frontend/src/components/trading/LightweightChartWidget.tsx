@@ -43,33 +43,52 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
 
-  // Convert seconds-based interval to OHLC service interval format
-  const convertToOhlcInterval = useCallback((secondsInterval: string): string => {
-    switch (secondsInterval) {
-      case '1':     // 1 second
+  // Convert interval from TimeFrameSelector format to OHLC service interval format
+  const convertToOhlcInterval = useCallback((timeframeValue: string): string => {
+    // Console log for debugging
+    console.log(`[LightweightChartWidget] Converting timeframe value: ${timeframeValue}`);
+    
+    switch (timeframeValue) {
+      // Second-based intervals
+      case '1S':
         return '1s';
-      case '10':    // 10 seconds
+      case '10S':
         return '10s';  
-      case '30':    // 30 seconds
+      case '30S':
         return '30s';
-      case '60':    // 1 minute
+      
+      // Minute-based intervals
+      case '1':     // 1 minute
         return '1m';
-      case '300':   // 5 minutes
+      case '5':     // 5 minutes
         return '5m';
-      case '900':   // 15 minutes
+      case '15':    // 15 minutes
         return '15m';
-      case '1800':  // 30 minutes
+      case '30':    // 30 minutes
         return '30m';
-      case '3600':  // 1 hour
+      
+      // Hour-based intervals
+      case '60':    // 1 hour (not 1 minute!)
         return '1h';
-      case '14400': // 4 hours
+      case '240':   // 4 hours
         return '4h';
-      case '86400': // 1 day
+      
+      // Day/Week/Month intervals
+      case '1D':    // 1 day
         return '1d';
-      case '604800': // 1 week
+      case '1W':    // 1 week
         return '1w';
+      case '1M':    // 1 month
+        return '1M';
+        
+      // If the provided value is already in the correct format, return it
+      case '1s': case '10s': case '30s': case '1m': case '5m': 
+      case '15m': case '30m': case '1h': case '4h': case '1d': 
+      case '1w': case '1M':
+        return timeframeValue;
+        
       default:
-        console.warn(`Unknown interval: ${interval}, defaulting to 1-minute`);
+        console.warn(`Unknown interval: ${timeframeValue}, defaulting to 1-minute`);
         return '1m';
     }
   }, []);
@@ -134,8 +153,13 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     }
     
     try {
+      // Debug the incoming update type
+      console.log(`[LightweightChartWidget] Received OHLC update of type: ${update.type || 'unknown'}, interval: ${update.interval || (update.data && update.data.interval) || 'unknown'}`);
+      
       // Check if this is a history message
       if (update.type === 'ohlc_history') {
+        console.log(`[LightweightChartWidget] Processing historical bars: ${update.bars?.length || 0} bars, interval: ${update.interval}`);
+        
         // Handle historical data
         if (update.bars && Array.isArray(update.bars) && update.bars.length > 0) {
           // Convert bars to chart format
@@ -147,6 +171,15 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
             } as CandlestickData<Time>;
           });
           
+          // Log first and last bar timestamps
+          const firstBar = chartBars[0];
+          const lastBar = chartBars[chartBars.length - 1];
+          if (firstBar && lastBar) {
+            const firstTime = new Date(Number(firstBar.time) * 1000).toISOString();
+            const lastTime = new Date(Number(lastBar.time) * 1000).toISOString();
+            console.log(`[LightweightChartWidget] Historical data range: ${firstTime} to ${lastTime}`);
+          }
+          
           // Process historical bars
           handleHistoricalBars(chartBars);
         }
@@ -155,6 +188,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       // Check if this is a new bar
       if (update.type === 'new_bar') {
+        console.log(`[LightweightChartWidget] Processing new bar for ${update.data?.symbol || symbol}, interval: ${update.data?.interval}`);
         handleNewBar(update.data);
         return;
       }
@@ -178,10 +212,15 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       const currInterval = currentOhlcInterval.toLowerCase();
       
       // Check if this update matches our interval
-      const isMatch = updateOHLCInterval === currInterval;
+      // Normalize comparison for common interval notations (1m = 1min, etc.)
+      const isMatch = updateOHLCInterval === currInterval || 
+                     (updateOHLCInterval === '1m' && currInterval === '1min') ||
+                     (updateOHLCInterval === '1min' && currInterval === '1m') ||
+                     (updateOHLCInterval === '5m' && currInterval === '5min') ||
+                     (updateOHLCInterval === '5min' && currInterval === '5m');
       
       if (isMatch) {
-        console.log(`[LightweightChartWidget] Updating chart with matching interval: ${updateOHLCInterval}`);
+        console.log(`[LightweightChartWidget] Updating chart with matching interval: ${updateOHLCInterval} matches ${currInterval}`);
         candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
         setLastBar(typedBar as CandlestickData<Time>);
       } else {
@@ -399,18 +438,20 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   useEffect(() => {
     if (!chartContainerRef.current) return;
     
-    console.log(`[LightweightChartWidget] Symbol or interval changed: ${symbol}, ${interval}`);
+    console.log(`[LightweightChartWidget] Symbol or interval changed: ${symbol}, interval=${interval}`);
     
     // Initialize chart
     initializeChart();
     
-    // Convert the lightweight-chart interval (in seconds) to OHLC service interval format
+    // Convert the TimeFrameSelector interval to OHLC service interval format
     const ohlcInterval = convertToOhlcInterval(interval);
+    console.log(`[LightweightChartWidget] Converted interval ${interval} to ${ohlcInterval} for service subscription`);
     
     // Unsubscribe from current feeds
     unsubscribeFromCurrentFeeds();
     
     // Subscribe to feeds with new symbol and interval
+    console.log(`[LightweightChartWidget] Subscribing to ${symbol} with interval=${ohlcInterval}`);
     subscribeToFeeds(symbol, ohlcInterval);
     
     // Handle window resize
