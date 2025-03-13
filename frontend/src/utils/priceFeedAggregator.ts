@@ -393,21 +393,7 @@ export class PriceFeedAggregatorService {
         case 'price_update':
           if (message.data) {
             try {
-              // Log the price update structure for debugging (always log for now)
-              try {
-                const keysInUpdate = Object.keys(message.data);
-                console.debug('[PriceFeedAggregator] Price update contains fields:', keysInUpdate);
-                
-                // Log special nested structures
-                if (message.data.pyth_data) {
-                  console.debug('[PriceFeedAggregator] Pyth data fields:', Object.keys(message.data.pyth_data));
-                }
-                if (message.data.polygon_data) {
-                  console.debug('[PriceFeedAggregator] Polygon data fields:', Object.keys(message.data.polygon_data));
-                }
-              } catch (err) {
-                console.warn('[PriceFeedAggregator] Error logging price update fields:', err);
-              }
+              // Debugging logs removed
               
               this.handlePriceUpdate(message.data);
             } catch (error) {
@@ -473,23 +459,9 @@ export class PriceFeedAggregatorService {
       return;
     }
     
-    // Debug the raw data structure to help diagnose issues
-    try {
-      console.debug('[PriceFeedAggregator] Price update data:', 
-        JSON.stringify(data, (key, value) => {
-          // Truncate long strings
-          if (typeof value === 'string' && value.length > 50) {
-            return value.substring(0, 50) + '...';
-          }
-          return value;
-        }).substring(0, 500)
-      );
-    } catch (err) {
-      console.warn('[PriceFeedAggregator] Error stringifying price data:', err);
-    }
     
     // If symbol is missing, try to determine it from any available identifier
-    let symbol: string;
+    let symbol: string = "";
     
     if (data.symbol) {
       // Use the provided symbol
@@ -497,18 +469,18 @@ export class PriceFeedAggregatorService {
     } else if (data.pyth_data?.id) {
       // Try to get symbol from Pyth feed ID mapping
       // Reverse lookup the symbol from feed ID
-      symbol = this.getSymbolFromFeedId(data.pyth_data.id);
+      const mappedSymbol = this.getSymbolFromFeedId(data.pyth_data.id);
       
       // If we couldn't find a symbol, just use the feed ID as the symbol
-      if (!symbol) {
+      if (mappedSymbol) {
+        symbol = mappedSymbol;
+      } else {
         symbol = data.pyth_data.id;
-        console.log(`[PriceFeedAggregator] Using feed ID as symbol: ${symbol}`);
       }
     } else if (data.polygon_data?.ticker) {
       // Try to extract symbol from Polygon ticker (e.g., X:BTC-USD -> BTCUSD)
       const ticker = data.polygon_data.ticker;
       symbol = ticker.replace('X:', '').replace('-', '');
-      console.log(`[PriceFeedAggregator] Extracted symbol ${symbol} from Polygon ticker ${ticker}`);
     } else if (typeof data === 'object' && data !== null) {
       // Try to find any object property that might be an identifier
       let foundId = false;
@@ -519,7 +491,6 @@ export class PriceFeedAggregatorService {
         if (typeof value === 'string' && 
             (key.includes('id') || key.includes('feed') || key.includes('ticker') || key.includes('symbol'))) {
           idSymbol = value;
-          console.log(`[PriceFeedAggregator] Found potential identifier in property ${key}: ${value}`);
           foundId = true;
           break;
         } else if (typeof value === 'object' && value !== null) {
@@ -527,7 +498,6 @@ export class PriceFeedAggregatorService {
           const nestedId = this.findIdentifierInObject(value);
           if (nestedId) {
             idSymbol = nestedId;
-            console.log(`[PriceFeedAggregator] Found potential identifier in nested object ${key}: ${nestedId}`);
             foundId = true;
             break;
           }
@@ -550,33 +520,22 @@ export class PriceFeedAggregatorService {
         if (possibleIds.length > 0) {
           // Use the available identifiers as symbol
           symbol = `unknown_${possibleIds.join('_')}`;
-          console.log(`[PriceFeedAggregator] Using generic identifier as symbol: ${symbol}`);
         } else {
           // Last resort - use a timestamp-based identifier
           symbol = `unknown_${Date.now()}`;
-          console.log(`[PriceFeedAggregator] Using timestamp-based identifier as symbol: ${symbol}`);
         }
       }
     } else {
       // Non-object data, use a fallback identifier
       symbol = `unknown_${Date.now()}`;
-      console.log('[PriceFeedAggregator] Unable to extract symbol from non-object data');
     }
 
     // Make sure symbol is defined at this point
     if (!symbol) {
       symbol = `unknown_${Date.now()}`;
-      console.log(`[PriceFeedAggregator] Generated fallback symbol: ${symbol}`);
     }
     
-    console.log(`Got price update for symbol: ${symbol}`)
-    
-    // Log available handlers for debugging
-    console.log(`Available message handlers: ${Array.from(this.messageHandlers.keys()).join(', ')}`)
-    
     const handlers = this.messageHandlers.get(symbol);
-
-    console.log(`Handlers found: ${handlers !== undefined}, size: ${handlers?.size || 'undefined'}`)
 
     if (handlers && handlers.size > 0) {
       // Call each registered handler
@@ -623,38 +582,28 @@ export class PriceFeedAggregatorService {
     const interval = data.interval;
     const normalizedInterval = interval.toLowerCase();
     
-    console.log(`Got OHLC ${eventType} for ${symbol} (${interval}): ${data.timestamp || 'unknown time'}`);
-    
     // Get handlers for this feed and interval
-    // Log detailed debugging info
-    console.log(`Looking for handlers with feedId: ${feedId} and interval: ${interval}`);
-    console.log(`Available feed handlers: ${Array.from(this.ohlcBarHandlers.keys()).join(', ')}`);
     
     // Find matching feed ID with normalized comparison
-    let matchedFeedId = null;
+    let matchedFeedId: string | null = null;
     
-    for (const key of this.ohlcBarHandlers.keys()) {
+    // Use Array.from to convert the iterator to an array
+    Array.from(this.ohlcBarHandlers.keys()).forEach(key => {
       const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
-      if (normalizedKey === normalizedFeedId) {
+      if (normalizedKey === normalizedFeedId && !matchedFeedId) {
         matchedFeedId = key;
-        console.log(`Found normalized feed ID match: ${key} for ID: ${feedId}`);
-        break;
       }
-    }
+    });
     
     const feedHandlers = matchedFeedId ? this.ohlcBarHandlers.get(matchedFeedId) : null;
     if (!feedHandlers) {
-      console.log(`No primary handlers found for feed ID: ${feedId}, trying symbol lookup`);
-      
       // Try another approach - look for handlers by symbol
       if (symbol && symbol !== feedId) {
-        console.log(`Trying to find handlers using symbol: ${symbol} instead of feed ID`);
-        
         // Normalize symbol for comparison
         const lowerSymbol = symbol.toLowerCase().replace(/[^a-z0-9]/g, ''); // Remove non-alphanumeric
         
         // Attempt to find feed ID from symbol
-        for (const [handlerFeedId, handlers] of this.ohlcBarHandlers.entries()) {
+        Array.from(this.ohlcBarHandlers.entries()).forEach(([handlerFeedId, handlers]) => {
           // Try multiple matching strategies
           const handlerSymbol = this.getSymbolFromFeedId(handlerFeedId) || '';
           const normalizedHandlerFeedId = handlerFeedId.startsWith('0x') ? 
@@ -667,22 +616,18 @@ export class PriceFeedAggregatorService {
               lowerHandlerSymbol === lowerSymbol ||
               lowerHandlerSymbol.includes(lowerSymbol) ||
               lowerSymbol.includes(lowerHandlerSymbol)) {
-            console.log(`Found alternative handlers using symbol match with feed ID: ${handlerFeedId}`);
             
             // Look for matching interval
-            let matchedAltInterval = null;
-            for (const intervalKey of handlers.keys()) {
-              if (intervalKey.toLowerCase() === normalizedInterval) {
+            let matchedAltInterval: string | null = null;
+            Array.from(handlers.keys()).forEach(intervalKey => {
+              if (intervalKey.toLowerCase() === normalizedInterval && !matchedAltInterval) {
                 matchedAltInterval = intervalKey;
-                console.log(`Found case-insensitive interval match: ${intervalKey}`);
-                break;
               }
-            }
+            });
             
             if (matchedAltInterval) {
               const altIntervalHandlers = handlers.get(matchedAltInterval);
               if (altIntervalHandlers && altIntervalHandlers.size > 0) {
-                console.log(`Found ${altIntervalHandlers.size} handlers via symbol matching for ${symbol}, interval: ${matchedAltInterval}`);
                 // Call the found handlers
                 altIntervalHandlers.forEach(callback => {
                   try {
@@ -694,31 +639,24 @@ export class PriceFeedAggregatorService {
               }
             }
           }
-        }
+        });
       }
       return;
     }
     
-    console.log(`Found handlers for feed. Available intervals: ${Array.from(feedHandlers.keys()).join(', ')}`);
-    
     // Try to match interval with case insensitivity
-    let matchedInterval = null;
+    let matchedInterval: string | null = null;
     
-    for (const key of feedHandlers.keys()) {
-      if (key.toLowerCase() === normalizedInterval) {
+    Array.from(feedHandlers.keys()).forEach(key => {
+      if (key.toLowerCase() === normalizedInterval && !matchedInterval) {
         matchedInterval = key;
-        console.log(`Found case-insensitive interval match: ${key}`);
-        break;
       }
-    }
+    });
     
     const intervalHandlers = matchedInterval ? feedHandlers.get(matchedInterval) : null;
     if (!intervalHandlers || intervalHandlers.size === 0) {
-      console.log(`No handlers found for interval: ${interval}, available intervals: ${Array.from(feedHandlers.keys()).join(', ')}`);
       return;
     }
-    
-    console.log(`Found ${intervalHandlers.size} handlers for feedId: ${matchedFeedId}, interval: ${matchedInterval}`);
     
     // Call each registered handler
     intervalHandlers.forEach(callback => {

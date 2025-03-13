@@ -45,9 +45,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
 
   // Convert interval from TimeFrameSelector format to OHLC service interval format
   const convertToOhlcInterval = useCallback((timeframeValue: string): string => {
-    // Console log for debugging
-    console.log(`[LightweightChartWidget] Converting timeframe value: ${timeframeValue}`);
-    
     switch (timeframeValue) {
       // Second-based intervals
       case '1S':
@@ -97,8 +94,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const handleHistoricalBars = useCallback((bars: CandlestickData<Time>[]) => {
     if (!candleSeriesRef.current) return;
     
-    console.log(`[LightweightChartWidget] Received ${bars.length} historical bars`);
-    
     // Update state
     setHistoricalData(bars);
     
@@ -121,8 +116,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     if (!candleSeriesRef.current) return;
     
     try {
-      console.log(`[LightweightChartWidget] Processing new OHLC bar for ${symbol}`, update);
-      
       // Create a bar from the OHLC bar data
       const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
       
@@ -146,20 +139,14 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   }, [symbol]);
 
   // Handle OHLC bar updates directly
-  const handleOHLCBarUpdate = useCallback((update: OHLCBarUpdate) => {
+  const handleOHLCBarUpdate = useCallback((update: OHLCBarUpdate & {type?: string, data?: OHLCBarUpdate, bars?: OHLCBarUpdate[]}) => {
     if (!candleSeriesRef.current) {
-      console.warn("[LightweightChartWidget] Candle series ref is null, can't update chart");
       return;
     }
     
     try {
-      // Debug the incoming update type
-      console.log(`[LightweightChartWidget] Received OHLC update of type: ${update.type || 'unknown'}, interval: ${update.interval || (update.data && update.data.interval) || 'unknown'}`);
-      
       // Check if this is a history message
       if (update.type === 'ohlc_history') {
-        console.log(`[LightweightChartWidget] Processing historical bars: ${update.bars?.length || 0} bars, interval: ${update.interval}`);
-        
         // Handle historical data
         if (update.bars && Array.isArray(update.bars) && update.bars.length > 0) {
           // Convert bars to chart format
@@ -171,15 +158,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
             } as CandlestickData<Time>;
           });
           
-          // Log first and last bar timestamps
-          const firstBar = chartBars[0];
-          const lastBar = chartBars[chartBars.length - 1];
-          if (firstBar && lastBar) {
-            const firstTime = new Date(Number(firstBar.time) * 1000).toISOString();
-            const lastTime = new Date(Number(lastBar.time) * 1000).toISOString();
-            console.log(`[LightweightChartWidget] Historical data range: ${firstTime} to ${lastTime}`);
-          }
-          
           // Process historical bars
           handleHistoricalBars(chartBars);
         }
@@ -187,15 +165,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       }
       
       // Check if this is a new bar
-      if (update.type === 'new_bar') {
-        console.log(`[LightweightChartWidget] Processing new bar for ${update.data?.symbol || symbol}, interval: ${update.data?.interval}`);
+      if (update.type === 'new_bar' && update.data) {
         handleNewBar(update.data);
         return;
       }
       
       // Handle regular bar update (updates the current bar)
-      const confirmationStatus = update.confirmed ? 'confirmed' : 'update';
-      console.log(`[LightweightChartWidget] Processing OHLC ${confirmationStatus} for ${symbol}, interval: ${currentOhlcInterval}`, update);
       
       // Create a bar from the OHLC bar data
       const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
@@ -220,11 +195,8 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
                      (updateOHLCInterval === '5min' && currInterval === '5m');
       
       if (isMatch) {
-        console.log(`[LightweightChartWidget] Updating chart with matching interval: ${updateOHLCInterval} matches ${currInterval}`);
         candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
         setLastBar(typedBar as CandlestickData<Time>);
-      } else {
-        console.log(`[LightweightChartWidget] Skipping update for non-matching interval: got ${updateOHLCInterval}, expected ${currInterval}`);
       }
       
       // Update the last price if available
@@ -241,8 +213,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     if (!candleSeriesRef.current) return;
     
     try {
-      console.log(`[LightweightChartWidget] Processing Polygon candle for ${symbol}`, update);
-      
       // Create a bar from the Polygon candle data
       const bar = PriceFeedAggregatorService.createBarFromPolygonCandle(update);
       
@@ -268,8 +238,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
 
   // Subscribe to price feeds
   const subscribeToFeeds = useCallback(async (symbol: string, ohlcInterval: string) => {
-    console.log(`[LightweightChartWidget] Subscribing to feeds for ${symbol}, interval: ${ohlcInterval}`);
-    
     // Update the current subscription reference
     activeSubscriptionRef.current = { symbol, interval: ohlcInterval };
     
@@ -282,20 +250,16 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       if (!success && activeSubscriptionRef.current?.symbol === symbol && activeSubscriptionRef.current?.interval === ohlcInterval) {
         // Fallback to Polygon candles if OHLC subscription fails
-        console.log("Falling back to Polygon candles...");
         return priceFeedAggregatorService.subscribeToPolygonCandles(symbol, handlePolygonCandleUpdate);
       }
       return success;
     } catch (err) {
-      console.error(`Error subscribing to data feeds for ${symbol}:`, err);
-      
       // Only try fallback if we're still on the same subscription
       if (activeSubscriptionRef.current?.symbol === symbol && activeSubscriptionRef.current?.interval === ohlcInterval) {
         // As a last resort, try to subscribe to Polygon candles if OHLC subscription throws an error
         try {
           return await priceFeedAggregatorService.subscribeToPolygonCandles(symbol, handlePolygonCandleUpdate);
         } catch (err2) {
-          console.error(`Error subscribing to Polygon candles as fallback:`, err2);
           return false;
         }
       }
@@ -307,8 +271,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const unsubscribeFromCurrentFeeds = useCallback(() => {
     const currentSub = activeSubscriptionRef.current;
     if (currentSub) {
-      console.log(`[LightweightChartWidget] Unsubscribing from feeds for ${currentSub.symbol}, interval: ${currentSub.interval}`);
-      
       // Unsubscribe from both data sources
       priceFeedAggregatorService.unsubscribeFromOHLCBars(currentSub.symbol, currentSub.interval);
       priceFeedAggregatorService.unsubscribeFromPolygonCandles(currentSub.symbol);
@@ -328,8 +290,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       chartRef.current = null;
       candleSeriesRef.current = null;
     }
-    
-    console.log('[LightweightChartWidget] Initializing chart');
     
     // Initialize chart with optimizations for the selected interval
     const chart = createChart(chartContainerRef.current, {
@@ -438,20 +398,16 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   useEffect(() => {
     if (!chartContainerRef.current) return;
     
-    console.log(`[LightweightChartWidget] Symbol or interval changed: ${symbol}, interval=${interval}`);
-    
     // Initialize chart
     initializeChart();
     
     // Convert the TimeFrameSelector interval to OHLC service interval format
     const ohlcInterval = convertToOhlcInterval(interval);
-    console.log(`[LightweightChartWidget] Converted interval ${interval} to ${ohlcInterval} for service subscription`);
     
     // Unsubscribe from current feeds
     unsubscribeFromCurrentFeeds();
     
     // Subscribe to feeds with new symbol and interval
-    console.log(`[LightweightChartWidget] Subscribing to ${symbol} with interval=${ohlcInterval}`);
     subscribeToFeeds(symbol, ohlcInterval);
     
     // Handle window resize
