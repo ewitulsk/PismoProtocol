@@ -89,7 +89,11 @@ class PriceFeedWebsocketServer:
     async def start(self) -> None:
         """Start the websocket server and register callbacks for Pyth."""
         # Register callback for Pyth price updates
-        self.pyth_client.register_price_callback(self.handle_pyth_price_update)
+        # Check if register_price_callback is a coroutine function or a regular method
+        if asyncio.iscoroutinefunction(self.pyth_client.register_price_callback):
+            await self.pyth_client.register_price_callback(self.handle_pyth_price_update)
+        else:
+            self.pyth_client.register_price_callback(self.handle_pyth_price_update)
         
         # Register OHLC bar update callback
         self.ohlc_service.register_callback(self.handle_ohlc_bar_update)
@@ -386,8 +390,8 @@ class PriceFeedWebsocketServer:
                     }))
                     return
                 
-                # Get OHLC bars
-                bars = self.ohlc_service.get_latest_bars(feed_id, interval, limit)
+                # Get OHLC bars (always use async method now)
+                bars = await self.ohlc_service.get_latest_bars(feed_id, interval, limit)
                 
                 # Send the bars
                 await self.clients[client_id].send(json.dumps({
@@ -613,20 +617,25 @@ class PriceFeedWebsocketServer:
         if not self.ohlc_subscriptions[client_id]:
             del self.ohlc_subscriptions[client_id]
     
-    async def handle_ohlc_bar_update(self, bar: OHLCBar, event_type: str, subscribers: Set[str]) -> None:
+    async def handle_ohlc_bar_update(self, bar: OHLCBar, event_type: str, subscribers: Set[str], history_message=None) -> None:
         """
         Handle an OHLC bar update and forward to subscribed clients.
         
         Args:
             bar: The updated or new OHLC bar
-            event_type: Type of event ("bar_update" or "new_bar")
+            event_type: Type of event ("bar_update", "new_bar", or "ohlc_history")
             subscribers: Set of client IDs to notify
+            history_message: Optional pre-formatted history message (for ohlc_history event type)
         """
-        # Create the update message
-        update_json = json.dumps({
-            "type": event_type,
-            "data": bar.model_dump(mode="json")
-        })
+        # For ohlc_history event type, use the pre-formatted message
+        if event_type == "ohlc_history" and history_message:
+            update_json = json.dumps(history_message)
+        else:
+            # Create the regular update message
+            update_json = json.dumps({
+                "type": event_type,
+                "data": bar.model_dump(mode="json")
+            })
         
         # Send to all subscribed clients
         send_tasks = []

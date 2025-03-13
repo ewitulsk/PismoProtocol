@@ -10,6 +10,8 @@ Usage:
   python ohlc_subscription.py [feed_id] [interval]
   python ohlc_subscription.py --symbol btc 1m
   python ohlc_subscription.py --multi btc,eth,sol --interval 5m
+  python ohlc_subscription.py --symbol sol --interval 1s
+  python ohlc_subscription.py --multi btc,eth --interval 1d
   python ohlc_subscription.py --help
 """
 
@@ -38,10 +40,17 @@ logger = logging.getLogger('ohlc_subscription')
 # Common Pyth Network price feed IDs for cryptocurrencies
 PRICE_FEEDS = {
     "btc": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # BTC/USD
+    "eth": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # ETH/USD
+    "sol": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",  # SOL/USD
+    "avax": "93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7",  # AVAX/USD
+    "matic": "5de33a9112c2b700b8d30b8a3402c103578ccfa2765696471cc672bd5cf6ac52",  # MATIC/USD
+    "link": "8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",  # LINK/USD
+    "doge": "dcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c",  # DOGE/USD
+    "uni": "78d185a741d7b3e43748f63e2ffbb10bd8d575e9cad8e6159daa2a60f5c68c17",   # UNI/USD
 }
 
 # Valid time intervals
-INTERVALS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+INTERVALS = ["1s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]
 
 
 async def subscribe_to_ohlc(
@@ -161,22 +170,40 @@ async def handle_messages(
                 bars = data.get("bars", [])
                 
                 if bars:
-                    logger.info(f"Received {len(bars)} historical OHLC bars for {feed_id}, interval: {interval}")
-                    # Display the most recent bar
-                    latest_bar = bars[0]  # The bars should be in reverse order (newest first)
+                    # Display summary of bars (oldest and newest)
+                    oldest_bar = bars[-1]  # Oldest bar
+                    latest_bar = bars[0]   # Newest bar (the bars should be in reverse order, newest first)
+                    
                     symbol = latest_bar.get("symbol", feed_id)
-                    timestamp = latest_bar.get("timestamp")
+                    oldest_time = oldest_bar.get("timestamp")
+                    newest_time = latest_bar.get("timestamp")
+                    
+                    # Latest bar details
                     open_price = latest_bar.get("open", 0)
                     high_price = latest_bar.get("high", 0)
                     low_price = latest_bar.get("low", 0)
                     close_price = latest_bar.get("close", 0)
                     
-                    logger.info(f"Latest bar for {symbol} ({interval}):")
-                    logger.info(f"  Time: {timestamp}")
-                    logger.info(f"  OHLC: ${open_price:.2f}, ${high_price:.2f}, ${low_price:.2f}, ${close_price:.2f}")
+                    # Display bar count prominently
+                    bar_count = len(bars)
+                    bar_count_str = f"===== RECEIVED {bar_count} HISTORICAL BARS ====="
+                    logger.info("=" * len(bar_count_str))
+                    logger.info(bar_count_str)
+                    logger.info("=" * len(bar_count_str))
+                    
+                    logger.info(f"Symbol: {symbol} ({interval})")
+                    logger.info(f"Date range: {oldest_time} to {newest_time}")
+                    logger.info(f"Latest bar: ${open_price:.2f}, ${high_price:.2f}, ${low_price:.2f}, ${close_price:.2f} (OHLC)")
                     
                     # Store this as the current bar
                     current_bars[(feed_id, interval)] = latest_bar
+                    
+                    # Initialize bar counter for this feed/interval with number of bars received
+                    if not hasattr(run_client, "bar_counters"):
+                        run_client.bar_counters = {}
+                    
+                    key = (feed_id, interval)
+                    run_client.bar_counters[key] = bar_count
                 else:
                     logger.info(f"No historical OHLC bars available for {feed_id}, interval: {interval}")
                 
@@ -218,7 +245,19 @@ async def handle_messages(
                 key = (feed_id, interval)
                 current_bars[key] = bar_data
                 
-                logger.info(f"NEW BAR - {symbol} ({interval}):")
+                # Get the bar count for this feed/interval
+                # Add a counter for each feed/interval combination
+                if not hasattr(run_client, "bar_counters"):
+                    run_client.bar_counters = {}
+                
+                if key not in run_client.bar_counters:
+                    run_client.bar_counters[key] = 1
+                else:
+                    run_client.bar_counters[key] += 1
+                
+                bar_number = run_client.bar_counters[key]
+                
+                logger.info(f"NEW BAR #{bar_number} - {symbol} ({interval}):")
                 logger.info(f"  Time: {timestamp}")
                 logger.info(f"  OHLC: ${open_price:.2f}, ${high_price:.2f}, ${low_price:.2f}, ${close_price:.2f}")
                 
@@ -351,8 +390,8 @@ def parse_args():
                         help="WebSocket server URL (default: ws://localhost:8765)")
     parser.add_argument("--history", action="store_true",
                         help="Request historical OHLC bars")
-    parser.add_argument("--history-limit", type=int, default=50,
-                        help="Maximum number of historical bars to retrieve (default: 50)")
+    parser.add_argument("--history-limit", type=int, default=200,
+                        help="Maximum number of historical bars to retrieve (default: 200)")
     parser.add_argument("--timeout", type=float, default=30.0, 
                         help="Timeout in seconds for receiving updates (default: 30.0)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
