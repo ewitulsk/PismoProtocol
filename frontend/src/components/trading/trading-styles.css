@@ -1,0 +1,69 @@
+/* Trading platform specific styles to maximize screen real estate */
+
+.trading-layout {
+  @apply max-w-full w-full mx-0 px-0 overflow-x-hidden !important;
+}
+
+.trading-container {
+  @apply w-full flex flex-col md:flex-row gap-2 md:gap-4 px-1 md:px-2 !important;
+}
+
+.trading-chart-wrapper {
+  @apply flex-grow mb-2 md:mb-0 !important;
+}
+
+.trading-chart {
+  @apply flex-1 p-1 md:p-2 rounded-xl bg-darkBackground max-md:w-full !important;
+}
+
+@media (min-width: 768px) {
+  .trading-chart {
+    height: calc(100vh - 120px); /* Adjust for header height + minimal margin */
+  }
+}
+
+@media (max-width: 767px) {
+  .trading-chart {
+    height: calc(70vh); /* Smaller height on mobile */
+  }
+}
+
+.trading-sidebar {
+  @apply flex flex-col gap-3 w-[350px] max-md:w-full !important;
+}
+
+.trading-controls {
+  @apply flex items-center gap-3 mb-1 max-sm:flex-wrap !important;
+}
+
+/* Timeframe dropdown styling */
+.timeframe-dropdown {
+  @apply relative !important;
+}
+
+.timeframe-dropdown-button {
+  @apply bg-mainBackground text-white px-3 py-1.5 text-sm font-bold rounded-lg flex items-center !important;
+}
+
+.timeframe-dropdown-content {
+  @apply absolute z-20 mt-1 rounded-md shadow-lg min-w-[120px] bg-darkBackground border border-mainBackground !important;
+}
+
+/* LivePriceOverlay component */
+.live-price-overlay {
+  @apply absolute top-2 left-2 z-10 bg-darkBackground bg-opacity-80 text-white px-3 py-1 rounded-md flex items-center gap-2 !important;
+}
+
+/* Hide TradingView elements we don't want */
+:global(.tradingview-widget-copyright) {
+  display: none !important;
+}
+
+/* Override default Tailwind gap sizes for trading page */
+.trading-gap-xs {
+  @apply gap-1 !important;
+}
+
+.trading-gap-sm {
+  @apply gap-2 !important;
+}

@@ -1,0 +1,176 @@
+/* Common Styles for Pismo Synthetics Frontend */
+
+/* Layout */
+.container-main {
+  @apply min-h-screen bg-mainBackground;
+}
+
+.container-content {
+  @apply max-w-screen-xl mx-auto flex gap-8 p-8 max-md:flex-col max-sm:p-4;
+}
+
+.container-aside {
+  @apply flex flex-col gap-6 w-[380px] max-md:w-full;
+}
+
+/* Home Page */
+.home-container {
+  @apply flex flex-col items-center justify-center bg-mainBackground text-white p-4;
+}
+
+.home-title {
+  @apply text-5xl font-bold mb-8 text-center;
+}
+
+.home-subtitle {
+  @apply text-xl mb-12 text-center max-w-2xl;
+}
+
+.home-buttons {
+  @apply flex flex-col sm:flex-row gap-6;
+}
+
+.home-button {
+  @apply bg-secondary text-black font-bold py-4 px-8 rounded-lg text-center hover:bg-opacity-80;
+}
+
+.home-button-alt {
+  @apply bg-primary text-darkBackground font-bold py-4 px-8 rounded-lg text-center hover:bg-opacity-80;
+}
+
+.feature-grid {
+  @apply mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl;
+}
+
+.feature-card {
+  @apply bg-darkBackground p-6 rounded-xl;
+}
+
+.feature-title {
+  @apply text-xl font-semibold mb-3 text-primary;
+}
+
+.feature-description {
+  @apply text-gray-300;
+}
+
+/* Component Containers */
+.card {
+  @apply p-6 rounded-2xl bg-darkBackground;
+}
+
+.chart-container {
+  @apply flex-1 p-6 rounded-xl bg-darkBackground max-md:w-full;
+}
+
+/* Special container for trading page */
+.trading-chart {
+  @apply p-2 md:p-3 rounded-xl bg-darkBackground max-md:w-full;
+  flex: 1 1 auto;
+}
+
+/* Headers */
+.header-main {
+  @apply flex items-center px-6 py-0 border-b border-solid bg-darkBackground border-b-secondary h-[73px] max-sm:px-4 max-sm:py-0 rounded-b-lg;
+}
+
+.header-title {
+  @apply mb-4 text-xl font-bold text-primary;
+}
+
+/* Navigation */
+.nav-link {
+  @apply px-4 py-2 mr-2 text-base font-bold text-white rounded-lg cursor-pointer;
+}
+
+.nav-link-active {
+  @apply px-4 py-2 mr-2 text-base font-bold text-primary rounded-lg cursor-pointer bg-mainBackground;
+}
+
+/* Buttons */
+.btn {
+  @apply px-4 py-2 font-bold rounded-lg cursor-pointer;
+}
+
+.btn-primary {
+  @apply bg-secondary text-black font-bold rounded-lg py-2 px-4 hover:bg-opacity-80;
+}
+
+.btn-secondary {
+  @apply bg-mainBackground text-white font-bold rounded-lg py-2 px-4;
+}
+
+.btn-connect {
+  @apply px-4 py-1 ml-auto text-base font-bold text-black bg-secondary rounded-lg;
+}
+
+.btn-action {
+  @apply py-3 px-6 w-full font-bold text-center text-black bg-secondary rounded-lg cursor-pointer hover:bg-opacity-80;
+}
+
+/* Time Controls */
+.time-button {
+  @apply px-4 py-2 font-bold rounded-lg cursor-pointer;
+}
+
+.time-button-active {
+  @apply bg-secondary text-black;
+}
+
+.time-button-inactive {
+  @apply bg-mainBackground text-white;
+}
+
+/* Position Controls */
+.position-button {
+  @apply flex-1 py-2 px-6 font-bold text-center rounded-lg cursor-pointer;
+}
+
+.position-button-active {
+  @apply bg-secondary text-black;
+}
+
+.position-button-inactive {
+  @apply bg-mainBackground text-white;
+}
+
+/* Tabs */
+.tab {
+  @apply px-4 py-2 font-bold cursor-pointer text-white;
+}
+
+.tab-active {
+  @apply text-primary border-b-2 border-primary;
+}
+
+/* Form Elements */
+.input-field {
+  @apply p-3 w-full bg-mainBackground rounded-lg text-white outline-none;
+}
+
+.input-label {
+  @apply mb-2 text-sm font-bold text-primary;
+}
+
+/* Text Styles */
+.text-label {
+  @apply text-sm font-bold text-primary;
+}
+
+.text-value {
+  @apply text-sm font-bold text-white;
+}
+
+/* Progress Bars */
+.progress-container {
+  @apply mb-2 w-full h-2 bg-mainBackground rounded-[999px];
+}
+
+.progress-bar {
+  @apply h-full bg-secondary rounded-[999px];
+}
+
+/* Footer */
+.footer {
+  @apply mt-24 text-center text-gray-400;
+}
