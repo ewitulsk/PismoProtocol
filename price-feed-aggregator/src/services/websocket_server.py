@@ -10,8 +10,9 @@ import websockets.server
 from websockets.server import WebSocketServerProtocol, WebSocketServer
 from websockets.exceptions import ConnectionClosed
 
-from src.clients.pyth_client import PythHermesClient
-from src.services.ohlc import OHLCService
+from src.clients.threaded_pyth_adapter import ThreadedPythAdapter
+from src.services.ohlc.ohlc_service import OHLCService
+from src.utils.constants import PRICE_FEEDS, DEFAULT_HISTORY_LIMIT
 from src.models.price_feed_models import (
     PythPriceData,
     FeedSubscription,
@@ -56,11 +57,11 @@ class PriceFeedWebsocketServer:
 
     def __init__(
         self,
-        pyth_client: PythHermesClient,
+        pyth_client: ThreadedPythAdapter,
         host: str = "localhost",
         port: int = 8765,
     ) -> None:
-        self.pyth_client: PythHermesClient = pyth_client
+        self.pyth_client: ThreadedPythAdapter = pyth_client
         self.host: str = host
         self.port: int = port
         self.logger = logging.getLogger("websocket_server")
@@ -127,18 +128,16 @@ class PriceFeedWebsocketServer:
             feed_count = len(available_feeds)
             self.logger.info(f"Found {feed_count} available Pyth price feeds")
             
-            # If we can't get feeds from Pyth, use a fallback list of known popular feeds
+            # If we can't get feeds from Pyth, use the central list of price feeds
             if not available_feeds:
-                self.logger.warning("No feeds received from Pyth API, using fallback list of common feeds")
-                # Define a set of common crypto feeds
+                self.logger.warning("No feeds received from Pyth API, using defined feeds from constants")
+                # Convert the PRICE_FEEDS constant to the format expected by the code
                 fallback_feeds = [
-                    {"id": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43", "symbol": "BTC/USD"},  # BTC/USD
-                    {"id": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace", "symbol": "ETH/USD"},  # ETH/USD
-                    {"id": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", "symbol": "SOL/USD"},  # SOL/USD
+                    {"id": feed_id, "symbol": symbol} for symbol, feed_id in PRICE_FEEDS.items()
                 ]
                 available_feeds = fallback_feeds
                 feed_count = len(fallback_feeds)
-                self.logger.info(f"Using {feed_count} fallback feeds")
+                self.logger.info(f"Using {feed_count} feeds from constants")
             
             # First collect all feed IDs and symbols
             feeds_to_subscribe = []
@@ -657,10 +656,10 @@ class PriceFeedWebsocketServer:
         # Subscribe to OHLC bars in the OHLC service
         await self.ohlc_service.subscribe(client_id, feed_id, intervals)
         
-        # Fetch historical bars for each interval (limit to 100 by default)
+        # Fetch historical bars for each interval (use constant for default limit)
         historical_bars_by_interval = {}
         for interval in intervals:
-            bars = await self.ohlc_service.get_latest_bars(feed_id, interval, 100)
+            bars = await self.ohlc_service.get_latest_bars(feed_id, interval, DEFAULT_HISTORY_LIMIT)
             historical_bars_by_interval[interval.value] = [bar.model_dump(mode="json") for bar in bars]
         
         # Log the number of historical bars we're sending
@@ -829,9 +828,6 @@ class PriceFeedWebsocketServer:
             if feed_id in self.ohlc_service.bars:
                 for interval, bars in self.ohlc_service.bars[feed_id].items():
                     after_bars_count += len(bars)
-                    
-            if after_bars_count > before_bars_count:
-                self.logger.info(f"Created {after_bars_count - before_bars_count} new OHLC bars for feed {feed_id}")
         
         # Check if any clients are subscribed to this feed
         if feed_id in self.feed_subscribers and self.feed_subscribers[feed_id]:

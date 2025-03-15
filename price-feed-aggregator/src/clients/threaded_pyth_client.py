@@ -6,6 +6,7 @@ from typing import Dict, List, Set, Optional, Callable, Any
 
 from src.clients.pyth_client import PythHermesClient
 from src.models.price_feed_models import PythPriceData
+from src.utils.constants import PRICE_FEEDS
 
 class ThreadedPythClient:
     """
