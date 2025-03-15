@@ -280,41 +280,33 @@ export class PriceFeedAggregatorService {
                     continue;
                   }
                   
-                  // Process each historical bar
-                  bars.forEach((barData, index) => {
-                    // Convert the bar data to a proper update object
-                    const barUpdate = {
-                      feed_id: feedId,
-                      symbol: barData.symbol || message.symbol || feedId,
-                      interval: interval,
-                      timestamp: barData.timestamp,
-                      open: barData.open,
-                      high: barData.high,
-                      low: barData.low,
-                      close: barData.close,
-                      volume: barData.volume,
-                      confirmed: true
-                    };
-                    
-                    // Send to all handlers for this feed and interval
-                    intervalHandlers.forEach(callback => {
-                      try {
-                        // For the first bar, use a new_bar type (it will create a new bar)
-                        if (index === 0) {
-                          callback({
-                            ...barUpdate,
-                            type: 'new_bar',
-                            data: barUpdate
-                          } as any);
-                        } 
-                        // For subsequent bars, just update the bar
-                        else {
-                          callback(barUpdate);
-                        }
-                      } catch (error) {
-                        console.error(`[PriceFeedAggregator] Error processing historical bar:`, error);
-                      }
-                    });
+                  // Convert all historical bars to the proper format
+                  const formattedBars = bars.map(barData => ({
+                    feed_id: feedId,
+                    symbol: barData.symbol || message.symbol || feedId,
+                    interval: interval,
+                    timestamp: barData.timestamp,
+                    open: barData.open,
+                    high: barData.high,
+                    low: barData.low,
+                    close: barData.close,
+                    volume: barData.volume,
+                    confirmed: true
+                  }));
+                  
+                  // Send all historical bars at once to each handler
+                  intervalHandlers.forEach(callback => {
+                    try {
+                      callback({
+                        type: 'historical_bars',
+                        feed_id: feedId,
+                        symbol: message.symbol || feedId,
+                        interval: interval,
+                        bars: formattedBars
+                      } as any);
+                    } catch (error) {
+                      console.error(`[PriceFeedAggregator] Error processing historical bars:`, error);
+                    }
                   });
                 }
               }
