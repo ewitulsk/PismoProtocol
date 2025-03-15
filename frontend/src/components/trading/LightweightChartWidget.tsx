@@ -158,7 +158,10 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
 
   // Handle new OHLC bar (creates a new bar on the chart)
   const handleNewBar = useCallback((update: OHLCBarUpdate) => {
-    if (!candleSeriesRef.current) return;
+    if (!candleSeriesRef.current) {
+      console.warn('[LightweightChartWidget] Cannot handle new bar, chart series not initialized');
+      return;
+    }
     
     try {
       // Create a bar from the OHLC bar data
@@ -168,11 +171,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       const typedBar = {
         ...bar,
         time: bar.time as Time
-      };
+      } as CandlestickData<Time>;
       
       // Update the chart
-      candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
-      setLastBar(typedBar as CandlestickData<Time>);
+      console.log('[LightweightChartWidget] Adding new bar to chart:', typedBar);
+      candleSeriesRef.current.update(typedBar);
+      setLastBar(typedBar);
       
       // Update the last price if available
       if (typeof update.close === 'number') {
@@ -191,8 +195,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     }
     
     try {
-      console.log('[LightweightChartWidget] Processing bar update:', update);
-      
       // Create a bar from the OHLC bar data
       const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
       
@@ -204,30 +206,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       // Update the chart with the updated bar
       console.log('[LightweightChartWidget] Updating chart with bar update:', typedBar);
-      
-      // Ensure we're calling the update method correctly
-      try {
-        candleSeriesRef.current.update(typedBar);
-        console.log('[LightweightChartWidget] Successfully updated chart with bar update');
-      } catch (chartError) {
-        console.error('[LightweightChartWidget] Error updating chart with bar update:', chartError);
-        
-        // Try alternative approach if the first one fails
-        try {
-          // Some versions of lightweight-charts might require different parameters
-          // or have different method signatures
-          const series = candleSeriesRef.current as any;
-          if (typeof series.update === 'function') {
-            series.update(typedBar);
-            console.log('[LightweightChartWidget] Successfully updated chart with alternative method');
-          } else {
-            console.error('[LightweightChartWidget] Series update method not available');
-          }
-        } catch (altError) {
-          console.error('[LightweightChartWidget] Alternative update method also failed:', altError);
-        }
-      }
-      
+      candleSeriesRef.current.update(typedBar);
       setLastBar(typedBar);
       
       // Update the last price if available
@@ -260,65 +239,23 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         return;
       }
       
-      // Check if this is a new bar message - handle both formats (nested data or direct)
+      // Check if this is a new bar message
       if (update.type === 'new_bar') {
-        if (update.data) {
-          // Handle nested data format
-          handleNewBar(update.data);
-        } else {
-          // Handle direct format (type is directly on the update object)
-          handleNewBar(update);
-        }
+        console.log('[LightweightChartWidget] Handling new bar');
+        handleNewBar(update);
         return;
       }
       
       // Check if this is a bar update message
       if (update.type === 'bar_update') {
-        // Handle bar update - this updates the current bar
         console.log('[LightweightChartWidget] Handling bar update');
-        if (update.data) {
-          // Handle nested data format
-          handleBarUpdate(update.data);
-        } else {
-          // Handle direct format (type is directly on the update object)
-          handleBarUpdate(update);
-        }
+        handleBarUpdate(update);
         return;
       }
       
-      // Handle regular bar update (updates the current bar)
-      // Create a bar from the OHLC bar data
-      const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
+      // If we get here, it's an unknown update type
+      console.warn(`[LightweightChartWidget] Unknown update type: ${update.type || 'undefined'}`);
       
-      // Convert to the format expected by the chart
-      const typedBar = {
-        ...bar,
-        time: bar.time as Time
-      };
-      
-      // Update the chart - only update for the interval we're currently displaying
-      // Normalize intervals for more robust comparison
-      const updateOHLCInterval = update.interval?.toLowerCase();
-      const currInterval = currentOhlcInterval.toLowerCase();
-      
-      // Check if this update matches our interval
-      // Normalize comparison for common interval notations (1m = 1min, etc.)
-      const isMatch = updateOHLCInterval === currInterval || 
-                     (updateOHLCInterval === '1m' && currInterval === '1min') ||
-                     (updateOHLCInterval === '1min' && currInterval === '1m') ||
-                     (updateOHLCInterval === '5m' && currInterval === '5min') ||
-                     (updateOHLCInterval === '5min' && currInterval === '5m');
-      
-      if (isMatch) {
-        console.log(`[LightweightChartWidget] Updating chart with ${update.type || 'regular'} update`);
-        candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
-        setLastBar(typedBar as CandlestickData<Time>);
-      }
-      
-      // Update the last price if available
-      if (typeof update.close === 'number') {
-        setLastPrice(update.close);
-      }
     } catch (error) {
       console.error('[LightweightChartWidget] Error handling OHLC bar update:', error, update);
     }

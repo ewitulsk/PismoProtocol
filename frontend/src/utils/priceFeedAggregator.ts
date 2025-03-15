@@ -334,7 +334,7 @@ export class PriceFeedAggregatorService {
         case 'bar_update':
           if (message.data) {
             try {
-              console.log('[PriceFeedAggregator] Received Bar Update:', JSON.stringify(message.data));
+              console.log('[PriceFeedAggregator] Received Bar Update for', message.data.symbol || message.data.feed_id);
               this.handleOHLCBarUpdate(message.data, 'bar_update');
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing bar update:', error);
@@ -345,6 +345,7 @@ export class PriceFeedAggregatorService {
         case 'new_bar':
           if (message.data) {
             try {
+              console.log('[PriceFeedAggregator] Received New Bar for', message.data.symbol || message.data.feed_id);
               this.handleOHLCBarUpdate(message.data, 'new_bar');
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing new bar:', error);
@@ -383,7 +384,10 @@ export class PriceFeedAggregatorService {
       return;
     }
     
-    console.log(`[PriceFeedAggregator] Processing ${eventType} for ${data.symbol || data.feed_id}, interval: ${data.interval}`);
+    // Log processing but avoid verbose output
+    if (eventType !== 'price_update') {
+      console.log(`[PriceFeedAggregator] Processing ${eventType} for ${data.symbol || data.feed_id}, interval: ${data.interval}`);
+    }
     
     // Clean and normalize the feed ID for consistent matching
     const feedId = data.feed_id;
