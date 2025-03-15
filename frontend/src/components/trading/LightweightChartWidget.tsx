@@ -183,6 +183,62 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     }
   }, []);
 
+  // Handle bar update (updates an existing bar on the chart)
+  const handleBarUpdate = useCallback((update: OHLCBarUpdate) => {
+    if (!candleSeriesRef.current) {
+      console.warn('[LightweightChartWidget] Cannot handle bar update, chart series not initialized');
+      return;
+    }
+    
+    try {
+      console.log('[LightweightChartWidget] Processing bar update:', update);
+      
+      // Create a bar from the OHLC bar data
+      const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
+      
+      // Convert to the format expected by the chart
+      const typedBar = {
+        ...bar,
+        time: bar.time as Time
+      } as CandlestickData<Time>;
+      
+      // Update the chart with the updated bar
+      console.log('[LightweightChartWidget] Updating chart with bar update:', typedBar);
+      
+      // Ensure we're calling the update method correctly
+      try {
+        candleSeriesRef.current.update(typedBar);
+        console.log('[LightweightChartWidget] Successfully updated chart with bar update');
+      } catch (chartError) {
+        console.error('[LightweightChartWidget] Error updating chart with bar update:', chartError);
+        
+        // Try alternative approach if the first one fails
+        try {
+          // Some versions of lightweight-charts might require different parameters
+          // or have different method signatures
+          const series = candleSeriesRef.current as any;
+          if (typeof series.update === 'function') {
+            series.update(typedBar);
+            console.log('[LightweightChartWidget] Successfully updated chart with alternative method');
+          } else {
+            console.error('[LightweightChartWidget] Series update method not available');
+          }
+        } catch (altError) {
+          console.error('[LightweightChartWidget] Alternative update method also failed:', altError);
+        }
+      }
+      
+      setLastBar(typedBar);
+      
+      // Update the last price if available
+      if (typeof update.close === 'number') {
+        setLastPrice(update.close);
+      }
+    } catch (error) {
+      console.error('[LightweightChartWidget] Error handling bar update:', error);
+    }
+  }, []);
+
   // Handle OHLC bar updates directly
   const handleOHLCBarUpdate = useCallback((update: OHLCBarUpdate & {type?: string, data?: OHLCBarUpdate, bars?: OHLCBarUpdate[]}) => {
     if (!candleSeriesRef.current) {
@@ -220,6 +276,14 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       if (update.type === 'bar_update') {
         // Handle bar update - this updates the current bar
         console.log('[LightweightChartWidget] Handling bar update');
+        if (update.data) {
+          // Handle nested data format
+          handleBarUpdate(update.data);
+        } else {
+          // Handle direct format (type is directly on the update object)
+          handleBarUpdate(update);
+        }
+        return;
       }
       
       // Handle regular bar update (updates the current bar)
@@ -258,7 +322,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     } catch (error) {
       console.error('[LightweightChartWidget] Error handling OHLC bar update:', error, update);
     }
-  }, [handleHistoricalBars, handleNewBar]);
+  }, [handleHistoricalBars, handleNewBar, handleBarUpdate]);
 
   // Subscribe to price feeds
   const subscribeToFeeds = useCallback(async (symbol: string, ohlcInterval: string) => {

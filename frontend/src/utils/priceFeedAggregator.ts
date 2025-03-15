@@ -334,7 +334,7 @@ export class PriceFeedAggregatorService {
         case 'bar_update':
           if (message.data) {
             try {
-              console.log('[PriceFeedAggregator] Recieved Bar Update...');
+              console.log('[PriceFeedAggregator] Received Bar Update:', JSON.stringify(message.data));
               this.handleOHLCBarUpdate(message.data, 'bar_update');
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing bar update:', error);
@@ -382,6 +382,8 @@ export class PriceFeedAggregatorService {
       console.warn('[PriceFeedAggregator] Received OHLC update with missing required fields', data);
       return;
     }
+    
+    console.log(`[PriceFeedAggregator] Processing ${eventType} for ${data.symbol || data.feed_id}, interval: ${data.interval}`);
     
     // Clean and normalize the feed ID for consistent matching
     const feedId = data.feed_id;
