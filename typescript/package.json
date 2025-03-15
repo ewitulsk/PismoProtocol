@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "collateral": "ts-node src/collateral.ts",
+    "lp": "ts-node src/lp.ts",
     "serve": "ts-node src/server.ts"
   },
   "keywords": [],

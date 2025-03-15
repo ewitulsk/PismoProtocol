@@ -4,12 +4,10 @@ import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { bcs } from '@mysten/bcs';
 import * as dotenv from 'dotenv';
+import { SUI_PACKAGE_ID, SUI_PROGRAM_ID } from "./constants";
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env' });
-
-const SUI_PACKAGE_ID = "0x1b04601c7395809e6dbbc257b34f8efefec880b2513381ad402ee0a747c3b4d6"
-const SUI_PROGRAM_ID = "0x0b1d689f27aceb76dc8345ac6dd361c5e883415486d603e2a07986b0b0ad8c8a" // This will change after every deployment.
 
 async function main() {
     const private_key = process.env.PRIVATE_KEY as string;
@@ -55,33 +53,33 @@ async function main() {
 
     /////////////// MINT TEST TOKEN
 
-    // const treasury_cap = `0x2::coin::TreasuryCap<${SUI_PACKAGE_ID}::test_coin::TEST_COIN>`;
-    // const amount = 1000000000000;
+    const treasury_cap = `0x2::coin::TreasuryCap<${SUI_PACKAGE_ID}::test_coin::TEST_COIN>`;
+    const amount = 1000000000000;
 
-    // const owned = await client.getOwnedObjects({
-    //     owner: sender,
-    //     filter: {
-    //         MatchAny: [{
-    //             StructType: treasury_cap
-    //         }]
-    //     }
-    // })
+    const owned = await client.getOwnedObjects({
+        owner: sender,
+        filter: {
+            MatchAny: [{
+                StructType: treasury_cap
+            }]
+        }
+    })
 
-    // const mint_tx = new Transaction();
-    // mint_tx.moveCall({
-    //     target: `${SUI_PACKAGE_ID}::test_coin::mint`,
-    //     arguments: [ // other arguments needed for your contract
-    //         mint_tx.object(owned.data[0].data?.objectId as string),
-    //         mint_tx.pure(bcs.u64().serialize(amount).toBytes()),
-    //         mint_tx.pure.address(sender)
-    //     ],
-    // });
+    const mint_tx = new Transaction();
+    mint_tx.moveCall({
+        target: `${SUI_PACKAGE_ID}::test_coin::mint`,
+        arguments: [ // other arguments needed for your contract
+            mint_tx.object(owned.data[0].data?.objectId as string),
+            mint_tx.pure(bcs.u64().serialize(amount).toBytes()),
+            mint_tx.pure.address(sender)
+        ],
+    });
 
-    // let tx = await client.signAndExecuteTransaction({
-    //     transaction: mint_tx,
-    //     signer: keypair,
-    // });
-    // console.log(`TX: ${tx.transaction}`);
+    let tx = await client.signAndExecuteTransaction({
+        transaction: mint_tx,
+        signer: keypair,
+    });
+    console.log(`TX: ${tx.digest}`);
 
 
     /////////////// INIT ACCOUNT
@@ -109,58 +107,58 @@ async function main() {
 
     /////////// POST COLLATERAL
 
-    const accounts = await client.getOwnedObjects({
-        owner: sender,
-        filter: {
-            MatchAll: [
-                {
-                    StructType: `${SUI_PACKAGE_ID}::accounts::Account`
-                }
-            ]
-        }
-    })
-    console.log("Accounts: ", accounts.data[0].data?.objectId as string);
+    // const accounts = await client.getOwnedObjects({
+    //     owner: sender,
+    //     filter: {
+    //         MatchAll: [
+    //             {
+    //                 StructType: `${SUI_PACKAGE_ID}::accounts::Account`
+    //             }
+    //         ]
+    //     }
+    // })
+    // console.log("Accounts: ", accounts.data[0].data?.objectId as string);
 
-    const coin_type = `${SUI_PACKAGE_ID}::test_coin::TEST_COIN`;
-    console.log(coin_type);
-    const coin = `0x2::coin::Coin<${coin_type}>`;
-    const coins = await client.getOwnedObjects({
-        owner: sender,
-        filter: {
-            MatchAll: [
-                {
-                    StructType: coin
-                }
-            ]
-        }
-    })
+    // const coin_type = `${SUI_PACKAGE_ID}::test_coin::TEST_COIN`;
+    // console.log(coin_type);
+    // const coin = `0x2::coin::Coin<${coin_type}>`;
+    // const coins = await client.getOwnedObjects({
+    //     owner: sender,
+    //     filter: {
+    //         MatchAll: [
+    //             {
+    //                 StructType: coin
+    //             }
+    //         ]
+    //     }
+    // })
 
-    console.log(coins.data[0].data?.objectId as string);
+    // console.log(coins.data[0].data?.objectId as string);
 
-    // program_id = 0xb0825f9a2c68ea451def4e0c19effb4cde4d1009050acc1374fbeadff2617b76
+    // // program_id = 0xb0825f9a2c68ea451def4e0c19effb4cde4d1009050acc1374fbeadff2617b76
 
-    // Supported Collat Off Chain = 0x965cfd351f350edad61596f502b85bc9f32c18681be7a18093bc126618cb2f6d::test_coin::TEST_COIN
-    // 0x965cfd351f350edad61596f502b85bc9f32c18681be7a18093bc126618cb2f6d::test_coin::TEST_COIN
+    // // Supported Collat Off Chain = 0x965cfd351f350edad61596f502b85bc9f32c18681be7a18093bc126618cb2f6d::test_coin::TEST_COIN
+    // // 0x965cfd351f350edad61596f502b85bc9f32c18681be7a18093bc126618cb2f6d::test_coin::TEST_COIN
 
 
-    const post_tx = new Transaction();
-    const coin_obj = post_tx.object(coins.data[0].data?.objectId as string);
-    const [new_coin_obj] = post_tx.splitCoins(coin_obj, [100]);
-    post_tx.moveCall({
-        target: `${SUI_PACKAGE_ID}::collateral::post_collateral`,
-        typeArguments: [coin_type],
-        arguments: [ // other arguments needed for your contract
-            post_tx.object(accounts.data[0].data?.objectId as string),
-            post_tx.object(SUI_PROGRAM_ID),
-            post_tx.object(new_coin_obj)
-        ],
-    });
+    // const post_tx = new Transaction();
+    // const coin_obj = post_tx.object(coins.data[0].data?.objectId as string);
+    // const [new_coin_obj] = post_tx.splitCoins(coin_obj, [100]);
+    // post_tx.moveCall({
+    //     target: `${SUI_PACKAGE_ID}::collateral::post_collateral`,
+    //     typeArguments: [coin_type],
+    //     arguments: [ // other arguments needed for your contract
+    //         post_tx.object(accounts.data[0].data?.objectId as string),
+    //         post_tx.object(SUI_PROGRAM_ID),
+    //         post_tx.object(new_coin_obj)
+    //     ],
+    // });
 
-    let tx = await client.signAndExecuteTransaction({
-        transaction: post_tx,
-        signer: keypair,
-    });
-    console.log(`TX: ${tx.transaction?.txSignatures}`);
+    // let tx = await client.signAndExecuteTransaction({
+    //     transaction: post_tx,
+    //     signer: keypair,
+    // });
+    // console.log(`TX: ${tx.transaction?.txSignatures}`);
 }
 
 // Execute the main function
