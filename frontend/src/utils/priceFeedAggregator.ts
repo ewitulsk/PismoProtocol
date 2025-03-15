@@ -277,6 +277,15 @@ export class PriceFeedAggregatorService {
           }
           break;
 
+        case 'price_update':
+          // Simply acknowledge receipt of price update message without processing it
+          if (message.feed_id) {
+            // console.debug(`[PriceFeedAggregator] Received price update for feed: ${message.feed_id}`);
+          } else {
+            // console.debug('[PriceFeedAggregator] Received price update message');
+          }
+          break;
+
         case 'error':
           console.error(`[PriceFeedAggregator] Server error: ${message.message}`);
           break;

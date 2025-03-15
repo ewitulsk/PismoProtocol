@@ -145,6 +145,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     }
     
     try {
+      // Check if this is a price update message (ignore it)
+      if (update.type === 'price_update') {
+        // We're not doing anything with price updates at the moment
+        return;
+      }
+      
       // Check if this is a history message
       if (update.type === 'ohlc_history') {
         // Handle historical data
