@@ -195,40 +195,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         return;
       }
       
-      // Check if this is a history message
-      if (update.type === 'ohlc_history') {
-        console.log(`[LightweightChartWidget] Received OHLC history with ${update.bars?.length || 0} bars`);
-        
-        // Handle historical data
-        if (update.bars && Array.isArray(update.bars) && update.bars.length > 0) {
-          // Convert bars to chart format
-          const chartBars = update.bars.map(bar => {
-            const barData = PriceFeedAggregatorService.createBarFromOHLCUpdate(bar);
-            return {
-              ...barData,
-              time: barData.time as Time
-            } as CandlestickData<Time>;
-          });
-          
-          // Deduplicate bars by timestamp
-          const uniqueBars = deduplicateBarsByTime(chartBars);
-          
-          // Sort bars by time to ensure proper order
-          uniqueBars.sort((a, b) => {
-            const timeA = typeof a.time === 'number' ? a.time : Number(a.time);
-            const timeB = typeof b.time === 'number' ? b.time : Number(b.time);
-            return timeA - timeB;
-          });
-          
-          console.log(`[LightweightChartWidget] Processed ${uniqueBars.length} historical bars (deduplicated from ${chartBars.length}), sending to chart`);
-          
-          // Process historical bars
-          handleHistoricalBars(uniqueBars);
-        } else {
-          console.warn('[LightweightChartWidget] Received empty OHLC history');
-        }
-        return;
-      }
+      // Removed ohlc_history message handling
       
       // Check if this is a new bar
       if (update.type === 'new_bar' && update.data) {

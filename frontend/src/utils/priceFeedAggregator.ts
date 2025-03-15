@@ -43,7 +43,7 @@ export class PriceFeedAggregatorService {
   } | null = null;
   private url = 'ws://localhost:8765'; // Default URL, can be changed
   // Track which history requests have been processed to avoid duplicates
-  private processedHistoryRequests: Set<string> = new Set();
+  // No longer tracking history requests
 
   // Connect to the WebSocket server
   public async connect(): Promise<boolean> {
@@ -233,27 +233,6 @@ export class PriceFeedAggregatorService {
                 if (Array.isArray(bars) && bars.length > 0) {
                   console.log(`[PriceFeedAggregator] Received ${bars.length} historical bars for ${message.feed_id}, interval: ${interval}`);
                   
-                  // Create a history message for this interval
-                  const historyMessage = {
-                    type: 'ohlc_history',
-                    feed_id: message.feed_id,
-                    interval: interval,
-                    bars: bars
-                  };
-                  
-                  // Process it like a normal ohlc_history message
-                  // Create a unique key for this history data
-                  const historyKey = `${message.feed_id}:${interval}:${bars.length || 'default'}`;
-                  
-                  // Check if we've already processed this exact history request
-                  if (this.processedHistoryRequests.has(historyKey)) {
-                    console.log(`[PriceFeedAggregator] Skipping duplicate history data: ${historyKey}`);
-                    continue;
-                  }
-                  
-                  // Mark this history data as processed
-                  this.processedHistoryRequests.add(historyKey);
-                  
                   // Find handlers for this feed ID
                   const feedId = message.feed_id;
                   
@@ -279,7 +258,7 @@ export class PriceFeedAggregatorService {
                   
                   const feedHandlers = matchedFeedId ? this.ohlcBarHandlers.get(matchedFeedId) : null;
                   if (!feedHandlers) {
-                    console.warn(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId} when processing history`);
+                    console.warn(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId} when processing historical data`);
                     continue;
                   }
                   
@@ -297,21 +276,45 @@ export class PriceFeedAggregatorService {
                   
                   const intervalHandlers = matchedInterval ? feedHandlers.get(matchedInterval) : null;
                   if (!intervalHandlers || intervalHandlers.size === 0) {
-                    console.warn(`[PriceFeedAggregator] No handlers found for interval: ${interval} when processing history`);
+                    console.warn(`[PriceFeedAggregator] No handlers found for interval: ${interval} when processing historical data`);
                     continue;
                   }
                   
-                  // Pass the history message to each handler
-                  intervalHandlers.forEach(callback => {
-                    try {
-                      // Pass the history message to the callback
-                      callback({
-                        ...historyMessage,
-                        type: 'ohlc_history'
-                      } as any);
-                    } catch (error) {
-                      console.error(`[PriceFeedAggregator] Error in OHLC history handler:`, error);
-                    }
+                  // Process each historical bar
+                  bars.forEach((barData, index) => {
+                    // Convert the bar data to a proper update object
+                    const barUpdate = {
+                      feed_id: feedId,
+                      symbol: barData.symbol || message.symbol || feedId,
+                      interval: interval,
+                      timestamp: barData.timestamp,
+                      open: barData.open,
+                      high: barData.high,
+                      low: barData.low,
+                      close: barData.close,
+                      volume: barData.volume,
+                      confirmed: true
+                    };
+                    
+                    // Send to all handlers for this feed and interval
+                    intervalHandlers.forEach(callback => {
+                      try {
+                        // For the first bar, use a new_bar type (it will create a new bar)
+                        if (index === 0) {
+                          callback({
+                            ...barUpdate,
+                            type: 'new_bar',
+                            data: barUpdate
+                          } as any);
+                        } 
+                        // For subsequent bars, just update the bar
+                        else {
+                          callback(barUpdate);
+                        }
+                      } catch (error) {
+                        console.error(`[PriceFeedAggregator] Error processing historical bar:`, error);
+                      }
+                    });
                   });
                 }
               }
@@ -355,92 +358,7 @@ export class PriceFeedAggregatorService {
           }
           break;
 
-        case 'ohlc_history':
-          console.log(`[PriceFeedAggregator] Received ${message.bars?.length || 0} historical OHLC bars for ${message.feed_id}`);
-          
-          //This is more of a bandaid for a bigger underlying issue. We shouldn't be making multiple history requests.
-
-          // Create a unique key for this history request
-          const historyKey = `${message.feed_id}:${message.interval}:${message.limit || 'default'}`;
-          
-          // Check if we've already processed this exact history request
-          if (this.processedHistoryRequests.has(historyKey)) {
-            console.log(`[PriceFeedAggregator] Skipping duplicate history request: ${historyKey}`);
-            return;
-          }
-          
-          // Mark this history request as processed
-          this.processedHistoryRequests.add(historyKey);
-          
-          if (message.bars && message.bars.length > 0) {
-            try {
-              // Find handlers for this feed ID
-              const feedId = message.feed_id;
-              const interval = message.interval;
-              
-              if (!feedId || !interval) {
-                console.warn('[PriceFeedAggregator] Missing feed_id or interval in ohlc_history message');
-                return;
-              }
-              
-              // Clean and normalize the feed ID for consistent matching
-              const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
-              const normalizedFeedId = cleanFeedId.toLowerCase();
-              
-              // Find matching feed ID with normalized comparison
-              let matchedFeedId: string | null = null;
-              
-              // Use Array.from to convert the iterator to an array
-              Array.from(this.ohlcBarHandlers.keys()).forEach(key => {
-                const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
-                if (normalizedKey === normalizedFeedId && !matchedFeedId) {
-                  matchedFeedId = key;
-                }
-              });
-              
-              const feedHandlers = matchedFeedId ? this.ohlcBarHandlers.get(matchedFeedId) : null;
-              if (!feedHandlers) {
-                console.warn(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId} when processing history`);
-                return;
-              }
-              
-              // Normalize the interval for case-insensitive matching
-              const normalizedInterval = interval.toLowerCase();
-              
-              // Find matching interval with normalized comparison
-              let matchedInterval: string | null = null;
-              
-              Array.from(feedHandlers.keys()).forEach(key => {
-                if (key.toLowerCase() === normalizedInterval && !matchedInterval) {
-                  matchedInterval = key;
-                }
-              });
-              
-              const intervalHandlers = matchedInterval ? feedHandlers.get(matchedInterval) : null;
-              if (!intervalHandlers || intervalHandlers.size === 0) {
-                console.warn(`[PriceFeedAggregator] No handlers found for interval: ${interval} when processing history`);
-                return;
-              }
-              
-              // Pass the entire history message to each handler
-              intervalHandlers.forEach(callback => {
-                try {
-                  // Pass the entire message with type to the callback
-                  callback({
-                    ...message,
-                    type: 'ohlc_history'
-                  } as any);
-                } catch (error) {
-                  console.error(`[PriceFeedAggregator] Error in OHLC history handler:`, error);
-                }
-              });
-            } catch (error) {
-              console.error('[PriceFeedAggregator] Error processing OHLC history bars:', error);
-            }
-          } else {
-            console.warn(`[PriceFeedAggregator] Received empty OHLC history for ${message.feed_id}`);
-          }
-          break;
+        // Removed ohlc_history case
 
         case 'price_update':
           // Simply acknowledge receipt of price update message without processing it
@@ -589,8 +507,6 @@ export class PriceFeedAggregatorService {
       this.socket = null;
       this.isConnected = false;
       this.clientId = null;
-      // Clear processed history requests on disconnect
-      this.processedHistoryRequests.clear();
     }
   }
   
@@ -879,13 +795,7 @@ export class PriceFeedAggregatorService {
     if (intervalHandlers.size === 0) {
       feedHandlers.delete(matchedInterval);
       
-      // Clear any processed history requests for this feed/interval
-      const historyKeyPrefix = `${cleanFeedId}:${interval}`;
-      Array.from(this.processedHistoryRequests).forEach(key => {
-        if (key.startsWith(historyKeyPrefix)) {
-          this.processedHistoryRequests.delete(key);
-        }
-      });
+      // No longer tracking history requests
     }
     
     if (feedHandlers.size === 0) {

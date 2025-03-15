@@ -360,46 +360,7 @@ class PriceFeedWebsocketServer:
                 # Handle request for available feeds
                 await self.send_available_feeds(client_id)
                 
-            elif message_type == "get_ohlc_history":
-                # Handle request for OHLC history
-                feed_id = data.get("feed_id")
-                interval_str = data.get("interval", "1m")
-                limit = data.get("limit", 100)
-                
-                if not feed_id:
-                    await self.clients[client_id].send(json.dumps({
-                        "type": "error",
-                        "message": "Feed ID is required for OHLC history"
-                    }))
-                    return
-                
-                # Sanitize feed ID by removing 0x prefix if present
-                feed_id = sanitize_feed_id(feed_id)
-                
-                # Convert interval string to TimeInterval enum
-                interval = None
-                for ti in TimeInterval:
-                    if ti.value == interval_str:
-                        interval = ti
-                        break
-                
-                if not interval:
-                    await self.clients[client_id].send(json.dumps({
-                        "type": "error",
-                        "message": f"Invalid interval: {interval_str}"
-                    }))
-                    return
-                
-                # Get OHLC bars (always use async method now)
-                bars = await self.ohlc_service.get_latest_bars(feed_id, interval, limit)
-                
-                # Send the bars
-                await self.clients[client_id].send(json.dumps({
-                    "type": "ohlc_history",
-                    "feed_id": feed_id,
-                    "interval": interval.value,
-                    "bars": [bar.model_dump(mode="json") for bar in bars]
-                }))
+            # Removed get_ohlc_history message handling
                 
             else:
                 # Unknown message type
@@ -630,19 +591,15 @@ class PriceFeedWebsocketServer:
         
         Args:
             bar: The updated or new OHLC bar
-            event_type: Type of event ("bar_update", "new_bar", or "ohlc_history")
+            event_type: Type of event ("bar_update" or "new_bar")
             subscribers: Set of client IDs to notify
-            history_message: Optional pre-formatted history message (for ohlc_history event type)
+            history_message: Deprecated and unused
         """
-        # For ohlc_history event type, use the pre-formatted message
-        if event_type == "ohlc_history" and history_message:
-            update_json = json.dumps(history_message)
-        else:
-            # Create the regular update message
-            update_json = json.dumps({
-                "type": event_type,
-                "data": bar.model_dump(mode="json")
-            })
+        # Create the update message
+        update_json = json.dumps({
+            "type": event_type,
+            "data": bar.model_dump(mode="json")
+        })
         
         # Send to all subscribed clients
         send_tasks = []
