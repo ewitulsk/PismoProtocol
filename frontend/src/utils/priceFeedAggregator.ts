@@ -225,6 +225,97 @@ export class PriceFeedAggregatorService {
         case 'subscription_confirmed':
           if (message.ohlc) {
             console.log(`[PriceFeedAggregator] OHLC subscription confirmed: ${message.feed_id}, intervals: ${message.intervals.join(', ')}`);
+            
+            // Process historical data if included in the subscription confirmation
+            if (message.historical_data) {
+              // For each interval in the historical data
+              for (const [interval, bars] of Object.entries(message.historical_data)) {
+                if (Array.isArray(bars) && bars.length > 0) {
+                  console.log(`[PriceFeedAggregator] Received ${bars.length} historical bars for ${message.feed_id}, interval: ${interval}`);
+                  
+                  // Create a history message for this interval
+                  const historyMessage = {
+                    type: 'ohlc_history',
+                    feed_id: message.feed_id,
+                    interval: interval,
+                    bars: bars
+                  };
+                  
+                  // Process it like a normal ohlc_history message
+                  // Create a unique key for this history data
+                  const historyKey = `${message.feed_id}:${interval}:${bars.length || 'default'}`;
+                  
+                  // Check if we've already processed this exact history request
+                  if (this.processedHistoryRequests.has(historyKey)) {
+                    console.log(`[PriceFeedAggregator] Skipping duplicate history data: ${historyKey}`);
+                    continue;
+                  }
+                  
+                  // Mark this history data as processed
+                  this.processedHistoryRequests.add(historyKey);
+                  
+                  // Find handlers for this feed ID
+                  const feedId = message.feed_id;
+                  
+                  if (!feedId || !interval) {
+                    console.warn('[PriceFeedAggregator] Missing feed_id or interval in historical data');
+                    continue;
+                  }
+                  
+                  // Clean and normalize the feed ID for consistent matching
+                  const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+                  const normalizedFeedId = cleanFeedId.toLowerCase();
+                  
+                  // Find matching feed ID with normalized comparison
+                  let matchedFeedId: string | null = null;
+                  
+                  // Use Array.from to convert the iterator to an array
+                  Array.from(this.ohlcBarHandlers.keys()).forEach(key => {
+                    const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
+                    if (normalizedKey === normalizedFeedId && !matchedFeedId) {
+                      matchedFeedId = key;
+                    }
+                  });
+                  
+                  const feedHandlers = matchedFeedId ? this.ohlcBarHandlers.get(matchedFeedId) : null;
+                  if (!feedHandlers) {
+                    console.warn(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId} when processing history`);
+                    continue;
+                  }
+                  
+                  // Normalize the interval for case-insensitive matching
+                  const normalizedInterval = interval.toLowerCase();
+                  
+                  // Find matching interval with normalized comparison
+                  let matchedInterval: string | null = null;
+                  
+                  Array.from(feedHandlers.keys()).forEach(key => {
+                    if (key.toLowerCase() === normalizedInterval && !matchedInterval) {
+                      matchedInterval = key;
+                    }
+                  });
+                  
+                  const intervalHandlers = matchedInterval ? feedHandlers.get(matchedInterval) : null;
+                  if (!intervalHandlers || intervalHandlers.size === 0) {
+                    console.warn(`[PriceFeedAggregator] No handlers found for interval: ${interval} when processing history`);
+                    continue;
+                  }
+                  
+                  // Pass the history message to each handler
+                  intervalHandlers.forEach(callback => {
+                    try {
+                      // Pass the history message to the callback
+                      callback({
+                        ...historyMessage,
+                        type: 'ohlc_history'
+                      } as any);
+                    } catch (error) {
+                      console.error(`[PriceFeedAggregator] Error in OHLC history handler:`, error);
+                    }
+                  });
+                }
+              }
+            }
           } else {
             console.log(`[PriceFeedAggregator] Subscription confirmed: ${message.feed_id}`);
           }
@@ -691,20 +782,13 @@ export class PriceFeedAggregatorService {
     }
     
     try {
+      // Send subscription message - historical bars will be included in the subscription confirmation
       this.socket.send(JSON.stringify({
         type: 'subscribe',
         feed_id: cleanFeedId,
         ohlc: true,
         intervals: [interval],
         symbol: symbol
-      }));
-      
-      // Request historical bars
-      this.socket.send(JSON.stringify({
-        type: 'get_ohlc_history',
-        feed_id: cleanFeedId,
-        interval: interval,
-        limit: 100
       }));
       
       return true;

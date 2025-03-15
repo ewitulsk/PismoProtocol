@@ -564,13 +564,20 @@ class PriceFeedWebsocketServer:
         # Subscribe to OHLC bars in the OHLC service
         await self.ohlc_service.subscribe(client_id, feed_id, intervals)
         
-        # Notify the client
+        # Fetch historical bars for each interval (limit to 100 by default)
+        historical_bars_by_interval = {}
+        for interval in intervals:
+            bars = await self.ohlc_service.get_latest_bars(feed_id, interval, 100)
+            historical_bars_by_interval[interval.value] = [bar.model_dump(mode="json") for bar in bars]
+        
+        # Notify the client with subscription confirmation and historical bars
         await self.clients[client_id].send(json.dumps({
             "type": "subscription_confirmed",
             "ohlc": True,
             "feed_id": feed_id,
             "symbol": symbol,
-            "intervals": [interval.value for interval in intervals]
+            "intervals": [interval.value for interval in intervals],
+            "historical_data": historical_bars_by_interval
         }))
         
         self.logger.info(f"Client {client_id} subscribed to OHLC bars for feed {feed_id} with intervals {[i.value for i in intervals]}")
