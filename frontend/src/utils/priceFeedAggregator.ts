@@ -266,14 +266,71 @@ export class PriceFeedAggregatorService {
           console.log(`[PriceFeedAggregator] Received ${message.bars?.length || 0} historical OHLC bars for ${message.feed_id}`);
           if (message.bars && message.bars.length > 0) {
             try {
-              message.bars.forEach((bar: OHLCBarUpdate) => {
-                if (bar) {
-                  this.handleOHLCBarUpdate(bar, 'new_bar');
+              // Find handlers for this feed ID
+              const feedId = message.feed_id;
+              const interval = message.interval;
+              
+              if (!feedId || !interval) {
+                console.warn('[PriceFeedAggregator] Missing feed_id or interval in ohlc_history message');
+                return;
+              }
+              
+              // Clean and normalize the feed ID for consistent matching
+              const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
+              const normalizedFeedId = cleanFeedId.toLowerCase();
+              
+              // Find matching feed ID with normalized comparison
+              let matchedFeedId: string | null = null;
+              
+              // Use Array.from to convert the iterator to an array
+              Array.from(this.ohlcBarHandlers.keys()).forEach(key => {
+                const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
+                if (normalizedKey === normalizedFeedId && !matchedFeedId) {
+                  matchedFeedId = key;
+                }
+              });
+              
+              const feedHandlers = matchedFeedId ? this.ohlcBarHandlers.get(matchedFeedId) : null;
+              if (!feedHandlers) {
+                console.warn(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId} when processing history`);
+                return;
+              }
+              
+              // Normalize the interval for case-insensitive matching
+              const normalizedInterval = interval.toLowerCase();
+              
+              // Find matching interval with normalized comparison
+              let matchedInterval: string | null = null;
+              
+              Array.from(feedHandlers.keys()).forEach(key => {
+                if (key.toLowerCase() === normalizedInterval && !matchedInterval) {
+                  matchedInterval = key;
+                }
+              });
+              
+              const intervalHandlers = matchedInterval ? feedHandlers.get(matchedInterval) : null;
+              if (!intervalHandlers || intervalHandlers.size === 0) {
+                console.warn(`[PriceFeedAggregator] No handlers found for interval: ${interval} when processing history`);
+                return;
+              }
+              
+              // Pass the entire history message to each handler
+              intervalHandlers.forEach(callback => {
+                try {
+                  // Pass the entire message with type to the callback
+                  callback({
+                    ...message,
+                    type: 'ohlc_history'
+                  } as any);
+                } catch (error) {
+                  console.error(`[PriceFeedAggregator] Error in OHLC history handler:`, error);
                 }
               });
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing OHLC history bars:', error);
             }
+          } else {
+            console.warn(`[PriceFeedAggregator] Received empty OHLC history for ${message.feed_id}`);
           }
           break;
 

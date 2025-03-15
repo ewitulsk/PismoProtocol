@@ -38,6 +38,10 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const activeSubscriptionRef = useRef<{ symbol: string, interval: string } | null>(null);
   // Add a ref to track if we've already initialized the subscription
   const hasInitializedRef = useRef<boolean>(false);
+  // Add a ref to store historical data to avoid dependency cycles
+  const historicalDataRef = useRef<CandlestickData<Time>[]>([]);
+  // Add a ref to track chart initialization state
+  const isChartInitializedRef = useRef<boolean>(false);
   
   // Use refs to store chart and series objects to prevent recreation
   const chartRef = useRef<any>(null);
@@ -94,11 +98,15 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const handleHistoricalBars = useCallback((bars: CandlestickData<Time>[]) => {
     if (!candleSeriesRef.current) return;
     
-    // Update state
+    console.log(`[LightweightChartWidget] Processing ${bars.length} historical bars`);
+    
+    // Update state and ref
     setHistoricalData(bars);
+    historicalDataRef.current = bars;
     
     // Set data on the chart
     if (bars.length > 0) {
+      // Replace all existing data with the historical data
       candleSeriesRef.current.setData(bars);
       
       // Fit content after loading historical data
@@ -108,6 +116,13 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       // Update last bar
       setLastBar(bars[bars.length - 1]);
+      
+      // Update last price
+      if (bars[bars.length - 1]?.close) {
+        setLastPrice(bars[bars.length - 1].close);
+      }
+      
+      console.log(`[LightweightChartWidget] Successfully set ${bars.length} historical bars on chart`);
     }
   }, []);
 
@@ -136,11 +151,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     } catch (error) {
       console.error('[LightweightChartWidget] Error handling new OHLC bar:', error);
     }
-  }, [symbol]);
+  }, []);
 
   // Handle OHLC bar updates directly
   const handleOHLCBarUpdate = useCallback((update: OHLCBarUpdate & {type?: string, data?: OHLCBarUpdate, bars?: OHLCBarUpdate[]}) => {
     if (!candleSeriesRef.current) {
+      console.warn('[LightweightChartWidget] Cannot handle update, chart series not initialized');
       return;
     }
     
@@ -153,6 +169,8 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       // Check if this is a history message
       if (update.type === 'ohlc_history') {
+        console.log(`[LightweightChartWidget] Received OHLC history with ${update.bars?.length || 0} bars`);
+        
         // Handle historical data
         if (update.bars && Array.isArray(update.bars) && update.bars.length > 0) {
           // Convert bars to chart format
@@ -164,8 +182,19 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
             } as CandlestickData<Time>;
           });
           
+          // Sort bars by time to ensure proper order
+          chartBars.sort((a, b) => {
+            const timeA = typeof a.time === 'number' ? a.time : Number(a.time);
+            const timeB = typeof b.time === 'number' ? b.time : Number(b.time);
+            return timeA - timeB;
+          });
+          
+          console.log(`[LightweightChartWidget] Processed ${chartBars.length} historical bars, sending to chart`);
+          
           // Process historical bars
           handleHistoricalBars(chartBars);
+        } else {
+          console.warn('[LightweightChartWidget] Received empty OHLC history');
         }
         return;
       }
@@ -210,9 +239,9 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         setLastPrice(update.close);
       }
     } catch (error) {
-      console.error('[LightweightChartWidget] Error handling OHLC bar update:', error);
+      console.error('[LightweightChartWidget] Error handling OHLC bar update:', error, update);
     }
-  }, [symbol, currentOhlcInterval, handleHistoricalBars, handleNewBar]);
+  }, [handleHistoricalBars, handleNewBar]);
 
   // Subscribe to price feeds
   const subscribeToFeeds = useCallback(async (symbol: string, ohlcInterval: string) => {
@@ -257,12 +286,21 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const initializeChart = useCallback(() => {
     if (!chartContainerRef.current) return;
     
+    // Prevent multiple initializations
+    if (isChartInitializedRef.current && chartRef.current) {
+      console.log('[LightweightChartWidget] Chart already initialized, skipping initialization');
+      return;
+    }
+    
     // Clean up existing chart if it exists
     if (chartRef.current) {
       chartRef.current.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
+      isChartInitializedRef.current = false;
     }
+    
+    console.log('[LightweightChartWidget] Initializing chart');
     
     // Initialize chart with optimizations for the selected interval
     const chart = createChart(chartContainerRef.current, {
@@ -336,8 +374,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     });
     candleSeriesRef.current = candleSeries;
     
+    // Mark chart as initialized
+    isChartInitializedRef.current = true;
+    
+    console.log('[LightweightChartWidget] Chart initialized successfully');
+    
     // Initialize with empty data
-    setHistoricalData([]);
     candleSeries.setData([]);
 
     // Configure time scale for optimal viewing
@@ -356,7 +398,15 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       // For other intervals, fit all content
       chart.timeScale().fitContent();
     }
-  }, [interval]);
+    
+    // If we have historical data already, set it now
+    const cachedData = historicalDataRef.current;
+    if (cachedData.length > 0) {
+      console.log(`[LightweightChartWidget] Setting ${cachedData.length} cached historical bars after chart init`);
+      candleSeries.setData(cachedData);
+      chart.timeScale().fitContent();
+    }
+  }, [interval]); // Remove historicalData from dependencies
 
   // Handle resize
   const handleResize = useCallback(() => {
@@ -371,8 +421,10 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   useEffect(() => {
     if (!chartContainerRef.current) return;
     
-    // Initialize chart
-    initializeChart();
+    // Initialize chart only once
+    if (!isChartInitializedRef.current) {
+      initializeChart();
+    }
     
     // Handle window resize
     window.addEventListener('resize', handleResize);
@@ -386,13 +438,14 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         chartRef.current.remove();
         chartRef.current = null;
         candleSeriesRef.current = null;
+        isChartInitializedRef.current = false;
       }
     };
   }, [handleResize, initializeChart]);
   
-  // Effect for subscription management
+  // Effect for subscription management - run only after chart is initialized
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current || !candleSeriesRef.current) return;
     
     // Convert the TimeFrameSelector interval to OHLC service interval format
     const ohlcInterval = convertToOhlcInterval(interval);
@@ -405,8 +458,14 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     
     // Only unsubscribe and resubscribe if the symbol or interval has changed
     if (!isSameSubscription) {
+      console.log(`[LightweightChartWidget] Subscription changed from ${currentSub?.symbol}/${currentSub?.interval} to ${symbol}/${ohlcInterval}`);
+      
       // Unsubscribe from current feeds
       unsubscribeFromCurrentFeeds();
+      
+      // Clear historical data when changing symbol or interval
+      setHistoricalData([]);
+      historicalDataRef.current = [];
       
       // Subscribe to feeds with new symbol and interval
       subscribeToFeeds(symbol, ohlcInterval);
