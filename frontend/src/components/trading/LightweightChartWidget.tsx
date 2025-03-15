@@ -130,8 +130,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     
     // Set data on the chart
     try {
-      console.log(`[LightweightChartWidget] Setting ${sortedBars.length} historical bars on chart`);
-      
       // Replace all existing data with the historical data
       candleSeriesRef.current.setData(sortedBars);
       
@@ -150,7 +148,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         }
       }
       
-      console.log(`[LightweightChartWidget] Successfully set ${sortedBars.length} historical bars on chart`);
+      console.log(`[LightweightChartWidget] Successfully loaded ${sortedBars.length} historical bars`);
     } catch (error) {
       console.error('[LightweightChartWidget] Error setting historical bars on chart:', error);
     }
@@ -174,7 +172,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       } as CandlestickData<Time>;
       
       // Update the chart
-      console.log('[LightweightChartWidget] Adding new bar to chart:', typedBar);
       candleSeriesRef.current.update(typedBar);
       setLastBar(typedBar);
       
@@ -205,7 +202,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       } as CandlestickData<Time>;
       
       // Update the chart with the updated bar
-      console.log('[LightweightChartWidget] Updating chart with bar update:', typedBar);
       candleSeriesRef.current.update(typedBar);
       setLastBar(typedBar);
       
@@ -241,14 +237,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       // Check if this is a new bar message
       if (update.type === 'new_bar') {
-        console.log('[LightweightChartWidget] Handling new bar');
         handleNewBar(update);
         return;
       }
       
       // Check if this is a bar update message
       if (update.type === 'bar_update') {
-        console.log('[LightweightChartWidget] Handling bar update');
         handleBarUpdate(update);
         return;
       }
@@ -266,7 +260,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     // Check if we're already subscribed to this exact symbol and interval
     const currentSub = activeSubscriptionRef.current;
     if (currentSub && currentSub.symbol === symbol && currentSub.interval === ohlcInterval) {
-      console.log(`[LightweightChartWidget] Already subscribed to ${symbol} with interval ${ohlcInterval}`);
       return true;
     }
     
@@ -291,7 +284,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const unsubscribeFromCurrentFeeds = useCallback(() => {
     const currentSub = activeSubscriptionRef.current;
     if (currentSub) {
-      console.log(`[LightweightChartWidget] Unsubscribing from ${currentSub.symbol} with interval ${currentSub.interval}`);
       // Unsubscribe from OHLC bars
       priceFeedAggregatorService.unsubscribeFromOHLCBars(currentSub.symbol, currentSub.interval);
       

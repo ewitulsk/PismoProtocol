@@ -334,7 +334,6 @@ export class PriceFeedAggregatorService {
         case 'bar_update':
           if (message.data) {
             try {
-              console.log('[PriceFeedAggregator] Received Bar Update for', message.data.symbol || message.data.feed_id);
               this.handleOHLCBarUpdate(message.data, 'bar_update');
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing bar update:', error);
@@ -345,7 +344,6 @@ export class PriceFeedAggregatorService {
         case 'new_bar':
           if (message.data) {
             try {
-              console.log('[PriceFeedAggregator] Received New Bar for', message.data.symbol || message.data.feed_id);
               this.handleOHLCBarUpdate(message.data, 'new_bar');
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing new bar:', error);
@@ -353,15 +351,8 @@ export class PriceFeedAggregatorService {
           }
           break;
 
-        // Removed ohlc_history case
-
         case 'price_update':
           // Simply acknowledge receipt of price update message without processing it
-          if (message.feed_id) {
-            // console.debug(`[PriceFeedAggregator] Received price update for feed: ${message.feed_id}`);
-          } else {
-            // console.debug('[PriceFeedAggregator] Received price update message');
-          }
           break;
 
         case 'error':
@@ -382,11 +373,6 @@ export class PriceFeedAggregatorService {
     if (!data || !data.feed_id || !data.interval) {
       console.warn('[PriceFeedAggregator] Received OHLC update with missing required fields', data);
       return;
-    }
-    
-    // Log processing but avoid verbose output
-    if (eventType !== 'price_update') {
-      console.log(`[PriceFeedAggregator] Processing ${eventType} for ${data.symbol || data.feed_id}, interval: ${data.interval}`);
     }
     
     // Clean and normalize the feed ID for consistent matching
@@ -552,51 +538,6 @@ export class PriceFeedAggregatorService {
     return null;
   }
   
-  // Helper method to recursively find potential identifiers in nested objects
-  private findIdentifierInObject(obj: any): string | null {
-    // Safety check
-    if (!obj || typeof obj !== 'object') {
-      return null;
-    }
-    
-    // Look for common identifier field names in the object
-    const identifierFields = ['id', 'feedId', 'feed_id', 'ticker', 'symbol'];
-    
-    for (const field of identifierFields) {
-      if (obj[field] && typeof obj[field] === 'string') {
-        return obj[field];
-      }
-    }
-    
-    // Recursively check nested objects (limited depth to avoid infinite recursion)
-    try {
-      for (const [key, value] of Object.entries(obj)) {
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-          // Check if the key itself might be an identifier
-          if (identifierFields.some(field => key.includes(field))) {
-            if (typeof value === 'string') {
-              return value;
-            } else if (typeof value === 'object' && value !== null && 
-                       'id' in value && typeof (value as any).id === 'string') {
-              return (value as any).id;
-            }
-          }
-          
-          // Recurse into the nested object (but only if it's not the same object to avoid loops)
-          if (value !== obj) {
-            const nestedId = this.findIdentifierInObject(value);
-            if (nestedId) {
-              return nestedId;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('[PriceFeedAggregator] Error searching for identifiers in object:', error);
-    }
-    
-    return null;
-  }
 
   // Subscribe to OHLC bars for a specific feed and interval
   public async subscribeToOHLCBars(
@@ -604,8 +545,6 @@ export class PriceFeedAggregatorService {
     interval: string,
     callback: OHLCBarCallback
   ): Promise<boolean> {
-    console.log(`[PriceFeedAggregator] Subscribing to OHLC bars for ${symbol}, interval: ${interval}`);
-    
     // Try to get the feed ID for this symbol
     let feedId = PRICE_FEED_IDS[symbol];
     
@@ -640,7 +579,6 @@ export class PriceFeedAggregatorService {
       const normalizedKey = key.startsWith('0x') ? key.substring(2).toLowerCase() : key.toLowerCase();
       if (normalizedKey === normalizedFeedId) {
         existingFeedId = key;
-        console.log(`Found existing feed ID key: ${key} for normalized ID: ${normalizedFeedId}`);
         break;
       }
     }
@@ -660,7 +598,6 @@ export class PriceFeedAggregatorService {
     for (const intervalKey of feedHandlers.keys()) {
       if (intervalKey.toLowerCase() === normalizedInterval) {
         existingInterval = intervalKey;
-        console.log(`Found existing interval key: ${intervalKey} for normalized interval: ${normalizedInterval}`);
         break;
       }
     }
@@ -683,12 +620,9 @@ export class PriceFeedAggregatorService {
     
     callbackAlreadyRegistered = sizeBefore === sizeAfter;
     
-    console.log(`Registered OHLC handler for ${keyToUse}, interval: ${intervalToUse}. Total handlers: ${existingCallbacks.size}`);
-    
     // If the callback was already registered and we already have a subscription,
     // we don't need to send another subscription message
     if (callbackAlreadyRegistered && sizeBefore > 0) {
-      console.log(`[PriceFeedAggregator] Callback already registered for ${symbol}, interval: ${interval}. Skipping subscription.`);
       return true;
     }
     
@@ -728,8 +662,6 @@ export class PriceFeedAggregatorService {
     interval: string,
     callback?: OHLCBarCallback
   ): boolean {
-    console.log(`[PriceFeedAggregator] Unsubscribing from OHLC bars for ${symbol}, interval: ${interval}`);
-    
     // Get the feed ID for this symbol
     let feedId = PRICE_FEED_IDS[symbol];
     if (!feedId) {
@@ -766,7 +698,6 @@ export class PriceFeedAggregatorService {
     }
     
     if (!matchedFeedId) {
-      console.log(`[PriceFeedAggregator] No handlers found for feed ID: ${feedId}`);
       return true; // Already unsubscribed
     }
     
@@ -784,7 +715,6 @@ export class PriceFeedAggregatorService {
     }
     
     if (!matchedInterval) {
-      console.log(`[PriceFeedAggregator] No handlers found for interval: ${interval}`);
       return true; // Already unsubscribed
     }
     
@@ -802,8 +732,6 @@ export class PriceFeedAggregatorService {
     // Clean up empty maps
     if (intervalHandlers.size === 0) {
       feedHandlers.delete(matchedInterval);
-      
-      // No longer tracking history requests
     }
     
     if (feedHandlers.size === 0) {
