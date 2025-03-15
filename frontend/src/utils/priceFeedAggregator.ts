@@ -571,10 +571,26 @@ export class PriceFeedAggregatorService {
       feedHandlers.set(intervalToUse, new Set());
     }
     
-    // Add the callback to handlers
-    feedHandlers.get(intervalToUse)!.add(callback);
+    // Check if this exact callback is already registered
+    const existingCallbacks = feedHandlers.get(intervalToUse)!;
+    let callbackAlreadyRegistered = false;
     
-    console.log(`Registered OHLC handler for ${keyToUse}, interval: ${intervalToUse}. Total handlers: ${feedHandlers.get(intervalToUse)!.size}`);
+    // We can't directly check if a Set contains a function reference,
+    // so we'll check the size before and after adding
+    const sizeBefore = existingCallbacks.size;
+    existingCallbacks.add(callback);
+    const sizeAfter = existingCallbacks.size;
+    
+    callbackAlreadyRegistered = sizeBefore === sizeAfter;
+    
+    console.log(`Registered OHLC handler for ${keyToUse}, interval: ${intervalToUse}. Total handlers: ${existingCallbacks.size}`);
+    
+    // If the callback was already registered and we already have a subscription,
+    // we don't need to send another subscription message
+    if (callbackAlreadyRegistered && sizeBefore > 0) {
+      console.log(`[PriceFeedAggregator] Callback already registered for ${symbol}, interval: ${interval}. Skipping subscription.`);
+      return true;
+    }
     
     // Connect if not already connected
     if (!this.isConnected) {

@@ -36,6 +36,8 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   
   // Track active subscriptions to prevent duplicate subscriptions
   const activeSubscriptionRef = useRef<{ symbol: string, interval: string } | null>(null);
+  // Add a ref to track if we've already initialized the subscription
+  const hasInitializedRef = useRef<boolean>(false);
   
   // Use refs to store chart and series objects to prevent recreation
   const chartRef = useRef<any>(null);
@@ -208,6 +210,13 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
 
   // Subscribe to price feeds
   const subscribeToFeeds = useCallback(async (symbol: string, ohlcInterval: string) => {
+    // Check if we're already subscribed to this exact symbol and interval
+    const currentSub = activeSubscriptionRef.current;
+    if (currentSub && currentSub.symbol === symbol && currentSub.interval === ohlcInterval) {
+      console.log(`[LightweightChartWidget] Already subscribed to ${symbol} with interval ${ohlcInterval}`);
+      return true;
+    }
+    
     // Update the current subscription reference
     activeSubscriptionRef.current = { symbol, interval: ohlcInterval };
     
@@ -216,6 +225,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     
     // Subscribe to OHLC bars (these come from Pyth network)
     try {
+      console.log(`[LightweightChartWidget] Subscribing to ${symbol} with interval ${ohlcInterval}`);
       const success = await priceFeedAggregatorService.subscribeToOHLCBars(symbol, ohlcInterval, handleOHLCBarUpdate);
       return success;
     } catch (err) {
@@ -228,6 +238,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const unsubscribeFromCurrentFeeds = useCallback(() => {
     const currentSub = activeSubscriptionRef.current;
     if (currentSub) {
+      console.log(`[LightweightChartWidget] Unsubscribing from ${currentSub.symbol} with interval ${currentSub.interval}`);
       // Unsubscribe from OHLC bars
       priceFeedAggregatorService.unsubscribeFromOHLCBars(currentSub.symbol, currentSub.interval);
       
@@ -350,21 +361,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     }
   }, []);
 
-  // Main effect to handle subscriptions based on symbol and interval changes
+  // Effect for chart initialization and cleanup
   useEffect(() => {
     if (!chartContainerRef.current) return;
     
     // Initialize chart
     initializeChart();
-    
-    // Convert the TimeFrameSelector interval to OHLC service interval format
-    const ohlcInterval = convertToOhlcInterval(interval);
-    
-    // Unsubscribe from current feeds
-    unsubscribeFromCurrentFeeds();
-    
-    // Subscribe to feeds with new symbol and interval
-    subscribeToFeeds(symbol, ohlcInterval);
     
     // Handle window resize
     window.addEventListener('resize', handleResize);
@@ -373,9 +375,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       
-      // Unsubscribe from all data sources
-      unsubscribeFromCurrentFeeds();
-      
       // Clean up chart
       if (chartRef.current) {
         chartRef.current.remove();
@@ -383,7 +382,41 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         candleSeriesRef.current = null;
       }
     };
-  }, [symbol, interval, handleResize, initializeChart, subscribeToFeeds, unsubscribeFromCurrentFeeds, convertToOhlcInterval]);
+  }, [handleResize, initializeChart]);
+  
+  // Effect for subscription management
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+    
+    // Convert the TimeFrameSelector interval to OHLC service interval format
+    const ohlcInterval = convertToOhlcInterval(interval);
+    
+    // Check if we're already subscribed to this exact symbol and interval
+    const currentSub = activeSubscriptionRef.current;
+    const isSameSubscription = currentSub && 
+                              currentSub.symbol === symbol && 
+                              currentSub.interval === ohlcInterval;
+    
+    // Only unsubscribe and resubscribe if the symbol or interval has changed
+    if (!isSameSubscription) {
+      // Unsubscribe from current feeds
+      unsubscribeFromCurrentFeeds();
+      
+      // Subscribe to feeds with new symbol and interval
+      subscribeToFeeds(symbol, ohlcInterval);
+    }
+    
+    // No cleanup here - we handle cleanup in a separate effect
+  }, [symbol, interval, subscribeToFeeds, unsubscribeFromCurrentFeeds, convertToOhlcInterval]);
+  
+  // Effect for component unmount cleanup
+  useEffect(() => {
+    // Cleanup function for component unmount
+    return () => {
+      console.log('[LightweightChartWidget] Component unmounting, cleaning up subscriptions');
+      unsubscribeFromCurrentFeeds();
+    };
+  }, [unsubscribeFromCurrentFeeds]);
 
   return (
     <div 
