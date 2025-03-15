@@ -24,6 +24,7 @@ export interface OHLCBarUpdate {
   close: number;
   volume?: number;
   confirmed: boolean;
+  type?: string;  // Add optional type property
 }
 
 type OHLCBarCallback = (update: OHLCBarUpdate) => void;
@@ -333,6 +334,7 @@ export class PriceFeedAggregatorService {
         case 'bar_update':
           if (message.data) {
             try {
+              console.log('[PriceFeedAggregator] Recieved Bar Update...');
               this.handleOHLCBarUpdate(message.data, 'bar_update');
             } catch (error) {
               console.error('[PriceFeedAggregator] Error processing bar update:', error);
@@ -455,7 +457,11 @@ export class PriceFeedAggregatorService {
                 // Call the found handlers
                 altIntervalHandlers.forEach(callback => {
                   try {
-                    callback(data);
+                    // Include the eventType in the data passed to the callback
+                    callback({
+                      ...data,
+                      type: eventType
+                    });
                   } catch (error) {
                     console.error(`[PriceFeedAggregator] Error in OHLC bar update handler via symbol lookup:`, error);
                   }
@@ -485,7 +491,11 @@ export class PriceFeedAggregatorService {
     // Call each registered handler
     intervalHandlers.forEach(callback => {
       try {
-        callback(data);
+        // Include the eventType in the data passed to the callback
+        callback({
+          ...data,
+          type: eventType
+        });
       } catch (error) {
         console.error(`[PriceFeedAggregator] Error in OHLC bar update handler:`, error);
       }

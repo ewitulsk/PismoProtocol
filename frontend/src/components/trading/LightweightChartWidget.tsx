@@ -204,10 +204,22 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         return;
       }
       
-      // Check if this is a new bar message
-      if (update.type === 'new_bar' && update.data) {
-        handleNewBar(update.data);
+      // Check if this is a new bar message - handle both formats (nested data or direct)
+      if (update.type === 'new_bar') {
+        if (update.data) {
+          // Handle nested data format
+          handleNewBar(update.data);
+        } else {
+          // Handle direct format (type is directly on the update object)
+          handleNewBar(update);
+        }
         return;
+      }
+      
+      // Check if this is a bar update message
+      if (update.type === 'bar_update') {
+        // Handle bar update - this updates the current bar
+        console.log('[LightweightChartWidget] Handling bar update');
       }
       
       // Handle regular bar update (updates the current bar)
@@ -234,6 +246,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
                      (updateOHLCInterval === '5min' && currInterval === '5m');
       
       if (isMatch) {
+        console.log(`[LightweightChartWidget] Updating chart with ${update.type || 'regular'} update`);
         candleSeriesRef.current.update(typedBar as CandlestickData<Time>);
         setLastBar(typedBar as CandlestickData<Time>);
       }
