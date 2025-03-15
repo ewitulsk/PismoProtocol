@@ -42,6 +42,8 @@ export class PriceFeedAggregatorService {
     timespan?: string;
   } | null = null;
   private url = 'ws://localhost:8765'; // Default URL, can be changed
+  // Track which history requests have been processed to avoid duplicates
+  private processedHistoryRequests: Set<string> = new Set();
 
   // Connect to the WebSocket server
   public async connect(): Promise<boolean> {
@@ -264,6 +266,21 @@ export class PriceFeedAggregatorService {
 
         case 'ohlc_history':
           console.log(`[PriceFeedAggregator] Received ${message.bars?.length || 0} historical OHLC bars for ${message.feed_id}`);
+          
+          //This is more of a bandaid for a bigger underlying issue. We shouldn't be making multiple history requests.
+
+          // Create a unique key for this history request
+          const historyKey = `${message.feed_id}:${message.interval}:${message.limit || 'default'}`;
+          
+          // Check if we've already processed this exact history request
+          if (this.processedHistoryRequests.has(historyKey)) {
+            console.log(`[PriceFeedAggregator] Skipping duplicate history request: ${historyKey}`);
+            return;
+          }
+          
+          // Mark this history request as processed
+          this.processedHistoryRequests.add(historyKey);
+          
           if (message.bars && message.bars.length > 0) {
             try {
               // Find handlers for this feed ID
@@ -481,6 +498,8 @@ export class PriceFeedAggregatorService {
       this.socket = null;
       this.isConnected = false;
       this.clientId = null;
+      // Clear processed history requests on disconnect
+      this.processedHistoryRequests.clear();
     }
   }
   
@@ -775,6 +794,14 @@ export class PriceFeedAggregatorService {
     // Clean up empty maps
     if (intervalHandlers.size === 0) {
       feedHandlers.delete(matchedInterval);
+      
+      // Clear any processed history requests for this feed/interval
+      const historyKeyPrefix = `${cleanFeedId}:${interval}`;
+      Array.from(this.processedHistoryRequests).forEach(key => {
+        if (key.startsWith(historyKeyPrefix)) {
+          this.processedHistoryRequests.delete(key);
+        }
+      });
     }
     
     if (feedHandlers.size === 0) {
