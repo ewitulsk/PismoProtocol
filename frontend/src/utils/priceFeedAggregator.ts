@@ -37,10 +37,10 @@ export class PriceFeedAggregatorService {
   private reconnectInterval = 2000; // 2 seconds
   private clientId: string | null = null;
   private ohlcBarHandlers: Map<string, Map<string, Set<OHLCBarCallback>>> = new Map(); // feedId -> interval -> handlers
-  private pendingSubscriptions: Array<{ 
+  private pendingSubscription: { 
     feedId: string; 
     timespan?: string;
-  }> = [];
+  } | null = null;
   private url = 'ws://localhost:8765'; // Default URL, can be changed
 
   // Connect to the WebSocket server
@@ -63,8 +63,11 @@ export class PriceFeedAggregatorService {
           this.isConnecting = false;
           this.reconnectAttempts = 0;
 
-          // Process any pending subscriptions
-          this.processPendingSubscriptions();
+          // Process pending subscription if exists
+          if (this.pendingSubscription) {
+            this.subscribeToFeed(this.pendingSubscription.feedId, this.pendingSubscription.timespan);
+            this.pendingSubscription = null;
+          }
 
           // Request available feeds for reference
           this.requestAvailableFeeds();
@@ -122,25 +125,6 @@ export class PriceFeedAggregatorService {
     }, delay);
   }
 
-  // Process any pending subscriptions after connection
-  private processPendingSubscriptions(): void {
-    if (this.pendingSubscriptions.length === 0) {
-      return;
-    }
-
-    // If we have multiple pending subscriptions, use the batch subscription method
-    if (this.pendingSubscriptions.length > 1) {
-      this.subscribeToMultipleFeeds(this.pendingSubscriptions);
-    } else {
-      // Otherwise, use individual subscription
-      const sub = this.pendingSubscriptions[0];
-      this.subscribeToFeed(sub.feedId, sub.timespan);
-    }
-
-    // Clear pending subscriptions
-    this.pendingSubscriptions = [];
-  }
-
   // Request list of available feeds
   private requestAvailableFeeds(): void {
     if (!this.isConnected || !this.socket) {
@@ -163,10 +147,11 @@ export class PriceFeedAggregatorService {
     
     // If not connected, store subscription for later
     if (!this.isConnected) {
-      this.pendingSubscriptions.push({ 
+      // Only store one subscription at a time
+      this.pendingSubscription = { 
         feedId: cleanFeedId, 
         timespan
-      });
+      };
       
       // Try to connect
       const connected = await this.connect();
@@ -191,39 +176,6 @@ export class PriceFeedAggregatorService {
       return true;
     } catch (error) {
       console.error('[PriceFeedAggregator] Error sending subscription:', error);
-      return false;
-    }
-  }
-
-  // Subscribe to multiple feeds at once
-  private subscribeToMultipleFeeds(
-    subscriptions: Array<{ feedId: string; timespan?: string; }>
-  ): boolean {
-    if (!this.isConnected || !this.socket) {
-      console.warn('[PriceFeedAggregator] Cannot subscribe, not connected');
-      return false;
-    }
-
-    try {
-      const formattedSubscriptions = subscriptions.map(sub => {
-        // Remove "0x" prefix from feedId if present
-        const cleanFeedId = sub.feedId.startsWith('0x') ? sub.feedId.substring(2) : sub.feedId;
-        
-        return {
-          feed_id: cleanFeedId,
-          timespan: sub.timespan || 'minute',
-          ohlc: true
-        };
-      });
-
-      this.socket.send(JSON.stringify({
-        type: 'subscribe_multiple',
-        subscriptions: formattedSubscriptions
-      }));
-
-      return true;
-    } catch (error) {
-      console.error('[PriceFeedAggregator] Error subscribing to multiple feeds:', error);
       return false;
     }
   }
