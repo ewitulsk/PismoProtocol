@@ -232,12 +232,13 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       // Check if this is a new bar
       if (update.type === 'new_bar' && update.data) {
+        console.log("[LightweightChartWidget] Received new bar!!");
         handleNewBar(update.data);
         return;
       }
       
       // Handle regular bar update (updates the current bar)
-      
+      console.log("[LightweightChartWidget] Received update bar message!");
       // Create a bar from the OHLC bar data
       const bar = PriceFeedAggregatorService.createBarFromOHLCUpdate(update);
       
