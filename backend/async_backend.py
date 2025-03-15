@@ -3,7 +3,7 @@ import asyncio
 import re
 from typing import Dict, List, Any
 
-async def get_owned_objects(session: aiohttp.ClientSession, network: str, owner: str) -> List:
+async def get_owned_objects(session: aiohttp.ClientSession, network: str, owner: str) -> List[Dict[str, Any]]:
     """
     Asynchronously retrieve owned objects for a given owner on a specified network.
     """
@@ -32,7 +32,7 @@ async def get_owned_objects(session: aiohttp.ClientSession, network: str, owner:
         owned_objects = result['result']['data']
         return owned_objects
 
-async def get_collateral_objects(session: aiohttp.ClientSession, network: str, owner: str, account: str, contract_address: str) -> List:
+async def get_collateral_objects(session: aiohttp.ClientSession, network: str, owner: str, account: str, contract_address: str) -> List[Dict[str, Any]]:
     """
     Asynchronously retrieve collateral objects owned by a specified owner.
     """
@@ -50,7 +50,7 @@ async def get_collateral_objects(session: aiohttp.ClientSession, network: str, o
             
     return collateral_objects
 
-async def form_coin_type_prgm_triples(session: aiohttp.ClientSession, network: str, owner: str, account: str, contract_address: str) -> List:
+async def form_coin_type_prgm_triples(session: aiohttp.ClientSession, network: str, owner: str, account: str, contract_address: str) -> List[Dict[str, str]]:
     """
     Asynchronously form triples that contain the "coin", "type", and "program_id" values from the collateral objects.
     """
@@ -66,7 +66,7 @@ async def form_coin_type_prgm_triples(session: aiohttp.ClientSession, network: s
         triples.append(triple)
     return triples
 
-async def get_program_objects(session: aiohttp.ClientSession, network: str, program_ids: List) -> Dict:
+async def get_program_objects(session: aiohttp.ClientSession, network: str, program_ids: List[str]) -> List[Dict[str, Any]]:
     """
     Asynchronously retrieve program objects from the chain.
     """
@@ -101,7 +101,7 @@ def convert_feed_bytes_to_hex_str(feed_bytes: List[int]) -> str:
         feed_hex_str += f"{byte:02x}"
     return feed_hex_str
 
-async def get_price_feed(session: aiohttp.ClientSession, feed_id: str) -> Dict:
+async def get_price_feed(session: aiohttp.ClientSession, feed_id: str) -> Dict[str, Any]:
     """
     Asynchronously get price feed updates from Pyth API.
     """
@@ -111,7 +111,7 @@ async def get_price_feed(session: aiohttp.ClientSession, feed_id: str) -> Dict:
         result = await response.json()
         return result['parsed'][0]
 
-def join_collaterals(dict_list1: List[Dict], dict_list2: List[Dict]) -> List[Dict]:
+def join_collaterals(dict_list1: List[Dict[str, Any]], dict_list2: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Perform an inner join between two lists of dictionaries.
     """

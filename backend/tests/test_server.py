@@ -19,7 +19,7 @@ class TestServerEndpoints(unittest.TestCase):
         with open(os.path.join(os.path.dirname(__file__), 'mock_data.json'), 'r') as f:
             self.mock_data = json.load(f)
     
-    @patch('server.calc_total_account_value_async')
+    @patch('server.calc_total_account_value')
     def test_calculate_total_account_value(self, mock_calc):
         # Configure mock to return a predefined value
         mock_calc.return_value = 1234.56
@@ -63,36 +63,7 @@ class TestServerEndpoints(unittest.TestCase):
         # Assertions
         self.assertEqual(response.status_code, 400)
         self.assertTrue("error" in data)
-    
-    @patch('server.calc_total_account_value')
-    def test_calculate_total_account_value_sync(self, mock_calc):
-        # Configure mock to return a predefined value
-        mock_calc.return_value = 1234.56
-        
-        # Test data
-        test_request_data = {
-            "network": "testnet",
-            "address": "0xsample_owner",
-            "account": "0xsample_account",
-            "contract": "0xsample_contract"
-        }
-        
-        # Make request to the endpoint
-        response = self.app.post(
-            '/api/calculateTotalAccountValueSync',
-            json=test_request_data,
-            content_type='application/json'
-        )
-        
-        # Parse response
-        data = json.loads(response.data)
-        
-        # Assertions
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["totalValue"], 1234.56)
-        mock_calc.assert_called_once_with(
-            "testnet", "0xsample_owner", "0xsample_account", "0xsample_contract"
-        )
+
 
 if __name__ == '__main__':
     unittest.main()
