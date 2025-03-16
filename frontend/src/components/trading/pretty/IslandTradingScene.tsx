@@ -25,12 +25,12 @@ export default function IslandTradingScene() {
   return (
     <Canvas shadows>
       <color attach="background" args={['#030210']} />
-      <fog attach="fog" args={['#030210', 5, 30]} />
-      <ambientLight intensity={0.2} />
+      <fog attach="fog" args={['#030210', 10, 30]} />
+      <ambientLight intensity={0.3} />
       
       {/* Main directional light (sunset) */}
       <directionalLight 
-        position={[10, 5, 0]} 
+        position={[0, 5, -12]} 
         intensity={1.5} 
         color="#ff7e5f" 
         castShadow 
@@ -43,40 +43,54 @@ export default function IslandTradingScene() {
         shadow-camera-bottom={-10}
       />
       
-      {/* Light from the opposite side */}
-      <directionalLight position={[-5, 3, 0]} intensity={0.4} color="#feb47b" />
+      {/* Fill light to illuminate the island from the front */}
+      <directionalLight position={[0, 3, 10]} intensity={0.5} color="#feb47b" />
       
-      {/* Position camera */}
-      <PerspectiveCamera makeDefault position={[0, 2, 8]} fov={50} />
+      {/* Position camera at the front edge of the island, looking outward */}
+      <PerspectiveCamera makeDefault position={[0, 0.6, 2]} fov={60} />
       <OrbitControls 
         enablePan={false}
         enableZoom={true}
         minPolarAngle={Math.PI / 6}
-        maxPolarAngle={Math.PI / 2}
-        minDistance={5}
-        maxDistance={15}
+        maxPolarAngle={Math.PI / 2.5}
+        minDistance={2}
+        maxDistance={5}
+        enableRotate={false}
+        target={[0, 0, -5]}
       />
       
       <Suspense fallback={null}>
-        <Island position={[0, -0.1, 0]} scale={[1, 0.5, 1]} />
-        <Ocean position={[0, -0.2, 0]} />
-        <PalmTree position={[1.5, 0.5, 0]} scale={[0.5, 0.5, 0.5]} />
-        <Sunset position={[15, 3, -10]} />
+        {/* Island under the camera */}
+        <Island position={[0, -0.2, 0]} scale={[2.5, 0.5, 3]} />
+        
+        {/* Water in front of the island */}
+        <Ocean position={[0, -0.4, -10]} />
+        
+        {/* Palm tree on the right side of the island */}
+        <PalmTree position={[2, 0.2, 0.5]} scale={[0.6, 0.6, 0.6]} />
+        
+        {/* Small palm tree on the left for balance */}
+        <PalmTree position={[-2, 0.2, 0.5]} scale={[0.4, 0.4, 0.4]} />
+        
+        {/* Sunset behind the water */}
+        <Sunset position={[0, 3, -20]} />
+        
+        {/* Boat on top of the water */}
         <Boat 
-          position={[-4, 0, 2]} 
+          position={[0, -0.1, -5]} 
           selectedPair={selectedPair}
           selectedTimeFrame={selectedTimeFrame}
         />
         
-        {/* Selectors in the sand */}
+        {/* Selectors in the sand - in front of the camera */}
         <TimeFrameSelector3D 
-          position={[-1, 0.3, 0.5]} 
+          position={[-1.2, 0.0, 1.2]} 
           selectedTimeFrame={selectedTimeFrame} 
           onTimeFrameChange={handleTimeFrameChange} 
         />
         
         <AssetSelector3D 
-          position={[1, 0.3, 0.5]} 
+          position={[1.2, 0.0, 1.2]} 
           selectedPair={selectedPair} 
           onPairSelect={handlePairSelect} 
         />
@@ -96,11 +110,17 @@ function TimeFrameSelector3D({ position, selectedTimeFrame, onTimeFrameChange }:
   const [isOpen, setIsOpen] = useState(false);
   
   return (
-    <group position={position}>
-      {/* Base for the selector */}
-      <mesh position={[0, -0.05, 0]} receiveShadow>
-        <boxGeometry args={[2, 0.1, 1]} />
-        <meshStandardMaterial color="#d4af37" roughness={0.8} />
+    <group position={position} rotation={[0, 0, 0]}>
+      {/* Base for the selector - more visible as a raised platform */}
+      <mesh position={[0, -0.05, 0]} receiveShadow castShadow>
+        <boxGeometry args={[2, 0.15, 1]} />
+        <meshStandardMaterial color="#e0c474" roughness={0.6} />
+      </mesh>
+      
+      {/* Decorative rim */}
+      <mesh position={[0, 0.025, 0]} receiveShadow castShadow>
+        <boxGeometry args={[2.1, 0.05, 1.1]} />
+        <meshStandardMaterial color="#ffd700" metalness={0.5} roughness={0.3} />
       </mesh>
       
       {/* Time selector button */}
@@ -177,11 +197,17 @@ function AssetSelector3D({ position, selectedPair, onPairSelect }: AssetSelector
     : tradingPairs;
   
   return (
-    <group position={position}>
-      {/* Base for the selector */}
-      <mesh position={[0, -0.05, 0]} receiveShadow>
-        <boxGeometry args={[2, 0.1, 1]} />
-        <meshStandardMaterial color="#d4af37" roughness={0.8} />
+    <group position={position} rotation={[0, 0, 0]}>
+      {/* Base for the selector - more visible as a raised platform */}
+      <mesh position={[0, -0.05, 0]} receiveShadow castShadow>
+        <boxGeometry args={[2, 0.15, 1]} />
+        <meshStandardMaterial color="#e0c474" roughness={0.6} />
+      </mesh>
+      
+      {/* Decorative rim */}
+      <mesh position={[0, 0.025, 0]} receiveShadow castShadow>
+        <boxGeometry args={[2.1, 0.05, 1.1]} />
+        <meshStandardMaterial color="#ffd700" metalness={0.5} roughness={0.3} />
       </mesh>
       
       {/* Asset selector button */}

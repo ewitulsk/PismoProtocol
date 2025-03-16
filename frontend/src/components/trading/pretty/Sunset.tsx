@@ -33,10 +33,10 @@ export default function Sunset({ position = [0, 0, 0] }: SunsetProps) {
   });
   
   return (
-    <group position={position}>
+    <group position={position} rotation={[0, 0, 0]}>
       {/* Sun disk */}
       <mesh ref={sunRef}>
-        <circleGeometry args={[3, 32]} />
+        <circleGeometry args={[5, 32]} />
         <meshBasicMaterial
           color="#ff7e5f" 
           side={THREE.DoubleSide}
@@ -45,14 +45,25 @@ export default function Sunset({ position = [0, 0, 0] }: SunsetProps) {
       
       {/* Sun glow */}
       <mesh ref={glowRef}>
-        <circleGeometry args={[3.3, 32]} />
+        <circleGeometry args={[6, 32]} />
         <meshStandardMaterial
           color="#feb47b"
           transparent={true}
           opacity={0.7}
           side={THREE.DoubleSide}
           emissive="#ff7e5f"
-          emissiveIntensity={0.5}
+          emissiveIntensity={0.8}
+        />
+      </mesh>
+      
+      {/* Additional outer glow */}
+      <mesh position={[0, 0, -0.01]}>
+        <circleGeometry args={[8, 32]} />
+        <meshBasicMaterial
+          color="#ff9e7f"
+          transparent={true}
+          opacity={0.3}
+          side={THREE.DoubleSide}
         />
       </mesh>
     </group>

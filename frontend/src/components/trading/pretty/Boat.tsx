@@ -41,7 +41,7 @@ export default function Boat({
   });
   
   return (
-    <group ref={boatRef} position={position}>
+    <group ref={boatRef} position={position} rotation={[0, Math.PI, 0]}>
       {/* Boat hull (simple low-poly shape) */}
       <mesh castShadow receiveShadow position={[0, 0, 0]}>
         <boxGeometry args={[1.5, 0.2, 0.8]} />
@@ -73,7 +73,7 @@ export default function Boat({
           transform 
           position={[0, 0, 0.03]} 
           scale={0.18}
-          rotation={[0, 0, 0]}
+          rotation={[0, Math.PI, 0]}
           zIndexRange={[0, 1]}
           distanceFactor={1}
           style={{

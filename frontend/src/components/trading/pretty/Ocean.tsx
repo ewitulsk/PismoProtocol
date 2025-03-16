@@ -25,7 +25,7 @@ export default function Ocean({ position = [0, 0, 0] }: OceanProps) {
   const waveGeometries = useMemo(() => {
     return Array(waveCount).fill(0).map((_, i) => {
       // Different size and segment count for each wave
-      const radius = 13 + i * 0.6;
+      const radius = 20 + i * 0.8; // Larger waves
       const segments = 32 + i * 2;
       
       // Create a circular plane with some random height variations

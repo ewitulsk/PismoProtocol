@@ -12,11 +12,12 @@ interface IslandProps {
 export default function Island({ position = [0, 0, 0], scale = [1, 1, 1] }: IslandProps) {
   const islandRef = useRef<THREE.Mesh>(null);
   
-  // Low poly island geometry
+  // Low poly island geometry - more like a beach platform
   const createIslandGeometry = () => {
-    const geometry = new THREE.CylinderGeometry(2, 2.5, 0.4, 8, 1, false);
+    // Create a wider, flatter island shape (more like a platform)
+    const geometry = new THREE.CylinderGeometry(3, 3.2, 0.3, 12, 1, false);
     
-    // Add some random height variation for a more natural look
+    // Add some subtle height variation for a more natural look
     const positionAttr = geometry.getAttribute('position');
     const vertex = new THREE.Vector3();
     
@@ -24,16 +25,21 @@ export default function Island({ position = [0, 0, 0], scale = [1, 1, 1] }: Isla
       vertex.fromBufferAttribute(positionAttr, i);
       
       // Only modify vertices that are not on the bottom face
-      if (vertex.y > -0.19) {
-        // Add some random variation to the surface
-        if (Math.random() > 0.6 && vertex.y > 0) {
-          vertex.y += Math.random() * 0.1;
+      if (vertex.y > -0.14) {
+        // Add very subtle random variation to the surface
+        if (Math.random() > 0.7 && vertex.y > 0) {
+          vertex.y += Math.random() * 0.05;
         }
         
-        // Add subtle radial variation
+        // Make the front part of the island (negative Z) lower for beach effect
+        if (vertex.z < 0 && vertex.y > 0) {
+          vertex.y -= Math.abs(vertex.z) * 0.03;
+        }
+        
+        // Add subtle radial variation at the edges
         const distance = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
-        if (distance > 1.5 && vertex.y > 0) {
-          vertex.y -= (distance - 1.5) * 0.1;
+        if (distance > 2.5 && vertex.y > 0) {
+          vertex.y -= (distance - 2.5) * 0.08;
         }
       }
       
