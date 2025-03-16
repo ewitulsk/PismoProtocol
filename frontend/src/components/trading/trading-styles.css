@@ -24,7 +24,7 @@
 
 @media (max-width: 767px) {
   .trading-chart {
-    height: calc(50vh); /* Smaller height on mobile */
+    height: calc(80vh); /* Larger height for better mobile visibility */
   }
 }
 
