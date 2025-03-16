@@ -42,7 +42,7 @@ export class PriceFeedAggregatorService {
     feedId: string; 
     timespan?: string;
   } | null = null;
-  private url = 'ws://localhost:8765'; // Default URL, can be changed
+  private url = process.env.REACT_APP_PRICE_FEED_AGGREGATOR_URL as string // Use env var with fallback
   // Track which history requests have been processed to avoid duplicates
   // No longer tracking history requests
 
