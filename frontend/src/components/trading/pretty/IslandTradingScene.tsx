@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useRef, Suspense, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei';
+import * as THREE from 'three';
 import { TradingPair, tradingPairs } from '@/data/mocks/tradingPairs';
 import Island from './Island';
 import Ocean from './Ocean';
@@ -10,9 +11,43 @@ import Sunset from './Sunset';
 import Boat from './Boat';
 import { timeframes } from '../TimeFrameSelector';
 
+// Camera marker component removed
+
+// Keyboard controls for camera
+function KeyboardControls() {
+  const controlsRef = useRef<any>(null);
+  
+  useEffect(() => {
+    // Event handler for key press
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '0') {
+        // Toggle orbit controls enabled state
+        if (controlsRef.current) {
+          controlsRef.current.enabled = !controlsRef.current.enabled;
+        }
+      }
+    };
+    
+    // Add event listener
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+  
+  return { controlsRef };
+}
+
 export default function IslandTradingScene() {
   const [selectedTimeFrame, setSelectedTimeFrame] = useState<string>("60");
   const [selectedPair, setSelectedPair] = useState<TradingPair>(tradingPairs[0]);
+  const { controlsRef } = KeyboardControls();
+  
+  // Adjusted camera position to look toward the billboard
+  // Raised the camera height and moved it back slightly
+  const cameraPosition: [number, number, number] = [0, 0.8, 2.5];
 
   const handleTimeFrameChange = (interval: string) => {
     setSelectedTimeFrame(interval);
@@ -46,58 +81,56 @@ export default function IslandTradingScene() {
       {/* Fill light to illuminate the island from the front */}
       <directionalLight position={[0, 3, 10]} intensity={0.5} color="#feb47b" />
       
-      {/* Position camera at the front edge of the island, looking outward */}
-      <PerspectiveCamera makeDefault position={[0, 0.6, 2]} fov={60} />
+      {/* Position camera to look toward the billboard */}
+      <PerspectiveCamera 
+        makeDefault 
+        position={cameraPosition} 
+        fov={60} 
+      />
+      
+      {/* Orbit controls - initially disabled, press '0' to enable/disable */}
       <OrbitControls 
-        enablePan={false}
+        ref={controlsRef}
+        enablePan={true}
         enableZoom={true}
-        minPolarAngle={Math.PI / 6}
-        maxPolarAngle={Math.PI / 2.5}
+        minPolarAngle={Math.PI / 12}
+        maxPolarAngle={Math.PI / 1.5}
         minDistance={2}
-        maxDistance={5}
-        enableRotate={false}
-        target={[0, 0, -5]}
+        maxDistance={20}
+        enableRotate={true}
+        enabled={false} // Start with disabled controls
+        target={[0, 0.9, -4]} // Target the billboard on the boat
       />
       
       <Suspense fallback={null}>
-        {/* Island under the camera */}
-        <Island position={[0, -0.2, 0]} scale={[2.5, 0.5, 3]} />
+        {/* Island moved backward (positive Z direction) to create more space */}
+        <Island position={[0, -0.2, 5]} scale={[1, 0.5, 1]} />
         
         {/* Water in front of the island */}
-        <Ocean position={[0, -0.4, -10]} />
+        <Ocean position={[0, -0.4, -6]} />
         
-        {/* Palm tree on the right side of the island */}
-        <PalmTree position={[2, 0.2, 0.5]} scale={[0.6, 0.6, 0.6]} />
-        
-        {/* Small palm tree on the left for balance */}
-        <PalmTree position={[-2, 0.2, 0.5]} scale={[0.4, 0.4, 0.4]} />
+        {/* Palm trees moved with the island */}
+        <PalmTree position={[1.5, 0.2, 5]} scale={[0.5, 0.5, 0.5]} />
+        <PalmTree position={[-1.5, 0.2, 5]} scale={[0.3, 0.3, 0.3]} />
         
         {/* Sunset behind the water */}
-        <Sunset position={[0, 3, -20]} />
+        <Sunset position={[0, 3, -15]} />
         
-        {/* Boat on top of the water */}
+        {/* Boat on top of the water - position unchanged */}
         <Boat 
-          position={[0, -0.1, -5]} 
+          position={[0, -0.1, -4]} 
           selectedPair={selectedPair}
           selectedTimeFrame={selectedTimeFrame}
         />
         
-        {/* Selectors in the sand - in front of the camera */}
-        <TimeFrameSelector3D 
-          position={[-1.2, 0.0, 1.2]} 
-          selectedTimeFrame={selectedTimeFrame} 
-          onTimeFrameChange={handleTimeFrameChange} 
-        />
-        
-        <AssetSelector3D 
-          position={[1.2, 0.0, 1.2]} 
-          selectedPair={selectedPair} 
-          onPairSelect={handlePairSelect} 
-        />
+        {/* Selectors temporarily removed */}
       </Suspense>
     </Canvas>
   );
 }
+
+// TimeFrameSelector3D and AssetSelector3D components are kept in the file
+// but not rendered in the scene for now
 
 interface TimeFrameSelector3DProps {
   position: [number, number, number];

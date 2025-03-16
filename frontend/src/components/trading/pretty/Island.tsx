@@ -12,10 +12,10 @@ interface IslandProps {
 export default function Island({ position = [0, 0, 0], scale = [1, 1, 1] }: IslandProps) {
   const islandRef = useRef<THREE.Mesh>(null);
   
-  // Low poly island geometry - more like a beach platform
+  // Completely redesigned low-poly beach platform
   const createIslandGeometry = () => {
-    // Create a wider, flatter island shape (more like a platform)
-    const geometry = new THREE.CylinderGeometry(3, 3.2, 0.3, 12, 1, false);
+    // Start with a box geometry instead of a cylinder for better control
+    const geometry = new THREE.BoxGeometry(6, 0.3, 7, 10, 1, 10);
     
     // Add some subtle height variation for a more natural look
     const positionAttr = geometry.getAttribute('position');
@@ -24,22 +24,35 @@ export default function Island({ position = [0, 0, 0], scale = [1, 1, 1] }: Isla
     for (let i = 0; i < positionAttr.count; i++) {
       vertex.fromBufferAttribute(positionAttr, i);
       
-      // Only modify vertices that are not on the bottom face
-      if (vertex.y > -0.14) {
+      // Only modify top vertices
+      if (vertex.y > 0) {
         // Add very subtle random variation to the surface
-        if (Math.random() > 0.7 && vertex.y > 0) {
+        if (Math.random() > 0.7) {
           vertex.y += Math.random() * 0.05;
         }
         
-        // Make the front part of the island (negative Z) lower for beach effect
-        if (vertex.z < 0 && vertex.y > 0) {
-          vertex.y -= Math.abs(vertex.z) * 0.03;
+        // CRITICAL: Drastically shrink the front part of the island (positive Z)
+        // This is the part visible to the camera
+        if (vertex.z > 0) {
+          // Scale Z coordinate to only 20% of original (80% reduction)
+          vertex.z = vertex.z * 0.2;
         }
         
-        // Add subtle radial variation at the edges
-        const distance = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
-        if (distance > 2.5 && vertex.y > 0) {
-          vertex.y -= (distance - 2.5) * 0.08;
+        // Taper edges
+        const distanceFromCenter = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
+        const maxDistance = 3.5;
+        if (distanceFromCenter > 2.5) {
+          const falloff = (distanceFromCenter - 2.5) / (maxDistance - 2.5);
+          vertex.y -= falloff * 0.2;
+        }
+        
+        // Round corners by pushing in diagonal vertices
+        if (Math.abs(vertex.x) > 2.5 && Math.abs(vertex.z) > 2.5) {
+          const cornerFalloff = 0.2;
+          if (vertex.x > 0) vertex.x -= cornerFalloff;
+          if (vertex.x < 0) vertex.x += cornerFalloff;
+          if (vertex.z > 0) vertex.z -= cornerFalloff;
+          if (vertex.z < 0) vertex.z += cornerFalloff;
         }
       }
       
