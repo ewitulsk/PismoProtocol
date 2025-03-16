@@ -18,7 +18,7 @@ const CollateralPositions: React.FC = () => {
 
   return (
     <section className="card">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center max-sm:flex-wrap">
         <h2 className="header-title">
           Collateral Positions
         </h2>
