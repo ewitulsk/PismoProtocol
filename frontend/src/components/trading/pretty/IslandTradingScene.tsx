@@ -124,27 +124,39 @@ export default function IslandTradingScene() {
           selectedTimeFrame={selectedTimeFrame}
         />
         
-        {/* Selectors temporarily removed */}
+        {/* Selectors moved further in front of the camera, closer to the end of the island */}
+        <TimeFrameSelector3D 
+          position={[-0.4, -0.3, 0.5]} 
+          scale={[0.15, 0.15, 0.15]}
+          selectedTimeFrame={selectedTimeFrame} 
+          onTimeFrameChange={handleTimeFrameChange} 
+        />
+        
+        <AssetSelector3D 
+          position={[0.4, -0.3, 0.5]} 
+          scale={[0.15, 0.15, 0.15]}
+          selectedPair={selectedPair} 
+          onPairSelect={handlePairSelect} 
+        />
       </Suspense>
     </Canvas>
   );
 }
 
-// TimeFrameSelector3D and AssetSelector3D components are kept in the file
-// but not rendered in the scene for now
-
+// TimeFrameSelector3D component with added scale prop
 interface TimeFrameSelector3DProps {
   position: [number, number, number];
+  scale?: [number, number, number];
   selectedTimeFrame: string;
   onTimeFrameChange: (value: string) => void;
 }
 
-function TimeFrameSelector3D({ position, selectedTimeFrame, onTimeFrameChange }: TimeFrameSelector3DProps) {
+function TimeFrameSelector3D({ position, scale = [1, 1, 1], selectedTimeFrame, onTimeFrameChange }: TimeFrameSelector3DProps) {
   const selectedLabel = timeframes.find(tf => tf.value === selectedTimeFrame)?.label || "1H";
   const [isOpen, setIsOpen] = useState(false);
   
   return (
-    <group position={position} rotation={[0, 0, 0]}>
+    <group position={position} rotation={[0, 0, 0]} scale={scale}>
       {/* Base for the selector - more visible as a raised platform */}
       <mesh position={[0, -0.05, 0]} receiveShadow castShadow>
         <boxGeometry args={[2, 0.15, 1]} />
@@ -212,13 +224,15 @@ function TimeFrameSelector3D({ position, selectedTimeFrame, onTimeFrameChange }:
   );
 }
 
+// AssetSelector3D component with added scale prop
 interface AssetSelector3DProps {
   position: [number, number, number];
+  scale?: [number, number, number];
   selectedPair: TradingPair;
   onPairSelect: (pair: TradingPair) => void;
 }
 
-function AssetSelector3D({ position, selectedPair, onPairSelect }: AssetSelector3DProps) {
+function AssetSelector3D({ position, scale = [1, 1, 1], selectedPair, onPairSelect }: AssetSelector3DProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -231,7 +245,7 @@ function AssetSelector3D({ position, selectedPair, onPairSelect }: AssetSelector
     : tradingPairs;
   
   return (
-    <group position={position} rotation={[0, 0, 0]}>
+    <group position={position} rotation={[0, 0, 0]} scale={scale}>
       {/* Base for the selector - more visible as a raised platform */}
       <mesh position={[0, -0.05, 0]} receiveShadow castShadow>
         <boxGeometry args={[2, 0.15, 1]} />
