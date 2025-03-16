@@ -55,7 +55,7 @@ const AssetSelector: React.FC<AssetSelectorProps> = ({
     <div className="relative ml-auto" ref={dropdownRef}>
       <button
         onClick={toggleDropdown}
-        className="btn-primary flex items-center justify-between min-w-[120px] max-sm:w-full max-sm:text-center"
+        className="btn-primary flex items-center justify-between min-w-[120px] max-sm:max-w-[150px] max-sm:text-sm"
       >
         <span>{selectedPair.displayName}</span>
         <svg
@@ -75,7 +75,7 @@ const AssetSelector: React.FC<AssetSelectorProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-10 mt-2 rounded-xl shadow-lg w-64 bg-darkBackground border border-mainBackground">
+        <div className="absolute right-0 z-10 mt-2 rounded-xl shadow-lg w-64 max-sm:w-56 max-sm:right-0 bg-darkBackground border border-mainBackground">
           <div className="p-2">
             <input
               type="text"

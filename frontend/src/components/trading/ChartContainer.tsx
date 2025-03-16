@@ -26,15 +26,17 @@ const ChartContainer: React.FC = () => {
 
   return (
     <section className="trading-chart">
-      <div className="trading-controls">
-        <TimeFrameSelector
-          selectedTimeFrame={selectedInterval}
-          onTimeFrameChange={handleTimeFrameChange}
-        />
-        <AssetSelector 
-          selectedPair={selectedPair} 
-          onPairSelect={handlePairSelect}
-        />
+      <div className="trading-controls max-sm:flex-col max-sm:space-y-2">
+        <div className="flex justify-between max-sm:w-full items-center">
+          <TimeFrameSelector
+            selectedTimeFrame={selectedInterval}
+            onTimeFrameChange={handleTimeFrameChange}
+          />
+          <AssetSelector 
+            selectedPair={selectedPair} 
+            onPairSelect={handlePairSelect}
+          />
+        </div>
       </div>
       <div className="relative bg-mainBackground rounded-lg w-full" style={{ height: 'calc(100% - 40px)' }}>
         {/* Live price overlay component */}

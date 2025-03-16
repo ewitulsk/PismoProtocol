@@ -55,7 +55,7 @@ const TimeFrameSelector: React.FC<TimeFrameSelectorProps> = ({
     <div className="timeframe-dropdown" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="timeframe-dropdown-button"
+        className="timeframe-dropdown-button max-sm:text-xs max-sm:px-2 max-sm:py-1"
       >
         <span>{selectedLabel}</span>
         <svg
@@ -75,8 +75,8 @@ const TimeFrameSelector: React.FC<TimeFrameSelectorProps> = ({
       </button>
 
       {isOpen && (
-        <div className="timeframe-dropdown-content">
-          <div className="py-1">
+        <div className="timeframe-dropdown-content max-sm:transform max-sm:left-0 max-sm:right-auto">
+          <div className="py-1 max-sm:grid max-sm:grid-cols-4 max-sm:gap-1">
             {timeframes.map((timeframe) => (
               <button
                 key={timeframe.value}
@@ -84,7 +84,7 @@ const TimeFrameSelector: React.FC<TimeFrameSelectorProps> = ({
                   onTimeFrameChange(timeframe.value);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left block px-4 py-2 text-sm hover:bg-mainBackground ${
+                className={`w-full text-left block max-sm:text-center px-4 max-sm:px-2 py-2 max-sm:py-1.5 text-sm max-sm:text-xs hover:bg-mainBackground ${
                   timeframe.value === selectedTimeFrame ? "bg-mainBackground text-primary" : "text-white"
                 }`}
               >

@@ -17,7 +17,7 @@ const TradePanel: React.FC = () => {
 
   return (
     <section className="card">
-      <div className="flex gap-4 mb-6">
+      <div className="flex gap-4 mb-6 max-sm:gap-2">
         <button
           className={`position-button ${position === "Long" ? "position-button-active" : "position-button-inactive"}`}
           onClick={() => handlePositionClick("Long")}
