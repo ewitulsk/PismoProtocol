@@ -24,16 +24,16 @@
 
 @media (max-width: 767px) {
   .trading-chart {
-    height: calc(70vh); /* Smaller height on mobile */
+    height: calc(80vh); /* Larger height for better mobile visibility */
   }
 }
 
 .trading-sidebar {
-  @apply flex flex-col gap-3 w-[350px] max-md:w-full !important;
+  @apply flex flex-col gap-3 w-[350px] max-md:w-full max-sm:gap-2 !important;
 }
 
 .trading-controls {
-  @apply flex items-center gap-3 mb-1 max-sm:flex-wrap !important;
+  @apply flex items-center gap-3 mb-1 !important;
 }
 
 /* Timeframe dropdown styling */
@@ -46,12 +46,12 @@
 }
 
 .timeframe-dropdown-content {
-  @apply absolute z-20 mt-1 rounded-md shadow-lg min-w-[120px] bg-darkBackground border border-mainBackground !important;
+  @apply absolute z-20 mt-1 rounded-md shadow-lg min-w-[120px] max-sm:min-w-[200px] bg-darkBackground border border-mainBackground !important;
 }
 
 /* LivePriceOverlay component */
 .live-price-overlay {
-  @apply absolute top-2 left-2 z-10 bg-darkBackground bg-opacity-80 text-white px-3 py-1 rounded-md flex items-center gap-2 !important;
+  @apply absolute top-2 left-2 z-10 bg-darkBackground bg-opacity-80 text-white px-3 py-1 rounded-md flex items-center gap-2 max-sm:text-xs max-sm:px-2 max-sm:py-0.5 !important;
 }
 
 /* Hide TradingView elements we don't want */
