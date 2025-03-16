@@ -45,9 +45,8 @@ export default function IslandTradingScene() {
   const [selectedPair, setSelectedPair] = useState<TradingPair>(tradingPairs[0]);
   const { controlsRef } = KeyboardControls();
   
-  // Adjusted camera position to look toward the billboard
-  // Raised the camera height and moved it back slightly
-  const cameraPosition: [number, number, number] = [0, 0.8, 2.5];
+  // Adjusted camera position - moved back slightly to show more of the palm tree and island
+  const cameraPosition: [number, number, number] = [0, 0.9, 3.5];
 
   const handleTimeFrameChange = (interval: string) => {
     setSelectedTimeFrame(interval);
@@ -109,9 +108,11 @@ export default function IslandTradingScene() {
         {/* Water in front of the island */}
         <Ocean position={[0, -0.4, -6]} />
         
-        {/* Palm trees moved with the island */}
-        <PalmTree position={[1.5, 0.2, 5]} scale={[0.5, 0.5, 0.5]} />
-        <PalmTree position={[-1.5, 0.2, 5]} scale={[0.3, 0.3, 0.3]} />
+        {/* Palm tree moved forward, to the left, and made smaller while still touching the island */}
+        <PalmTree 
+          position={[-1.0, -0.05, 3.0]} 
+          scale={[0.5, 0.5, 0.5]} 
+        />
         
         {/* Sunset behind the water */}
         <Sunset position={[0, 3, -15]} />

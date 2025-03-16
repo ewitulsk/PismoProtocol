@@ -40,6 +40,12 @@ export default function Boat({
     boatRef.current.rotation.z = Math.sin(time * 0.3) * 0.08;
   });
   
+  // Calculate the exact dimensions needed for the chart
+  // Billboard dimensions are 2.5 x 1.4 units
+  const billboardWidth = 2.5;
+  const billboardHeight = 1.4;
+  const scale = 1.25;
+  
   return (
     <group ref={boatRef} position={position} rotation={[0, Math.PI, 0]}>
       {/* Boat hull (simple low-poly shape) */}
@@ -64,28 +70,39 @@ export default function Boat({
       <group position={[0, 1, 0]} ref={billboardRef}>
         {/* Billboard frame */}
         <mesh castShadow position={[0, 0, 0]}>
-          <boxGeometry args={[2.5, 1.4, 0.05]} />
+          <boxGeometry args={[billboardWidth, billboardHeight, 0.05]} />
           <meshStandardMaterial color="#150726" />
         </mesh>
         
-        {/* Trading chart */}
+        {/* Trading chart - exactly matching the billboard dimensions */}
         <Html 
           transform 
-          position={[0, 0, 0.03]} 
-          scale={0.18}
+          position={[0, 0, 0.026]} 
+          scale={scale} 
           rotation={[0, Math.PI, 0]}
           zIndexRange={[0, 1]}
           distanceFactor={1}
           style={{
-            width: '800px',
-            height: '400px',
+            width: '830px',
+            height: '465px', // Precisely matched to billboard dimensions
             backgroundColor: 'transparent',
             overflow: 'hidden',
-            borderRadius: '8px',
-            border: '1px solid #00fff7'
+            borderRadius: '0px',
+            border: 'none',
+            margin: '0',
+            padding: '0'
           }}
         >
-          <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+          <div style={{ 
+            width: '100%', 
+            height: '100%', 
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0',
+            padding: '0'
+          }}>
             <LightweightChartWidget 
               symbol={formatSymbol(selectedPair)} 
               interval={selectedTimeFrame}
