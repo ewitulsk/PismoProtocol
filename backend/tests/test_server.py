@@ -46,7 +46,7 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(data["totalValue"], 1234.56)
         mock_calc.assert_called_once_with(
-            "testnet", "0xsample_owner", "0xsample_account", "0xsample_contract"
+            "0xsample_owner", "0xsample_account", "0xsample_contract"
         )
     
     def test_calculate_total_account_value_missing_params(self):
@@ -63,7 +63,84 @@ class TestServerEndpoints(unittest.TestCase):
         # Assertions
         self.assertEqual(response.status_code, 400)
         self.assertTrue("error" in data)
-
+    
+    @patch('server.calc_total_vault_values')
+    def test_calculate_total_value_locked(self, mock_calc):
+        # Configure mock to return a predefined value
+        mock_calc.return_value = {
+            "totalValueLocked": 9876.54,
+            "vaults": [
+                {
+                    "type": "0xpackage::lp::Vault<0xpackage::coin::COIN, 0xpackage::coin::COIN>",
+                    "coin": 1000.0,
+                    "coin_type": "0xpackage::coin::COIN",
+                    "value": 5000.0
+                },
+                {
+                    "type": "0xpackage::lp::Vault<0xpackage::token::TOKEN, 0xpackage::token::TOKEN>",
+                    "coin": 500.0,
+                    "coin_type": "0xpackage::token::TOKEN",
+                    "value": 4876.54
+                }
+            ],
+            "count": 2
+        }
+        
+        # Make request to the endpoint
+        response = self.app.post(
+            '/api/calculateTotalValueLocked',
+            content_type='application/json'
+        )
+        
+        # Parse response
+        data = json.loads(response.data)
+        
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["totalValueLocked"], 9876.54)
+        self.assertEqual(len(data["vaults"]), 2)
+        self.assertEqual(data["count"], 2)
+        mock_calc.assert_called_once()
+    
+    @patch('server.calc_total_vault_values')
+    def test_calculate_total_value_locked_error(self, mock_calc):
+        # Configure mock to raise an exception
+        mock_calc.side_effect = ValueError("Configuration error")
+        
+        # Make request to the endpoint
+        response = self.app.post(
+            '/api/calculateTotalValueLocked',
+            content_type='application/json'
+        )
+        
+        # Parse response
+        data = json.loads(response.data)
+        
+        # Assertions
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue("error" in data)
+        self.assertEqual(data["error"], "Configuration error")
+        mock_calc.assert_called_once()
+    
+    @patch('server.calc_total_vault_values')
+    def test_calculate_total_value_locked_exception(self, mock_calc):
+        # Configure mock to raise an unexpected exception
+        mock_calc.side_effect = Exception("Unexpected error")
+        
+        # Make request to the endpoint
+        response = self.app.post(
+            '/api/calculateTotalValueLocked',
+            content_type='application/json'
+        )
+        
+        # Parse response
+        data = json.loads(response.data)
+        
+        # Assertions
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue("error" in data)
+        self.assertTrue("Failed to calculate total value locked" in data["error"])
+        mock_calc.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()
