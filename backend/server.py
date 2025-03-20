@@ -4,7 +4,10 @@ import asyncio
 import concurrent.futures
 from functools import wraps
 
-from async_backend import calc_total_account_value
+from async_backend import (
+    calc_total_account_value,
+    calc_total_vault_values
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -41,14 +44,30 @@ async def calculate_total_account_value():
         contract = data.get('contract')
         
         # Use the async version of the calculation function
-        total_value = await calc_total_account_value(network, address, account, contract)
+        total_value = await calc_total_account_value(address, account, contract)
         
         return jsonify({"totalValue": total_value}), 200
     
     except Exception as e:
         print(f"Error calculating total account value: {str(e)}")
         return jsonify({"error": f"Failed to calculate total account value: {str(e)}"}), 500
+    
 
+@app.route('/api/calculateTotalValueLocked', methods=['POST'])
+@async_route
+async def calculate_total_value_locked():
+    try:
+        # Calculate total value locked using config-based vault addresses
+        result = await calc_total_vault_values()
+        
+        return jsonify(result), 200
+    
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        print(f"Error calculating total value locked: {str(e)}")
+        return jsonify({"error": f"Failed to calculate total value locked: {str(e)}"}), 500
+    
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)

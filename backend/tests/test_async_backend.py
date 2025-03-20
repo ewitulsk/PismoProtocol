@@ -13,9 +13,11 @@ from async_backend import (
     get_owned_objects,
     get_collateral_objects,
     form_coin_type_prgm_triples,
-    get_program_objects,
+    get_objects,
     get_price_feed,
-    calc_total_account_value
+    calc_total_account_value,
+    parse_vault_token_type,
+    calc_total_vault_values  # Add the new function
 )
 
 class AsyncMock(MagicMock):
@@ -102,7 +104,7 @@ class TestAsyncBackendFunctions(unittest.TestCase):
         # Run the coroutine
         async def run_test():
             session = aiohttp.ClientSession()
-            result = await get_program_objects(session, 'testnet', ['0xsample_program_id'])
+            result = await get_objects(session, 'testnet', ['0xsample_program_id'])
             await session.close()
             return result
         
@@ -124,7 +126,9 @@ class TestAsyncBackendFunctions(unittest.TestCase):
         # Run the coroutine
         async def run_test():
             session = aiohttp.ClientSession()
-            result = await get_price_feed(session, '0xsample_feed_id')
+            # Include the pyth URL parameter
+            pyth_url = "https://hermes.pyth.network/v2/updates/price/latest?"
+            result = await get_price_feed(session, '0xsample_feed_id', pyth_url)
             await session.close()
             return result
         
@@ -135,17 +139,23 @@ class TestAsyncBackendFunctions(unittest.TestCase):
         self.assertEqual(result, self.mock_data["price_feed_response"]["parsed"][0])
     
     @patch('async_backend.form_coin_type_prgm_triples')
-    @patch('async_backend.get_program_objects')
+    @patch('async_backend.get_objects')
     @patch('async_backend.get_price_feed')
-    def test_calc_total_account_value_async(self, mock_get_price, mock_get_program, mock_form_triples):
+    @patch('async_backend.load_config')
+    def test_calc_total_account_value_async(self, mock_load_config, mock_get_price, mock_get_program, mock_form_triples):
         # Configure mocks
+        mock_load_config.return_value = {
+            "sui_api_url": "https://fullnode.testnet.sui.io:443",
+            "contract_address": "0xsample_contract",
+            "pyth_price_feed_url": "https://hermes.pyth.network/v2/updates/price/latest?"
+        }
         mock_form_triples.return_value = self.mock_data["collateral_triples"]
         mock_get_program.return_value = self.mock_data["program_objects"]
         mock_get_price.return_value = self.mock_data["price_feed_response"]["parsed"][0]
         
         # Run the coroutine
         async def run_test():
-            result = await calc_total_account_value('testnet', '0xsample_owner', '0xsample_account', '0xsample_contract')
+            result = await calc_total_account_value('0xsample_owner', '0xsample_account', '0xsample_contract')
             return result
         
         loop = asyncio.get_event_loop()
@@ -153,6 +163,82 @@ class TestAsyncBackendFunctions(unittest.TestCase):
         
         # Assertion - verify the function returns a value
         self.assertIsInstance(result, float)
+    
+    @patch('async_backend.get_objects')
+    @patch('async_backend.get_price_feed')
+    @patch('async_backend.load_config')
+    def test_calc_total_vault_values_async(self, mock_load_config, mock_get_price, mock_get_objects):
+        # Configure mocks
+        mock_load_config.return_value = {
+            "sui_api_url": "https://fullnode.testnet.sui.io:443",
+            "vault_addresses": ["0xvault1", "0xvault2"],
+            "contract_global": "0xglobal_address",
+            "pyth_price_feed_url": "https://hermes.pyth.network/v2/updates/price/latest?"
+        }
+        
+        # Mock get_objects to return vault objects and global object
+        def mock_get_objects_side_effect(session, sui_api_url, addresses):
+            if "0xglobal_address" in addresses:
+                return [self.mock_data["global_object"]]
+            else:
+                return self.mock_data["vault_objects"]
+        
+        mock_get_objects.side_effect = mock_get_objects_side_effect
+        
+        # Update the mock_get_price to return the correct price feed response
+        mock_get_price.return_value = {
+            "price": {
+                "price": "10000000",
+                "expo": -8
+            }
+        }
+        
+        # Run the coroutine
+        async def run_test():
+            result = await calc_total_vault_values()
+            return result
+        
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(run_test())
+        
+        # Assertions
+        self.assertIn("totalValueLocked", result)
+        self.assertIn("vaults", result)
+        self.assertIn("count", result)
+        self.assertIsInstance(result["totalValueLocked"], float)
+        self.assertIsInstance(result["vaults"], list)
+        self.assertIsInstance(result["count"], int)
+    
+    @patch('async_backend.load_config')
+    def test_calc_total_vault_values_missing_config_async(self, mock_load_config):
+        # Configure mock to return incomplete config - now including missing pyth URL
+        mock_load_config.return_value = {
+            "sui_api_url": "https://fullnode.testnet.sui.io:443",
+            "vault_addresses": ["0xvault1", "0xvault2"],
+            # Missing contract_global and pyth_price_feed_url
+        }
+        
+        # Run the coroutine
+        async def run_test():
+            with self.assertRaises(ValueError):
+                await calc_total_vault_values()
+        
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(run_test())
+    
+    async def test_parse_vault_token_type(self):
+        # Test valid input
+        token_type = "0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::lp::Vault<0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::test_coin::TEST_COIN, 0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::test_coin::TEST_COIN>"
+        result = await parse_vault_token_type(token_type)
+        
+        # Assertions
+        expected_coin_type = "0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::test_coin::TEST_COIN"
+        self.assertEqual(result, expected_coin_type)
+        
+        # Test with single type parameter
+        token_type_single = "0xpackage::lp::Vault<0xpackage::coin::COIN>"
+        result_single = await parse_vault_token_type(token_type_single)
+        self.assertEqual(result_single, "0xpackage::coin::COIN")
 
 if __name__ == '__main__':
     unittest.main()

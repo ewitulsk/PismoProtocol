@@ -6,35 +6,29 @@
       "data": [
         {
           "data": {
-            "objectId": "0xsample_object_id",
+            "objectId": "0xsample_collateral_id",
             "version": "1",
-            "digest": "sample_digest",
-            "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>",
+            "digest": "0xsample_digest",
+            "type": "0xsample_contract::collateral::Collateral<0xsample_coin::sample::SAMPLE_COIN>",
             "content": {
               "fields": {
                 "account_id": "0xsample_account",
                 "coin": "100",
-                "program_id": "0xsample_program_id",
-                "id": {
-                  "id": "0xsample_id"
-                },
-                "collateral_index": "0"
-              },
-              "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>"
+                "program_id": "0xsample_program_id"
+              }
             }
           }
         },
         {
           "data": {
-            "objectId": "0xnon_collateral_object",
+            "objectId": "0xother_id",
             "version": "1",
-            "digest": "sample_digest",
-            "type": "0xsample_contract::other_type::Other",
+            "digest": "0xother_digest",
+            "type": "0xsample_contract::other::Object",
             "content": {
               "fields": {
-                "value": "200"
-              },
-              "type": "0xsample_contract::other_type::Other"
+                "data": "some data"
+              }
             }
           }
         }
@@ -45,28 +39,23 @@
   },
   "collateral_object": {
     "data": {
-      "objectId": "0xsample_object_id",
+      "objectId": "0xsample_collateral_id",
       "version": "1",
-      "digest": "sample_digest",
-      "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>",
+      "digest": "0xsample_digest",
+      "type": "0xsample_contract::collateral::Collateral<0xsample_coin::sample::SAMPLE_COIN>",
       "content": {
         "fields": {
           "account_id": "0xsample_account",
           "coin": "100",
-          "program_id": "0xsample_program_id",
-          "id": {
-            "id": "0xsample_id"
-          },
-          "collateral_index": "0"
-        },
-        "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>"
+          "program_id": "0xsample_program_id"
+        }
       }
     }
   },
   "collateral_triples": [
     {
       "coin": "100",
-      "type": "0xsample_contract::collateral::Collateral<0xsample_contract::test_coin::TEST_COIN>",
+      "type": "0xsample_contract::collateral::Collateral<0xsample_coin::sample::SAMPLE_COIN>",
       "program_id": "0xsample_program_id"
     }
   ],
@@ -75,29 +64,19 @@
       "data": {
         "objectId": "0xsample_program_id",
         "version": "1",
-        "digest": "sample_digest",
+        "digest": "0xprogram_digest",
         "type": "0xsample_contract::programs::Program",
-        "owner": {
-          "Shared": {
-            "initial_shared_version": "1"
-          }
-        },
         "content": {
           "fields": {
-            "id": {
-              "id": "0xsample_program_id_inner"
-            },
             "supported_collateral": [
               {
-                "type": "0xsample_contract::programs::CollateralIdentifier",
                 "fields": {
-                  "price_feed_id_bytes": [35, 215, 49, 81, 19, 245, 177, 211, 186, 122, 131, 96, 76, 68, 185, 77, 121, 244, 253, 105, 175, 119, 248, 4, 252, 127, 146, 10, 109, 198, 87, 68],
-                  "token_decimals": 10,
-                  "token_info": "sample_contract::test_coin::TEST_COIN"
+                  "token_info": "sample_coin::sample::SAMPLE_COIN",
+                  "token_decimals": 8,
+                  "price_feed_id_bytes": [1, 2, 3, 4]
                 }
               }
-            ],
-            "shared_price_decimals": 8
+            ]
           }
         }
       }
@@ -116,23 +95,67 @@
   "price_feed_response": {
     "parsed": [
       {
-        "id": "0xsample_price_id",
+        "id": "0xsample_feed_id",
         "price": {
-          "price": "150000000",
-          "conf": "1250000",
+          "price": "10000000",
+          "conf": "123456",
           "expo": -8,
-          "publish_time": 1685447858
-        },
-        "ema_price": {
-          "price": "149500000",
-          "conf": "1300000",
-          "expo": -8,
-          "publish_time": 1685447858
+          "publishTime": 1651651651
         }
       }
     ],
     "raw": [
       "sample_raw_data"
     ]
+  },
+  "vault_objects": [
+    {
+      "data": {
+        "objectId": "0xvault1",
+        "version": "1",
+        "digest": "0xvault1_digest",
+        "type": "0xpackage::lp::Vault<0xpackage::coin::COIN, 0xpackage::coin::COIN>",
+        "content": {
+          "fields": {
+            "coin": "1000",
+            "balance": "1000"
+          }
+        }
+      }
+    },
+    {
+      "data": {
+        "objectId": "0xvault2",
+        "version": "1",
+        "digest": "0xvault2_digest",
+        "type": "0xpackage::lp::Vault<0xpackage::token::TOKEN, 0xpackage::token::TOKEN>",
+        "content": {
+          "fields": {
+            "coin": "500",
+            "balance": "500"
+          }
+        }
+      }
+    }
+  ],
+  "global_object": {
+    "data": {
+      "objectId": "0xglobal_address",
+      "version": "1",
+      "digest": "0xglobal_digest",
+      "type": "0xpackage::global::Global",
+      "content": {
+        "fields": {
+          "supported_lp": [
+            "package::coin::COIN",
+            "package::token::TOKEN"
+          ],
+          "price_feed_bytes": [
+            [1, 2, 3, 4, 5, 6, 7, 8],
+            [9, 10, 11, 12, 13, 14, 15, 16]
+          ]
+        }
+      }
+    }
   }
 }
