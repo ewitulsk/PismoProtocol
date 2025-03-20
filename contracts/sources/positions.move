@@ -1,4 +1,9 @@
 module pismo_protocol::positions;
+use pyth::price_info;
+use pyth::price_identifier;
+use pyth::price;
+use pyth::pyth;
+use pyth::price_info::PriceInfoObject;
 
 use sui::clock::Clock;
 use sui::coin::Coin;
@@ -6,7 +11,7 @@ use sui::balance::Balance;
 use sui::transfer;
 use sui::object::UID;
 
-use pismo_protocol::tokens::TokenIdentifier;
+use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth, get_price_pyth};
 
 const E_BAD_POSITION: u64 = 225;
 
@@ -36,7 +41,7 @@ public fun u64_to_position_type(pos_id: u64): PositionType {
     }
 }
 
-public(package) fun new_position(
+public(package) fun new_position (
     pos_type: PositionType,
     amount: u64,
     entry_price: u64,
@@ -53,3 +58,9 @@ public(package) fun new_position(
         supported_positions_token_i
     }
 }
+
+// public(package) fun close_position(
+//     position: Position
+// ){
+
+// }

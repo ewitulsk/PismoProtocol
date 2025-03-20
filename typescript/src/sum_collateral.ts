@@ -9,8 +9,8 @@ import * as dotenv from 'dotenv';
 // Load environment variables from .env file
 dotenv.config({ path: '.env' });
 
-const SUI_PACKAGE_ID = "0x65c0b64f9bd0958037232e009618f8a2a3fc1410c80f7f6cde5ba00832406e40"
-const SUI_PROGRAM_ID = "0x3bf4039cd73cd0c9b76a8b387d07aac7763d797fe2c8ef313189dc561e3c07aa" // This will change after every deployment.
+const SUI_PACKAGE_ID = "0x1c1b0e695b4f7925d37a3644fd62120134d9c3ef0d0ff32ed870b9f915e571d8"
+const SUI_PROGRAM_ID = "0xe5dc266a6f378c1f2048c3f00421de58723d51f3b995b1c08675a5368c95f671" // This will change after every deployment.
 
 // Pyth contract addresses for Sui testnet
 // These values should be updated based on the network you're using
@@ -317,22 +317,22 @@ async function main() {
         console.log(`\nTotal number of supported collateral tokens: ${tokens.length}`);
         
         // Create a new transaction
-        const tx = new Transaction();
+        const set_tx = new Transaction();
         
         // Update Pyth price feeds
-        const priceInfoResults = await prepUpdatePythPriceFeeds(client, tx, tokens);
-        
+        const priceInfoResults = await prepUpdatePythPriceFeeds(client, set_tx, tokens);
+
         if (priceInfoResults && priceInfoResults.length > 0) {
             // Add collateral value update calls to the transaction
-            // const accountIds = await updateCollateralValuesPyth(client, tx, priceInfoResults, SUI_PROGRAM_ID, sender);
+            const accountIds = await updateCollateralValuesPyth(client, set_tx, priceInfoResults, SUI_PROGRAM_ID, sender);
             
             // After updating all collateral values, sum them up for each account
-            // await sumCollateralValuesForAccounts(tx, accountIds);
+            await sumCollateralValuesForAccounts(set_tx, accountIds);
             
             // Sign and execute the transaction
             try {
                 const txResult = await client.signAndExecuteTransaction({
-                    transaction: tx,
+                    transaction: set_tx,
                     signer: keypair,
                 });
                 console.log(`Transaction executed successfully. Digest: ${txResult.digest}`);

@@ -1,17 +1,19 @@
 import { SuiPythClient } from "@pythnetwork/pyth-sui-js";
 import { SuiPriceServiceConnection } from './SuiPriceServiceConnection';
-import { getFullnodeUrl, SuiClient, SuiParsedData } from '@mysten/sui/client';
+import { getFullnodeUrl, SuiClient, SuiObjectChange, SuiParsedData } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { bcs } from '@mysten/bcs';
 import * as dotenv from 'dotenv';
+import { execSync } from "child_process";
+import path from "path";
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env' });
 
-const SUI_PACKAGE_ID = "0x65c0b64f9bd0958037232e009618f8a2a3fc1410c80f7f6cde5ba00832406e40"
+const SUI_PACKAGE_ID = "0x1c1b0e695b4f7925d37a3644fd62120134d9c3ef0d0ff32ed870b9f915e571d8"
 const SUI_PROGRAM_IDS = [
-    "0x3bf4039cd73cd0c9b76a8b387d07aac7763d797fe2c8ef313189dc561e3c07aa"
+    "0xe5dc266a6f378c1f2048c3f00421de58723d51f3b995b1c08675a5368c95f671"
 ] // This will change after every deployment.
 
 async function main() {
@@ -41,7 +43,7 @@ async function main() {
         )
     )];
     let token_decimals = 10;
-    
+
     /////////////// INIT PROGRAM
 
     // const admin_cap = `${SUI_PACKAGE_ID}::main::AdminCap`;
@@ -71,14 +73,16 @@ async function main() {
     //     ],
     // });
      
-    // for(let i = 0; i < 3; i++){
-    //     // Create the wallet from the client and keypair
-    //     let tx = await client.signAndExecuteTransaction({
-    //         transaction: tx0,
-    //         signer: keypair,
-    //     });
-    //     console.log(tx.digest);
-    // }
+    // // Create the wallet from the client and keypair
+    // let tx = await client.signAndExecuteTransaction({
+    //     transaction: tx0,
+    //     signer: keypair,
+    // });
+    // console.log(tx.digest);
+
+
+
+    
     
 
 
@@ -144,69 +148,69 @@ async function main() {
 
     /////////// POST COLLATERAL
 
-    // const accounts = await client.getOwnedObjects({
-    //     owner: sender,
-    //     filter: {
-    //         MatchAll: [
-    //             {
-    //                 StructType: `${SUI_PACKAGE_ID}::accounts::Account`
-    //             }
-    //         ]
-    //     }
-    // })
+    const accounts = await client.getOwnedObjects({
+        owner: sender,
+        filter: {
+            MatchAll: [
+                {
+                    StructType: `${SUI_PACKAGE_ID}::accounts::Account`
+                }
+            ]
+        }
+    })
 
-    // for(let program_id of SUI_PROGRAM_IDS){
-    //     console.log("Accounts: ", accounts.data[0].data?.objectId as string);
+    for(let program_id of SUI_PROGRAM_IDS){
+        console.log("Accounts: ", accounts.data[0].data?.objectId as string);
         
-    //     let account_ids = [];
-    //     for(let account of accounts.data) {
-    //         let account_obj = (account.data?.objectId as string);
-    //         let account_data = await client.getObject({id: account_obj, options: {showContent: true}});
-    //         let account_program_id = (account_data.data?.content as any)['fields']['program_id']
-    //         if (account_program_id == program_id){
-    //             account_ids.push(account_obj)
-    //         }
-    //     }
+        let account_ids = [];
+        for(let account of accounts.data) {
+            let account_obj = (account.data?.objectId as string);
+            let account_data = await client.getObject({id: account_obj, options: {showContent: true}});
+            let account_program_id = (account_data.data?.content as any)['fields']['program_id']
+            if (account_program_id == program_id){
+                account_ids.push(account_obj)
+            }
+        }
 
-    //     for(let account_id of account_ids) {
-    //         const coin_type = `${SUI_PACKAGE_ID}::test_coin::TEST_COIN`;
-    //         console.log(coin_type);
-    //         const coin = `0x2::coin::Coin<${coin_type}>`;
-    //         const coins = await client.getOwnedObjects({
-    //             owner: sender,
-    //             filter: {
-    //                 MatchAll: [
-    //                     {
-    //                         StructType: coin
-    //                     }
-    //                 ]
-    //             }
-    //         })
+        for(let account_id of account_ids) {
+            const coin_type = `${SUI_PACKAGE_ID}::test_coin::TEST_COIN`;
+            console.log(coin_type);
+            const coin = `0x2::coin::Coin<${coin_type}>`;
+            const coins = await client.getOwnedObjects({
+                owner: sender,
+                filter: {
+                    MatchAll: [
+                        {
+                            StructType: coin
+                        }
+                    ]
+                }
+            })
 
-    //         console.log(coins.data[0].data?.objectId as string);
+            console.log(coins.data[0].data?.objectId as string);
 
-    //         const post_tx = new Transaction();
-    //         const coin_obj = post_tx.object(coins.data[0].data?.objectId as string);
-    //         const [new_coin_obj] = post_tx.splitCoins(coin_obj, [Math.floor(Math.random() * (100000000 - 100000 + 1)) + 100000]);
-    //         post_tx.moveCall({
-    //             target: `${SUI_PACKAGE_ID}::collateral::post_collateral`,
-    //             typeArguments: [coin_type],
-    //             arguments: [ // other arguments needed for your contract
-    //                 post_tx.object(account_id),
-    //                 post_tx.object(program_id),
-    //                 post_tx.object(new_coin_obj)
-    //             ],
-    //         });
+            const post_tx = new Transaction();
+            const coin_obj = post_tx.object(coins.data[0].data?.objectId as string);
+            const [new_coin_obj] = post_tx.splitCoins(coin_obj, [Math.floor(Math.random() * (100000000 - 100000 + 1)) + 100000]);
+            post_tx.moveCall({
+                target: `${SUI_PACKAGE_ID}::collateral::post_collateral`,
+                typeArguments: [coin_type],
+                arguments: [ // other arguments needed for your contract
+                    post_tx.object(account_id),
+                    post_tx.object(program_id),
+                    post_tx.object(new_coin_obj)
+                ],
+            });
 
-    //         let tx = await client.signAndExecuteTransaction({
-    //             transaction: post_tx,
-    //             signer: keypair,
-    //         });
-    //         console.log(`TX: ${tx.digest}`);
-    //     }
+            let tx = await client.signAndExecuteTransaction({
+                transaction: post_tx,
+                signer: keypair,
+            });
+            console.log(`TX: ${tx.digest}`);
+        }
         
         
-    // }
+    }
     
 }
 
