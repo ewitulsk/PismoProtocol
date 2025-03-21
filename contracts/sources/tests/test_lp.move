@@ -393,7 +393,7 @@ fun test_extract_coin() {
         let admin_cap = test_scenario::take_from_sender<AdminCap>(&scenario);
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
-        let extracted = lp::extract_coin(&admin_cap, &mut global, &mut vault, 300, scenario.ctx());
+        let extracted = lp::extract_coin(&mut global, &mut vault, 300, scenario.ctx());
         assert!(extracted.value() == 300, 0);
         transfer::public_transfer(extracted, scenario.ctx().sender());
         test_scenario::return_shared(global);
@@ -453,7 +453,7 @@ fun test_deposit_coin() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
-        lp::deposit_coin(&admin_cap, &mut global, &mut vault, coin);
+        lp::deposit_coin(&mut global, &mut vault, coin);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
         test_scenario::return_to_sender(&scenario, admin_cap);

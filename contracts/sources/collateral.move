@@ -89,15 +89,14 @@ public entry fun post_collateral<CoinType>(account: &mut Account, program: &Prog
         if(type_str.to_string() == program.supported_collateral()[i].token_info()){
             account.collateral_balances_mut().push_back(coin_bal);
             account.collateral_balances_mut().swap_remove(i);
-            transfer::transfer(
+            transfer::share_object(
                 Collateral<CoinType> {
                     id: object::new(ctx),
                     account_id: account.id(),
                     program_id: program.id(),
                     coin: coin.into_balance(),
                     collateral_index: i
-                },
-                ctx.sender()
+                }
             );
             return;
         };
@@ -107,6 +106,31 @@ public entry fun post_collateral<CoinType>(account: &mut Account, program: &Prog
     coin.destroy_zero();
 }
 
+public(package) fun destroy_collateral<CoinType>(collateral: Collateral<CoinType>) {
+    let Collateral {
+        id,
+        account_id,
+        program_id,
+        coin,
+        collateral_index
+    } = collateral;
+    object::delete(id);
+    coin.destroy_zero();
+}
+
+public(package) fun return_collateral<CoinType>(collateral: Collateral<CoinType>) {
+    if (collateral.value() > 0) {
+        transfer::share_object(collateral);
+    }
+    else{
+        collateral.destroy_collateral();
+    };
+}
+
 public(package) fun value<CoinType>(collateral: &Collateral<CoinType>): u64 {
     collateral.coin.value()
+}
+
+public(package) fun take_coin<CoinType>(collateral: &mut Collateral<CoinType>, amount: u64): Balance<CoinType> {
+    collateral.coin.split(amount)
 }

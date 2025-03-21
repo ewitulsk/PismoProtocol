@@ -15,7 +15,7 @@ use std::u128::pow;
 use pyth::price_info::PriceInfoObject;
 
 use pismo_protocol::programs::Program;
-use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position};
+use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal};
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth};
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
@@ -121,7 +121,7 @@ public fun open_position_pyth(
     account.increment_open_positions();
 
     transfer::public_transfer(
-        new_position(
+        new_position_internal(
             pos_type,
             pos_amount,
             entry_price,

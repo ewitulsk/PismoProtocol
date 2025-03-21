@@ -15,7 +15,7 @@ public struct Vault<phantom CoinType, phantom LPType> has key {
     id: UID,
     coin: Balance<CoinType>,
     lp: Supply<LPToken<LPType>>,
-    global_index: u64,
+    global_index: u64, //Index into the global supported lp vector.
     deprecated: bool,
 }
 
@@ -116,13 +116,11 @@ public entry fun withdraw_lp<CoinType, LPType>(
 }
 
 public(package) fun extract_coin<CoinType, LPType>(
-    _: &AdminCap,
     global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
     amount: u64,
     ctx: &mut TxContext
 ): Coin<CoinType> {
-    // THIS IS A PERMISSIONED METHOD ADD THE WHITELIST CALL HERE
     assert!(vault.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = vault.coin.split(amount);
     
@@ -133,7 +131,6 @@ public(package) fun extract_coin<CoinType, LPType>(
 }
 
 public(package) fun deposit_coin<CoinType, LPType>(
-    _: &AdminCap,
     global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
     coin: Coin<CoinType>

@@ -15,7 +15,7 @@ use pismo_protocol::tokens::new_token_identifier;
 #[test_only]
 use pismo_protocol::accounts::{Account, init_account};
 #[test_only]
-use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_vecs_length, E_INVALID_COLLATERAL};
+use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_vecs_length, E_INVALID_COLLATERAL, value};
 #[test_only]
 use pismo_protocol::test_coin::{Self, TEST_COIN};
 
@@ -301,13 +301,13 @@ public fun test_post_collateral_good() {
     
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
-    destroy_program(program);
-
+    
     scenario.next_tx(sender);
-    let collateral = scenario.take_from_sender<Collateral<TEST_COIN>>();
+    let collateral = scenario.take_shared<Collateral<TEST_COIN>>();
     assert!(collateral.value() == mint_amount, 0);
-    scenario.return_to_sender<Collateral<TEST_COIN>>(collateral);
-
+    test_scenario::return_shared(collateral);
+    
+    destroy_program(program);
     scenario.end();
 }
 
@@ -366,12 +366,12 @@ public fun test_post_collateral_good_2() {
     
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
-    destroy_program(program);
-
+    
     scenario.next_tx(sender);
-    let collateral = scenario.take_from_sender<Collateral<TEST_COIN>>();
+    let collateral = scenario.take_shared<Collateral<TEST_COIN>>();
     assert!(collateral.value() == mint_amount, 0);
-    scenario.return_to_sender<Collateral<TEST_COIN>>(collateral);
-
+    test_scenario::return_shared(collateral);
+    
+    destroy_program(program);
     scenario.end();
 }
