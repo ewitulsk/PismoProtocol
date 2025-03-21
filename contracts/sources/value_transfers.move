@@ -2,9 +2,12 @@ module pismo_protocol::value_transfers;
 
 use sui::balance;
 use sui::coin;
+use sui::tx_context::TxContext;
 
-use pismo_protocol::collateral::Collateral;
+use pismo_protocol::collateral::{Self, Collateral};
 use pismo_protocol::lp::{Self, Vault, Global};
+use pismo_protocol::accounts::Account;
+use pismo_protocol::programs::Program;
 use std::vector;
 
 //This method forgoes any checks on whethter this transfer is allowed to take place.
@@ -37,4 +40,24 @@ public(package) fun transfer_same_collateral_to_same_vault_internal<CoinType, LP
         let collat = vector::pop_back(eligible_collateral);
         collat.return_collateral();
     };
+}
+
+//This method transfers from a vault to collateral
+//It checks if the vault has enough coin before executing the transfer
+public(package) fun transfer_same_vault_to_collateral_internal<CoinType, LPType>(
+    global: &mut Global,
+    vault: &mut Vault<CoinType, LPType>,
+    account_id: address,
+    program: &Program,
+    amount: u64,
+    ctx: &mut TxContext
+) {
+    // Check that the vault has enough coin
+    assert!(lp::coin_value(vault) >= amount, 0);
+    
+    // Extract coin from vault
+    let coin = lp::extract_coin(global, vault, amount, ctx);
+    
+    // Post coin as collateral to the specified account_id
+    collateral::post_collateral_to_arbitrary_account_internal(account_id, program, coin, ctx);
 }

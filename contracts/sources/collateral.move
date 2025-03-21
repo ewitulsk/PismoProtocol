@@ -106,6 +106,29 @@ public entry fun post_collateral<CoinType>(account: &mut Account, program: &Prog
     coin.destroy_zero();
 }
 
+public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(account_id: address, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
+    let coin_bal = coin.value();
+    let type_str = type_name::get<CoinType>().into_string();
+    let mut i = 0;
+    while(i < program.supported_collateral().length()){
+        if(type_str.to_string() == program.supported_collateral()[i].token_info()){
+            transfer::share_object(
+                Collateral<CoinType> {
+                    id: object::new(ctx),
+                    account_id,
+                    program_id: program.id(),
+                    coin: coin.into_balance(),
+                    collateral_index: i
+                }
+            );
+            return;
+        };
+        i = i + 1;
+    };
+    assert!(false, E_INVALID_COLLATERAL);
+    coin.destroy_zero();
+}
+
 public(package) fun destroy_collateral<CoinType>(collateral: Collateral<CoinType>) {
     let Collateral {
         id,
