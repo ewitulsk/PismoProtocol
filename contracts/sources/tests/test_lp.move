@@ -1,8 +1,8 @@
 module pismo_protocol::test_lp;
 
 use pismo_protocol::lp;
-use pismo_protocol::lp::{Vault, LPToken, Global};
-use pismo_protocol::main::{Self, AdminCap};
+use pismo_protocol::lp::{Vault, LPToken};
+use pismo_protocol::main::{Self, AdminCap, Global};
 
 use pismo_protocol::test_coin::{Self, TEST_COIN};
 
@@ -68,7 +68,7 @@ fun test_lp() {
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
         lp::deposit_lp(&mut global, &mut vault, coin, scenario.ctx());
-        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1000);
+        assert!(lp::get_vault_balances(&global).borrow(vault.global_index()) == 1000);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -102,7 +102,7 @@ fun test_lp() {
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
         lp::deposit_lp(&mut global, &mut vault, coin, scenario.ctx());
-        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1500);
+        assert!(lp::get_vault_balances(&global).borrow(vault.global_index()) == 1500);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -130,7 +130,7 @@ fun test_lp() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         lp::withdraw_lp(&mut global, &mut vault, to_burn, scenario.ctx());
-        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1200);
+        assert!(lp::get_vault_balances(&global).borrow(vault.global_index()) == 1200);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
         test_scenario::return_to_sender(&scenario, lp_token);
@@ -165,7 +165,7 @@ fun test_lp() {
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         let coin = test_scenario::take_from_sender<Coin<TEST_COIN>>(&scenario);
         lp::deposit_lp(&mut global, &mut vault, coin, scenario.ctx());
-        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1800);
+        assert!(lp::get_vault_balances(&global).borrow(vault.global_index()) == 1800);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -190,7 +190,7 @@ fun test_lp() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         lp::withdraw_lp(&mut global, &mut vault, lp_token, scenario.ctx());
-        assert!(global.get_vault_balances().borrow(vault.global_index()) == 1200);
+        assert!(lp::get_vault_balances(&global).borrow(vault.global_index()) == 1200);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };
@@ -224,7 +224,7 @@ fun test_lp() {
         let mut global = test_scenario::take_shared<Global>(&scenario);
         let mut vault = test_scenario::take_shared<Vault<TEST_COIN, TEST_LP>>(&scenario);
         lp::withdraw_lp(&mut global, &mut vault, lp_token, scenario.ctx());
-        assert!(global.get_vault_balances().borrow(vault.global_index()) == 0);
+        assert!(lp::get_vault_balances(&global).borrow(vault.global_index()) == 0);
         test_scenario::return_shared(global);
         test_scenario::return_shared(vault);
     };

@@ -17,6 +17,7 @@ use pyth::price_info::PriceInfoObject;
 use pismo_protocol::programs::Program;
 use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal};
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth};
+use pismo_protocol::main::Global;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_TOKEN_INFO_PRICE_FEED_MISMATCH: u64 = 1;
@@ -99,6 +100,7 @@ public fun assert_maintence_margin() {
 }
 
 public fun open_position_pyth_no_leverage(
+    global: &Global,
     account: &mut Account, 
     program: &Program,
     pos_type_int: u64, 
@@ -121,6 +123,7 @@ public fun open_position_pyth_no_leverage(
     account.increment_open_positions();
 
     new_position_internal(
+        global,
         pos_type,
         pos_amount,
         1,

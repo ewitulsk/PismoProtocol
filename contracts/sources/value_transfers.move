@@ -5,7 +5,8 @@ use sui::coin;
 use sui::tx_context::TxContext;
 
 use pismo_protocol::collateral::{Self, Collateral};
-use pismo_protocol::lp::{Self, Vault, Global};
+use pismo_protocol::lp::{Self, Vault};
+use pismo_protocol::main::Global;
 use pismo_protocol::accounts::Account;
 use pismo_protocol::programs::Program;
 use std::vector;

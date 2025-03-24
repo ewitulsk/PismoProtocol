@@ -13,10 +13,13 @@ use sui::object::{Self, UID};
 use sui::tx_context::TxContext;
 use sui::event;
 
+use std::vector;
+
 use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth, get_price_pyth};
-use pismo_protocol::main::AdminCap;
+use pismo_protocol::main::{Self, AdminCap, Global};
 
 const E_BAD_POSITION: u64 = 225;
+const E_INVALID_POSITION_TOKEN_INDEX: u64 = 226;
 
 public struct PositionCreatedEvent has copy, drop {
     position_id: address,
@@ -26,6 +29,7 @@ public struct PositionCreatedEvent has copy, drop {
     entry_price: u64,
     entry_price_decimals: u8,
     supported_positions_token_i: u64,
+    price_feed_id_bytes: vector<u8>,
     account_id: address
 }
 
@@ -74,6 +78,7 @@ public fun u64_to_position_type(pos_id: u64): PositionType {
 
 public entry fun admin_force_new_positon (
     _: &AdminCap,
+    global: &Global,
     pos_type_u64: u64,
     amount: u64,
     leverage_multiplier: u16,
@@ -86,6 +91,7 @@ public entry fun admin_force_new_positon (
 ) {
     let pos_type = u64_to_position_type(pos_type_u64);
     new_position_internal(
+        global,
         pos_type,
         amount,
         leverage_multiplier,
@@ -98,6 +104,7 @@ public entry fun admin_force_new_positon (
 }
 
 public(package) fun new_position_internal (
+    global: &Global,
     pos_type: PositionType,
     amount: u64,
     leverage_multiplier: u16,
@@ -107,6 +114,14 @@ public(package) fun new_position_internal (
     account_id: address,
     ctx: &mut TxContext
 ) {
+    // Validate that the position token index exists in global.supported_positions
+    let supported_positions = main::get_supported_positions(global);
+    assert!(supported_positions_token_i < vector::length(&supported_positions), E_INVALID_POSITION_TOKEN_INDEX);
+    
+    // Get the price feed ID bytes for this token
+    let token_identifier = *vector::borrow(&supported_positions, supported_positions_token_i);
+    let price_feed_id_bytes = pismo_protocol::tokens::price_feed_id_bytes(&token_identifier);
+    
     let position = Position {
         id: object::new(ctx),
         _type: pos_type,
@@ -126,10 +141,11 @@ public(package) fun new_position_internal (
         entry_price,
         entry_price_decimals,
         supported_positions_token_i,
+        price_feed_id_bytes,
         account_id
     });
     
-    transfer::public_share_object(position);
+    transfer::share_object(position);
 }
 
 public enum Sign has drop {
