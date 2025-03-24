@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "collateral": "ts-node src/collateral.ts",
+    "positions": "ts-node src/positions.ts",
     "sum": "ts-node src/sum_collateral.ts",
     "serve": "ts-node src/server.ts"
   },

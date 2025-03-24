@@ -98,7 +98,7 @@ public fun assert_maintence_margin() {
     //
 }
 
-public fun open_position_pyth(
+public fun open_position_pyth_no_leverage(
     account: &mut Account, 
     program: &Program,
     pos_type_int: u64, 
@@ -120,14 +120,14 @@ public fun open_position_pyth(
 
     account.increment_open_positions();
 
-    transfer::public_transfer(
-        new_position_internal(
-            pos_type,
-            pos_amount,
-            entry_price,
-            entry_price_decimals,
-            program_pos_i,
-            ctx
-        ), ctx.sender()
-    )
+    new_position_internal(
+        pos_type,
+        pos_amount,
+        1,
+        entry_price,
+        entry_price_decimals,
+        program_pos_i,
+        account.id(),
+        ctx
+    );
 }
