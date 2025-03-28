@@ -16,11 +16,13 @@ use pyth::price_info::PriceInfoObject;
 
 use pismo_protocol::programs::Program;
 use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal};
-use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth};
+use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth, get_PYTH_MAX_PRICE_AGE_SECONDS};
+use pismo_protocol::signed::{SignedU64, sub_signed_u64};
 use pismo_protocol::main::Global;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_TOKEN_INFO_PRICE_FEED_MISMATCH: u64 = 1;
+const E_COLLATERAL_VALUE_TOO_OLD: u64 = 2;
 
 public struct Account has key {
     id: UID,
@@ -95,16 +97,65 @@ public(package) fun set_collateral_value(account: &mut Account, collateral_i: u6
     account.collateral_value_update_times.swap_remove(collateral_i);
 }
 
-public fun assert_maintence_margin() {
-    //
+public(package) fun sum_and_assert_collateral_values_are_recent(account: &Account, clock: &Clock): u128 {
+    let mut sum = 0;
+    let mut i = 0;
+    while(i < account.collateral_values.length()){
+        sum = sum + account.collateral_values[i];
+        assert!(account.collateral_value_update_times[i] + get_PYTH_MAX_PRICE_AGE_SECONDS() <= clock.timestamp_ms(), E_COLLATERAL_VALUE_TOO_OLD);
+        i = i + 1;
+    };
+    sum
 }
 
-public fun open_position_pyth_no_leverage(
+
+
+public fun single_position_upnl(
+    position_size: u64,
+    leverage: u64,
+    entry_asset_price: u64,
+    cur_asset_price: u64
+): SignedU64 {
+    let entry_value = (position_size * leverage * entry_asset_price);
+    let cur_value = (position_size * leverage * cur_asset_price);
+    sub_signed_u64(cur_value, entry_value)
+}
+
+public fun sum_account_positions_upnl(
+    positions: &vector<Position>,
+    account: &Account
+){
+    //Assert all positions are from the passed in account
+    //assert the number of open positions on the account is equal to the number of positions passed (that way we know for sure that all of the positions are from this account)
+
+}
+
+// public fun assert_maintence_margin(
+//     account: &Account,
+//     position_size: u64,
+//     leverage: u64,
+//     entry_asset_price: u64,
+//     cur_asset_price: u64
+// ) {
+    //This needs to sum the positions upnls, and assert that the sum is > 0
+// }
+
+public fun assert_inital_margin(
+    collateral_value: u64,
+    position_size: u64,
+    mark_price: u64,
+    leverage: u64
+) { 
+    assert!(collateral_value >= (position_size * mark_price / leverage), 0);
+}
+
+public fun open_position_pyth(
     global: &Global,
     account: &mut Account, 
     program: &Program,
     pos_type_int: u64, 
     pos_amount: u64, 
+    leverage_multiplier: u16,
     program_pos_i: u64,
     price_info: &PriceInfoObject,
     clock: &Clock,
@@ -116,9 +167,11 @@ public fun open_position_pyth_no_leverage(
 
     let pos_type = u64_to_position_type(pos_type_int);
 
-    assert_maintence_margin();
-
     let (entry_price, entry_price_decimals) = get_price_pyth(price_info, clock);
+
+
+    // let collateral_value = 
+    // assert_inital_margin(collateral_value, pos_amount, entry_price, leverage_multiplier);
 
     account.increment_open_positions();
 
@@ -126,7 +179,7 @@ public fun open_position_pyth_no_leverage(
         global,
         pos_type,
         pos_amount,
-        1,
+        leverage_multiplier,
         entry_price,
         entry_price_decimals,
         program_pos_i,
@@ -134,3 +187,17 @@ public fun open_position_pyth_no_leverage(
         ctx
     );
 }
+
+// public fun close_position_pyth(
+//     position: Position,
+//     price_info: &PriceInfoObject,
+//     clock: &Clock,
+//     ctx: &mut TxContext
+// ){
+//     assert!(account.id() == program.id(), E_ACCOUNT_PROGRAM_MISMATCH);
+//     let token_id = program.supported_positions().borrow(program_pos_i);
+//     assert!(token_id.price_feed_id_bytes() == get_price_feed_bytes_pyth(price_info), E_TOKEN_INFO_PRICE_FEED_MISMATCH);
+
+//     let (exit_price, exit_price_decimal) = get_price_pyth(price_info, clock);
+
+// }

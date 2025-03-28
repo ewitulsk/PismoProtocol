@@ -86,7 +86,8 @@ fun test_ensure_balances() {
             0
         ),
     ];
-    let test_program =  init_program_internal(&mut ctx, collats, positions, 8);
+    let max_leverage = vector[1, 1, 1, 1, 1];
+    let test_program =  init_program_internal(&mut ctx, collats, positions, 8, max_leverage);
 
     let mut test_collats = vector::empty<u64>();
     ensure_collateral_vecs_length(&test_program, &mut test_collats, 0);
@@ -174,7 +175,8 @@ public fun test_post_collateral_bad() {
             0
         ),
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, positions, 8);
+    let max_leverage = vector[1, 1, 1, 1, 1];
+    let program =  init_program_internal(scenario.ctx(), collats, positions, 8, max_leverage);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -271,7 +273,8 @@ public fun test_post_collateral_good() {
             0
         ),
     ];
-    let program =  init_program_internal(scenario.ctx(), collats, positions, 8);
+    let max_leverage = vector[1, 1, 1, 1, 1];
+    let program =  init_program_internal(scenario.ctx(), collats, positions, 8, max_leverage);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 
@@ -336,7 +339,8 @@ public fun test_post_collateral_good_2() {
             0
         )
     ];
-    let program =  init_program_internal(scenario.ctx(), collats,positions, 8);
+    let max_leverage = vector[1];
+    let program =  init_program_internal(scenario.ctx(), collats,positions, 8, max_leverage);
 
     let mut t_cap = scenario.take_from_sender<TreasuryCap<TEST_COIN>>();
 

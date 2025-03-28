@@ -19,7 +19,8 @@ public struct Program has key {
     id: UID,
     supported_collateral: vector<TokenIdentifier>,
     shared_price_decimals: u8, //This is the precision that each asset will be evaluated on DEFAULT WILL BE 10.
-    supported_positions: vector<TokenIdentifier>
+    supported_positions: vector<TokenIdentifier>,
+    max_leverage: vector<u16>
 }
 
 public entry fun init_program(
@@ -30,6 +31,7 @@ public entry fun init_program(
     init_positions_info: vector<String>,
     init_positions_price_feed_id_bytes: vector<vector<u8>>,
     init_position_oracle_feed_id: vector<u16>, // 0: pyth
+    init_max_leverage: vector<u16>,
     shared_price_decimals: u8, 
     ctx: &mut TxContext
 ) {
@@ -65,16 +67,17 @@ public entry fun init_program(
     };
 
     transfer::share_object(
-        init_program_internal(ctx, collateral_identifiers, position_identifiers, shared_price_decimals)
+        init_program_internal(ctx, collateral_identifiers, position_identifiers, shared_price_decimals, init_max_leverage)
     );
 }
 
-public(package) fun init_program_internal(ctx: &mut TxContext, init_collateral: vector<TokenIdentifier>, supported_positions: vector<TokenIdentifier>, shared_price_decimals: u8): Program {
+public(package) fun init_program_internal(ctx: &mut TxContext, init_collateral: vector<TokenIdentifier>, supported_positions: vector<TokenIdentifier>, shared_price_decimals: u8, max_leverage: vector<u16>): Program {
     Program { 
         id: object::new(ctx), 
         supported_collateral: init_collateral,
         shared_price_decimals,
-        supported_positions
+        supported_positions,
+        max_leverage
     }
 }
 
@@ -96,7 +99,7 @@ public(package) fun shared_price_decimals(program: &Program): u8 {
 
 #[test_only]
 public(package) fun destroy_program(program: Program){
-    let Program {id, supported_collateral: _, shared_price_decimals: _, supported_positions: _} = program;
+    let Program {id, supported_collateral: _, shared_price_decimals: _, supported_positions: _, max_leverage: _} = program;
     object::delete(id);
 }
 

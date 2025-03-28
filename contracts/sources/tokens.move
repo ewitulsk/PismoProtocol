@@ -22,7 +22,7 @@ const E_PRICE_OBJS_DONT_MATCH_IDENTIFIERS: u64 = 0;
 
 const PYTH_ID: u64 = 0;
 
-const PYTH_MAX_PRICE_AGE: u64 = 5; //30 seconds
+const PYTH_MAX_PRICE_AGE_SECONDS: u64 = 5; //5 seconds
 
 public struct TokenIdentifier has copy, drop, store {
     token_info: String,
@@ -32,13 +32,16 @@ public struct TokenIdentifier has copy, drop, store {
     deprecated: bool
 }
 
+public(package) fun get_PYTH_MAX_PRICE_AGE_SECONDS(): u64 {
+    PYTH_MAX_PRICE_AGE_SECONDS
+}
 
 public(package) fun get_price_feed_bytes_pyth(price_info_obj: &PriceInfoObject): vector<u8> {
     price_info_obj.get_price_info_from_price_info_object().get_price_feed().get_price_identifier().get_bytes()
 }
 
 public(package) fun get_price_pyth(price_info_obj: &PriceInfoObject, clock: &Clock): (u64, u8) {
-    let price_struct = pyth::get_price_no_older_than(price_info_obj,clock, PYTH_MAX_PRICE_AGE);
+    let price_struct = pyth::get_price_no_older_than(price_info_obj,clock, get_PYTH_MAX_PRICE_AGE_SECONDS());
 
     let price_decimal_i64 = price::get_expo(&price_struct);
     let price_i64 = price::get_price(&price_struct);
