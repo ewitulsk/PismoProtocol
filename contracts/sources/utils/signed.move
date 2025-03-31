@@ -45,3 +45,37 @@ public fun is_negative(val: &SignedU64): bool {
         }
     }
 }
+
+public(package) fun amount(val: &SignedU64): u64 {
+    val.amount
+}
+
+public(package) fun sign(val: &SignedU64): Sign {
+    val.sign
+}
+
+public(package) fun new_signed_u64(amount: u64, sign: Sign): SignedU64 {
+    SignedU64 { amount, sign }
+}
+
+public(package) fun new_sign(is_positive: bool): Sign {
+    if (is_positive) {
+        Sign::Positive
+    } else {
+        Sign::Negative
+    }
+}
+
+public(package) fun add_signed_u64(a: &SignedU64, b: &SignedU64): SignedU64 {
+    if (sign(a) == sign(b)) {
+        // Same sign, just add amounts
+        new_signed_u64(amount(a) + amount(b), sign(a))
+    } else {
+        // Different signs, subtract amounts
+        if (amount(a) > amount(b)) {
+            new_signed_u64(amount(a) - amount(b), sign(a))
+        } else {
+            new_signed_u64(amount(b) - amount(a), sign(b))
+        }
+    }
+}

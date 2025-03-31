@@ -15,9 +15,9 @@ use std::u128::pow;
 use pyth::price_info::PriceInfoObject;
 
 use pismo_protocol::programs::Program;
-use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal};
-use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth, get_PYTH_MAX_PRICE_AGE_SECONDS};
-use pismo_protocol::signed::{SignedU64, sub_signed_u64};
+use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal, amount as position_amount, leverage_multiplier, entry_price, entry_price_decimals, supported_positions_token_i};
+use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth, get_PYTH_MAX_PRICE_AGE_SECONDS, normalize_value};
+use pismo_protocol::signed::{SignedU64, sub_signed_u64, is_positive, Sign, new_signed_u64, new_sign, amount as signed_amount, sign, add_signed_u64};
 use pismo_protocol::main::Global;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
@@ -114,20 +114,54 @@ public fun single_position_upnl(
     position_size: u64,
     leverage: u64,
     entry_asset_price: u64,
-    cur_asset_price: u64
+    cur_asset_price: u64,
+    token_decimals: u8,
+    shared_decimals: u8
 ): SignedU64 {
-    let entry_value = (position_size * leverage * entry_asset_price);
-    let cur_value = (position_size * leverage * cur_asset_price);
-    sub_signed_u64(cur_value, entry_value)
+    let entry_value = normalize_value((position_size * leverage * entry_asset_price) as u128, token_decimals, shared_decimals);
+    let cur_value = normalize_value((position_size * leverage * cur_asset_price) as u128, token_decimals, shared_decimals);
+    
+    sub_signed_u64(cur_value as u64, entry_value as u64)
 }
 
-public fun sum_account_positions_upnl(
+public fun sum_account_positions_upnl_pyth(
+    account: &Account,
+    program: &Program,
     positions: &vector<Position>,
-    account: &Account
-){
-    //Assert all positions are from the passed in account
-    //assert the number of open positions on the account is equal to the number of positions passed (that way we know for sure that all of the positions are from this account)
+    price_infos: &vector<PriceInfoObject>,
+    clock: &Clock,
+    shared_decimals: u8
+): SignedU64 {
+    assert!(vector::length(positions) == account.num_open_positions, 0);
+    
+    assert!(vector::length(price_infos) == vector::length(positions), 0);
 
+    let mut total_upnl = new_signed_u64(0, new_sign(true));
+    let mut i = 0;
+    
+    while (i < vector::length(positions)) {
+        let position = vector::borrow(positions, i);
+        let price_info = vector::borrow(price_infos, i);
+        
+        let token_id = program.supported_positions().borrow(supported_positions_token_i(position));
+        
+        let (cur_price, _) = get_price_pyth(price_info, clock);
+        
+        let position_upnl = single_position_upnl(
+            position_amount(position),
+            leverage_multiplier(position) as u64,
+            entry_price(position),
+            cur_price,
+            token_id.token_decimals(),
+            shared_decimals
+        );
+        
+        total_upnl = add_signed_u64(&total_upnl, &position_upnl);
+        
+        i = i + 1;
+    };
+    
+    total_upnl
 }
 
 // public fun assert_maintence_margin(
@@ -137,7 +171,7 @@ public fun sum_account_positions_upnl(
 //     entry_asset_price: u64,
 //     cur_asset_price: u64
 // ) {
-    //This needs to sum the positions upnls, and assert that the sum is > 0
+    ////This needs to sum the positions upnls, and assert that the sum is > 0
 // }
 
 public fun assert_inital_margin(

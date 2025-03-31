@@ -260,3 +260,23 @@ public(package) fun close_position_internal(
     
     transfer_data
 }
+
+public(package) fun amount(position: &Position): u64 {
+    position.amount
+}
+
+public(package) fun leverage_multiplier(position: &Position): u16 {
+    position.leverage_multiplier
+}
+
+public(package) fun entry_price(position: &Position): u64 {
+    position.entry_price
+}
+
+public(package) fun entry_price_decimals(position: &Position): u8 {
+    position.entry_price_decimals
+}
+
+public(package) fun supported_positions_token_i(position: &Position): u64 {
+    position.supported_positions_token_i
+}

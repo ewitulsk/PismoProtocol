@@ -51,6 +51,19 @@ public(package) fun get_price_pyth(price_info_obj: &PriceInfoObject, clock: &Clo
     (price_u64, price_decimal_u8)
 }
 
+public(package) fun normalize_value(value: u128, local_decimals: u8, shared_decimals: u8): u128 {
+    let mut normalized_value = value; 
+    if(local_decimals > shared_decimals){
+        let diff = local_decimals-shared_decimals;
+        normalized_value = value / pow(10, diff);
+    }
+    else if(shared_decimals > local_decimals){
+        let diff = shared_decimals-local_decimals;
+        normalized_value = value * pow(10, diff);
+    };
+    normalized_value
+}
+
 public(package) fun get_value_pyth(token_id: &TokenIdentifier, price_info_obj: &PriceInfoObject, clock: &Clock, amount: u64, shared_decimals: u8): u128 {
     assert!(token_id.price_feed_id_bytes() == get_price_feed_bytes_pyth(price_info_obj));
     let (price, decimals) = get_price_pyth(price_info_obj, clock);
@@ -61,19 +74,7 @@ public(package) fun get_value_pyth(token_id: &TokenIdentifier, price_info_obj: &
     let local_decimals = decimals + token_decimal;
     let value = (price as u128) * token_balance_u128;
 
-    let mut normalized_value = value; 
-    if(local_decimals > shared_decimals){
-        let diff = local_decimals-shared_decimals;
-        normalized_value = value / pow(10, diff);
-    }
-    else if(shared_decimals > local_decimals){
-        let diff = shared_decimals-local_decimals;
-        normalized_value = value * pow(10, diff);
-    };
-    //If shared_decimals == local_decimals, price will already by normalized;
-    //normalized_value is now the value of the asset in shared_decimals
-
-    normalized_value
+    normalize_value(value, local_decimals, shared_decimals)
 }
 
 
