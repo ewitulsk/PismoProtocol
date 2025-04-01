@@ -17,12 +17,16 @@ use pyth::price_info::PriceInfoObject;
 use pismo_protocol::programs::Program;
 use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal, amount as position_amount, leverage_multiplier, entry_price, entry_price_decimals, supported_positions_token_i};
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth, get_PYTH_MAX_PRICE_AGE_SECONDS, normalize_value};
-use pismo_protocol::signed::{SignedU64, sub_signed_u64, is_positive, Sign, new_signed_u64, new_sign, amount as signed_amount, sign, add_signed_u64};
+use pismo_protocol::signed::{SignedU64, sub_signed_u64, is_positive, Sign, new_signed_u64, new_sign, amount as signed_amount, sign, add_signed_u64, is_negative};
 use pismo_protocol::main::Global;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_TOKEN_INFO_PRICE_FEED_MISMATCH: u64 = 1;
 const E_COLLATERAL_VALUE_TOO_OLD: u64 = 2;
+const E_INVALID_INITAL_MARGIN: u64 = 3;
+const E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE: u64 = 4;
+const E_NEGATIVE_TOTAL_UPNL: u64 = 5;
+const E_ZERO_TOTAL_UPNL: u64 = 6;
 
 public struct Account has key {
     id: UID,
@@ -164,23 +168,22 @@ public fun sum_account_positions_upnl_pyth(
     total_upnl
 }
 
-// public fun assert_maintence_margin(
-//     account: &Account,
-//     position_size: u64,
-//     leverage: u64,
-//     entry_asset_price: u64,
-//     cur_asset_price: u64
-// ) {
-    ////This needs to sum the positions upnls, and assert that the sum is > 0
-// }
+public fun calc_inital_margin(
+    position_size: u64,
+    mark_price: u64,
+    leverage: u64
+): u64 {
+    position_size * mark_price / leverage
+}
 
 public fun assert_inital_margin(
-    collateral_value: u64,
+    collateral_value: SignedU64,
     position_size: u64,
     mark_price: u64,
     leverage: u64
 ) { 
-    assert!(collateral_value >= (position_size * mark_price / leverage), 0);
+    assert!(collateral_value.is_positive(), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
+    assert!(collateral_value.amount() > calc_inital_margin(position_size, mark_price, leverage), E_INVALID_INITAL_MARGIN);
 }
 
 public fun open_position_pyth(
@@ -235,3 +238,28 @@ public fun open_position_pyth(
 //     let (exit_price, exit_price_decimal) = get_price_pyth(price_info, clock);
 
 // }
+
+// This function implements the logic described in the original comment:
+// "sum the positions upnls, and assert that the sum is > 0" (technically >= 0)
+// Note: This is a basic check and might not represent a full maintenance margin requirement,
+// which usually compares total equity (collateral + uPNL) against a required margin level.
+public fun assert_total_upnl_is_positive_pyth(
+    account: &Account,
+    program: &Program,
+    positions: &vector<Position>,
+    price_infos: &vector<PriceInfoObject>,
+    clock: &Clock
+) {
+    let shared_decimals = program.shared_price_decimals();
+    let total_upnl = sum_account_positions_upnl_pyth(
+        account,
+        program,
+        positions,
+        price_infos,
+        clock,
+        shared_decimals
+    );
+
+    assert!(is_positive(&total_upnl), E_NEGATIVE_TOTAL_UPNL);
+    assert!(total_upnl.amount() > 0, E_ZERO_TOTAL_UPNL);
+}
