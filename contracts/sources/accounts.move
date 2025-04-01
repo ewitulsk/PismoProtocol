@@ -17,7 +17,7 @@ use pyth::price_info::PriceInfoObject;
 use pismo_protocol::programs::Program;
 use pismo_protocol::positions::{Position, PositionType, u64_to_position_type, new_position_internal, amount as position_amount, leverage_multiplier, entry_price, entry_price_decimals, supported_positions_token_i};
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth, get_PYTH_MAX_PRICE_AGE_SECONDS, normalize_value};
-use pismo_protocol::signed::{SignedU64, sub_signed_u64, is_positive, Sign, new_signed_u64, new_sign, amount as signed_amount, sign, add_signed_u64, is_negative};
+use pismo_protocol::signed::{SignedU128, sub_signed_u128, is_positive, Sign, new_signed_u128, new_sign, amount as signed_amount, sign, add_signed_u128, is_negative};
 use pismo_protocol::main::Global;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
@@ -112,8 +112,6 @@ public(package) fun sum_and_assert_collateral_values_are_recent(account: &Accoun
     sum
 }
 
-
-
 public fun single_position_upnl(
     position_size: u64,
     leverage: u64,
@@ -121,11 +119,16 @@ public fun single_position_upnl(
     cur_asset_price: u64,
     token_decimals: u8,
     shared_decimals: u8
-): SignedU64 {
-    let entry_value = normalize_value((position_size * leverage * entry_asset_price) as u128, token_decimals, shared_decimals);
-    let cur_value = normalize_value((position_size * leverage * cur_asset_price) as u128, token_decimals, shared_decimals);
+): SignedU128 {
+    let position_size_u128 = position_size as u128;
+    let leverage_u128 = leverage as u128;
+    let entry_asset_price_u128 = entry_asset_price as u128;
+    let cur_asset_price_u128 = cur_asset_price as u128;
+
+    let entry_value = normalize_value(position_size_u128 * leverage_u128 * entry_asset_price_u128, token_decimals, shared_decimals);
+    let cur_value = normalize_value(position_size_u128 * leverage_u128 * cur_asset_price_u128, token_decimals, shared_decimals);
     
-    sub_signed_u64(cur_value as u64, entry_value as u64)
+    sub_signed_u128(cur_value, entry_value)
 }
 
 public fun sum_account_positions_upnl_pyth(
@@ -135,12 +138,12 @@ public fun sum_account_positions_upnl_pyth(
     price_infos: &vector<PriceInfoObject>,
     clock: &Clock,
     shared_decimals: u8
-): SignedU64 {
+): SignedU128 {
     assert!(vector::length(positions) == account.num_open_positions, 0);
     
     assert!(vector::length(price_infos) == vector::length(positions), 0);
 
-    let mut total_upnl = new_signed_u64(0, new_sign(true));
+    let mut total_upnl = new_signed_u128(0, new_sign(true));
     let mut i = 0;
     
     while (i < vector::length(positions)) {
@@ -160,7 +163,7 @@ public fun sum_account_positions_upnl_pyth(
             shared_decimals
         );
         
-        total_upnl = add_signed_u64(&total_upnl, &position_upnl);
+        total_upnl = add_signed_u128(&total_upnl, &position_upnl);
         
         i = i + 1;
     };
@@ -172,18 +175,21 @@ public fun calc_inital_margin(
     position_size: u64,
     mark_price: u64,
     leverage: u64
-): u64 {
-    position_size * mark_price / leverage
+): u128 {
+    let position_size_u128 = position_size as u128;
+    let mark_price_u128 = mark_price as u128;
+    let leverage_u128 = leverage as u128;
+    position_size_u128 * mark_price_u128 / leverage_u128
 }
 
 public fun assert_inital_margin(
-    collateral_value: SignedU64,
+    collateral_value: SignedU128,
     position_size: u64,
     mark_price: u64,
     leverage: u64
 ) { 
-    assert!(collateral_value.is_positive(), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
-    assert!(collateral_value.amount() > calc_inital_margin(position_size, mark_price, leverage), E_INVALID_INITAL_MARGIN);
+    assert!(is_positive(&collateral_value), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
+    assert!(signed_amount(&collateral_value) > calc_inital_margin(position_size, mark_price, leverage), E_INVALID_INITAL_MARGIN);
 }
 
 public fun open_position_pyth(
@@ -206,9 +212,10 @@ public fun open_position_pyth(
 
     let (entry_price, entry_price_decimals) = get_price_pyth(price_info, clock);
 
-
-    // let collateral_value = 
-    // assert_inital_margin(collateral_value, pos_amount, entry_price, leverage_multiplier);
+    let total_collateral_value_u128 = sum_and_assert_collateral_values_are_recent(account, clock);
+    let collateral_value = new_signed_u128(total_collateral_value_u128, new_sign(true));
+    
+    assert_inital_margin(collateral_value, pos_amount, entry_price, leverage_multiplier as u64);
 
     account.increment_open_positions();
 

@@ -5,26 +5,26 @@ public enum Sign has drop, copy {
     Negative
 }
 
-public struct SignedU64 has drop, copy {
-    amount: u64,
+public struct SignedU128 has drop, copy {
+    amount: u128,
     sign: Sign
 }
 
-public fun sub_signed_u64(a: u64, b: u64): SignedU64 {
+public fun sub_signed_u128(a: u128, b: u128): SignedU128 {
     if (a < b) {
-        SignedU64 {
+        SignedU128 {
             amount: b - a,
             sign: Sign::Negative
         }
     } else {
-        SignedU64 {
+        SignedU128 {
             amount: a - b,
             sign: Sign::Positive
         }
     }
 }
 
-public fun is_positive(val: &SignedU64): bool {
+public fun is_positive(val: &SignedU128): bool {
     match (val.sign) {
         Sign::Positive => {
             true
@@ -35,7 +35,7 @@ public fun is_positive(val: &SignedU64): bool {
     }
 }
 
-public fun is_negative(val: &SignedU64): bool {
+public fun is_negative(val: &SignedU128): bool {
     match (val.sign) {
         Sign::Positive => {
             false
@@ -46,16 +46,16 @@ public fun is_negative(val: &SignedU64): bool {
     }
 }
 
-public(package) fun amount(val: &SignedU64): u64 {
+public(package) fun amount(val: &SignedU128): u128 {
     val.amount
 }
 
-public(package) fun sign(val: &SignedU64): Sign {
+public(package) fun sign(val: &SignedU128): Sign {
     val.sign
 }
 
-public(package) fun new_signed_u64(amount: u64, sign: Sign): SignedU64 {
-    SignedU64 { amount, sign }
+public(package) fun new_signed_u128(amount: u128, sign: Sign): SignedU128 {
+    SignedU128 { amount, sign }
 }
 
 public(package) fun new_sign(is_positive: bool): Sign {
@@ -66,50 +66,50 @@ public(package) fun new_sign(is_positive: bool): Sign {
     }
 }
 
-public(package) fun add_signed_u64(a: &SignedU64, b: &SignedU64): SignedU64 {
+public(package) fun add_signed_u128(a: &SignedU128, b: &SignedU128): SignedU128 {
     if (sign(a) == sign(b)) {
         // Same sign, just add amounts
-        new_signed_u64(amount(a) + amount(b), sign(a))
+        new_signed_u128(amount(a) + amount(b), sign(a))
     } else {
         // Different signs, subtract amounts
         if (amount(a) > amount(b)) {
-            new_signed_u64(amount(a) - amount(b), sign(a))
+            new_signed_u128(amount(a) - amount(b), sign(a))
         } else {
-            new_signed_u64(amount(b) - amount(a), sign(b))
+            new_signed_u128(amount(b) - amount(a), sign(b))
         }
     }
 }
 
-public(package) fun multiply(a: &SignedU64, b: &SignedU64): SignedU64 {
+public(package) fun multiply(a: &SignedU128, b: &SignedU128): SignedU128 {
     let new_amount = amount(a) * amount(b);
     let new_sign = if (sign(a) == sign(b)) {
         Sign::Positive
     } else {
         Sign::Negative
     };
-    new_signed_u64(new_amount, new_sign)
+    new_signed_u128(new_amount, new_sign)
 }
 
-public(package) fun mul(a: &SignedU64, b: u64): SignedU64 {
-    new_signed_u64(amount(a) * b, sign(a))
+public(package) fun mul(a: &SignedU128, b: u128): SignedU128 {
+    new_signed_u128(amount(a) * b, sign(a))
 }
 
-public(package) fun div(a: &SignedU64, b: u64): SignedU64 {
+public(package) fun div(a: &SignedU128, b: u128): SignedU128 {
     // Aborts if b is 0, standard Move behavior
-    new_signed_u64(amount(a) / b, sign(a))
+    new_signed_u128(amount(a) / b, sign(a))
 }
 
-public(package) fun mul_div(a: &SignedU64, numerator: u64, denominator: u64): SignedU64 {
-    // Aborts if denominator is 0 or if amount(a) * numerator overflows u64
+public(package) fun mul_div(a: &SignedU128, numerator: u128, denominator: u128): SignedU128 {
+    // Aborts if denominator is 0 or if amount(a) * numerator overflows u128
     let new_amount = (amount(a) * numerator) / denominator;
-    new_signed_u64(new_amount, sign(a))
+    new_signed_u128(new_amount, sign(a))
 }
 
-public(package) fun equal(a: &SignedU64, b: &SignedU64): bool {
+public(package) fun equal(a: &SignedU128, b: &SignedU128): bool {
     amount(a) == amount(b) && sign(a) == sign(b)
 }
 
-public(package) fun gt(a: &SignedU64, b: &SignedU64): bool {
+public(package) fun gt(a: &SignedU128, b: &SignedU128): bool {
     let sign_a = sign(a);
     let sign_b = sign(b);
 
@@ -124,7 +124,7 @@ public(package) fun gt(a: &SignedU64, b: &SignedU64): bool {
     }
 }
 
-public(package) fun gte(a: &SignedU64, b: &SignedU64): bool {
+public(package) fun gte(a: &SignedU128, b: &SignedU128): bool {
     // Could also implement as gt(a, b) || equal(a, b)
     let sign_a = sign(a);
     let sign_b = sign(b);
@@ -140,7 +140,7 @@ public(package) fun gte(a: &SignedU64, b: &SignedU64): bool {
     }
 }
 
-public(package) fun lt(a: &SignedU64, b: &SignedU64): bool {
+public(package) fun lt(a: &SignedU128, b: &SignedU128): bool {
     // Could also implement as !gte(a, b)
     let sign_a = sign(a);
     let sign_b = sign(b);
@@ -156,7 +156,7 @@ public(package) fun lt(a: &SignedU64, b: &SignedU64): bool {
     }
 }
 
-public(package) fun lte(a: &SignedU64, b: &SignedU64): bool {
+public(package) fun lte(a: &SignedU128, b: &SignedU128): bool {
     // Could also implement as !gt(a, b)
     let sign_a = sign(a);
     let sign_b = sign(b);
