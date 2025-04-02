@@ -36,6 +36,10 @@ public(package) fun get_PYTH_MAX_PRICE_AGE_SECONDS(): u64 {
     PYTH_MAX_PRICE_AGE_SECONDS
 }
 
+public(package) fun get_PYTH_MAX_PRICE_AGE_ms(): u64 {
+    PYTH_MAX_PRICE_AGE_SECONDS * 1000
+}
+
 public(package) fun get_price_feed_bytes_pyth(price_info_obj: &PriceInfoObject): vector<u8> {
     price_info_obj.get_price_info_from_price_info_object().get_price_feed().get_price_identifier().get_bytes()
 }
