@@ -2,6 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
+import ConnectWalletButton from "./ConnectWalletButton";
 
 interface HeaderProps {
   activePage?: 'trading' | 'vault' | 'home';
@@ -9,7 +10,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ activePage = 'home' }) => {
   return (
-    <header className="header-main">
+    <header className="header-main flex justify-between items-center">
       <div className="flex gap-4 items-center">
         <Link href="/" className="flex justify-center items-center mr-2">
           <div className="relative w-10 h-10 overflow-hidden rounded-full">
@@ -38,9 +39,7 @@ const Header: React.FC<HeaderProps> = ({ activePage = 'home' }) => {
           </Link>
         </nav>
       </div>
-      <button className="btn-connect">
-        Connect Wallet
-      </button>
+      <ConnectWalletButton />
     </header>
   );
 };
