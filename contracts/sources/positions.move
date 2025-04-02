@@ -280,3 +280,7 @@ public(package) fun entry_price_decimals(position: &Position): u8 {
 public(package) fun supported_positions_token_i(position: &Position): u64 {
     position.supported_positions_token_i
 }
+
+public(package) fun account_id(position: &Position): address {
+    position.account_id
+}

@@ -128,6 +128,10 @@ public(package) fun set_deprecated(token: &mut TokenIdentifier, val: bool) {
     token.deprecated = val;
 }
 
+public(package) fun is_deprecated(token: &TokenIdentifier): bool {
+    token.deprecated
+}
+
 public(package) fun get_PYTH_ID(): u64 {
     PYTH_ID
 }

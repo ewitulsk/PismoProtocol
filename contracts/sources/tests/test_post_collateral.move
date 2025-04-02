@@ -15,91 +15,9 @@ use pismo_protocol::tokens::new_token_identifier;
 #[test_only]
 use pismo_protocol::accounts::{Account, init_account};
 #[test_only]
-use pismo_protocol::collateral::{Collateral, post_collateral, ensure_collateral_vecs_length, E_INVALID_COLLATERAL, value};
+use pismo_protocol::collateral::{Collateral, post_collateral, E_INVALID_COLLATERAL, value};
 #[test_only]
 use pismo_protocol::test_coin::{Self, TEST_COIN};
-
-#[test]
-fun test_ensure_balances() {
-    let mut ctx = tx_context::dummy();
-    let collats = vector[
-        new_token_identifier (
-            string::utf8(b"0x1"),
-            8,
-            x"01",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x2"),
-            8,
-            x"02",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x3"),
-            8,
-            x"03",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x4"),
-            8,
-            x"04",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x5"),
-            8,
-            x"05",
-            0
-        ),
-    ];
-    let positions = vector[
-        new_token_identifier (
-            string::utf8(b"0x1"),
-            8,
-            x"01",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x2"),
-            8,
-            x"02",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x3"),
-            8,
-            x"03",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x4"),
-            8,
-            x"04",
-            0
-        ),
-        new_token_identifier (
-            string::utf8(b"0x5"),
-            8,
-            x"05",
-            0
-        ),
-    ];
-    let max_leverage = vector[1, 1, 1, 1, 1];
-    let test_program =  init_program_internal(&mut ctx, collats, positions, 8, max_leverage);
-
-    let mut test_collats = vector::empty<u64>();
-    ensure_collateral_vecs_length(&test_program, &mut test_collats, 0);
-    assert!(test_collats.length() == test_program.supported_collateral().length(), 0);
-
-    let mut test_collats_2 = vector[1, 2];
-    ensure_collateral_vecs_length(&test_program, &mut test_collats_2, 0);
-    assert!(test_collats_2.length() == test_program.supported_collateral().length(), 0);
-
-    destroy_program(test_program);
-}
-
 
 #[test]
 #[expected_failure(abort_code = E_INVALID_COLLATERAL)]
@@ -290,17 +208,9 @@ public fun test_post_collateral_good() {
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
 
     post_collateral(&mut account, &program, coin, scenario.ctx());
-    let mut i = 0;
-    while(i < account.collateral_balances().length()){
-        let bal = account.collateral_balances().borrow(i);
-        if(i != 2){
-            assert!(bal == 0, 0);
-        }
-        else{
-            assert!(bal == mint_amount, 0);
-        };
-        i = i + 1;
-    };
+    
+    // Check collateral count is 1 after successful post
+    assert!(account.collateral_count() == 1, 0);
     
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
@@ -356,17 +266,9 @@ public fun test_post_collateral_good_2() {
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
 
     post_collateral(&mut account, &program, coin, scenario.ctx());
-    let mut i = 0;
-    while(i < account.collateral_balances().length()){
-        let bal = account.collateral_balances().borrow(i);
-        if(i != 0){
-            assert!(bal == 0, 0);
-        }
-        else{
-            assert!(bal == mint_amount, 0);
-        };
-        i = i + 1;
-    };
+    
+    // Check collateral count is 1 after successful post
+    assert!(account.collateral_count() == 1, 0);
     
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
