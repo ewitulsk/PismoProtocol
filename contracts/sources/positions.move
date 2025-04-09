@@ -158,9 +158,36 @@ public enum TransferTo has drop, copy {
     User
 }
 
+//THIS FUNCTION SHOULD NEVER HAVE THE DROP ABILITY. IF YOU NEED TO DROP IT, YOU'RE DOING SOMETHING WRONG.
 public struct TransferData {
     transfer_to: TransferTo,
     amount: u64
+}
+
+public(package) fun transfer_to(data: &TransferData): TransferTo {
+    data.transfer_to
+}
+
+public(package) fun transfer_amount(data: &TransferData): u64 {
+    data.amount
+}
+
+public(package) fun is_transfer_to_vault(data: &TransferData): bool {
+    match (data.transfer_to) {
+        TransferTo::Vault => true,
+        TransferTo::User => false
+    }
+}
+
+public(package) fun is_transfer_to_user(data: &TransferData): bool {
+    match (data.transfer_to) {
+        TransferTo::Vault => false,
+        TransferTo::User => true
+    }
+}
+
+public(package) fun destroy_transfer_data(data: TransferData) {
+    let TransferData { transfer_to: _, amount: _ } = data;
 }
 
 public(package) fun close_position_internal(
@@ -168,8 +195,6 @@ public(package) fun close_position_internal(
     close_price: u64,
     close_price_decimals: u8,
     supported_positions_token_i: u64,
-    account_id: address,
-    ctx: &mut TxContext
 ): TransferData {
     let position_id = object::uid_to_address(&position.id);
     let position_type = position._type;
@@ -283,4 +308,21 @@ public(package) fun supported_positions_token_i(position: &Position): u64 {
 
 public(package) fun account_id(position: &Position): address {
     position.account_id
+}
+
+/// Destroys a vector of Position objects.
+public(package) fun destroy_positions(positions: &mut vector<Position>) {
+    while (!vector::is_empty(positions)) {
+        let Position {
+            id,
+            _type: _,
+            amount: _,
+            leverage_multiplier: _,
+            entry_price: _,
+            entry_price_decimals: _,
+            supported_positions_token_i: _,
+            account_id: _,
+        } = vector::pop_back(positions);
+        object::delete(id);
+    };
 }

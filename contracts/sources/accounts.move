@@ -2,10 +2,11 @@ module pismo_protocol::accounts;
 
 use sui::clock::Clock;
 use sui::coin::Coin;
-use sui::balance::Balance;
+use sui::balance::{Self, Balance};
 use sui::transfer;
-use sui::object::UID;
+use sui::object::{Self, UID, ID};
 use sui::tx_context::TxContext;
+use sui::address;
 
 use std::vector;
 use std::string::String;
@@ -17,71 +18,102 @@ use pyth::price_info::PriceInfoObject;
 
 use pismo_protocol::programs::Program;
 use pismo_protocol::positions::{
-    Position, PositionType, u64_to_position_type, new_position_internal,
-    amount as position_amount, leverage_multiplier, entry_price, entry_price_decimals,
-    supported_positions_token_i, account_id as position_account_id, close_position_internal, TransferData
+    Position,
+    amount as position_amount, leverage_multiplier, entry_price,
+    account_id as position_account_id
 };
-use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth, get_PYTH_MAX_PRICE_AGE_SECONDS, normalize_value, get_value_pyth as token_get_value_pyth, get_price_feed_bytes_pyth as token_get_price_feed_bytes_pyth};
+use pismo_protocol::tokens::{get_price_pyth, normalize_value};
 use pismo_protocol::signed::{SignedU128, sub_signed_u128, is_positive, Sign, new_signed_u128, new_sign, amount as signed_amount, sign, add_signed_u128, is_negative};
 use pismo_protocol::main::Global;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
-const E_TOKEN_INFO_PRICE_FEED_MISMATCH: u64 = 1;
-const E_COLLATERAL_VALUE_TOO_OLD: u64 = 2;
 const E_INVALID_INITAL_MARGIN: u64 = 3;
 const E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE: u64 = 4;
 const E_NEGATIVE_TOTAL_UPNL: u64 = 5;
 const E_ZERO_TOTAL_UPNL: u64 = 6;
 const E_POSITIVE_TOTAL_UPNL: u64 = 7;
-const E_NOT_POSITION_OWNER: u64 = 8;
 const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9;
-const E_COLLATERAL_PROGRAM_MISMATCH: u64 = 10;
-const E_COLLATERAL_PRICE_FEED_MISMATCH: u64 = 11;
 const E_INPUT_LENGTH_MISMATCH: u64 = 12;
+const E_ACCOUNT_STATS_MISMATCH: u64 = 13;
 
-public struct Account has key {
+public struct AccountStats has key {
     id: UID,
-    program_id: address,
+    account_id: address,
     num_open_positions: u64,
     collateral_count: u64
 }
 
-//Can you have multiple of the same type of object?
+public struct Account has key {
+    id: UID,
+    program_id: address,
+    stats_id: ID
+}
+
 public entry fun init_account(program: &Program, ctx: &mut TxContext) {
+    let account_uid = object::new(ctx);
+    let account_addr = object::uid_to_address(&account_uid);
 
-    transfer::transfer(
-        Account{
-            id: object::new(ctx),
-            program_id: program.id(),
-            num_open_positions: 0,
-            collateral_count: 0
-        }, 
-        ctx.sender()
-    )
+    let stats = AccountStats {
+        id: object::new(ctx),
+        account_id: account_addr,
+        num_open_positions: 0,
+        collateral_count: 0
+    };
+    let stats_id = object::id(&stats);
+    transfer::share_object(stats);
+
+    let account = Account{
+        id: account_uid,
+        program_id: program.id(),
+        stats_id: stats_id
+    };
+
+    transfer::transfer(account, ctx.sender());
 }
 
-public(package) fun collateral_count(account: &Account): u64 {
-    account.collateral_count
+public(package) fun assert_account_stats_match(account: &Account,stats: &AccountStats) {
+    assert!(id(account) == stats.account_id, E_ACCOUNT_STATS_MISMATCH);
 }
 
-public(package) fun increment_collateral_count(account: &mut Account) {
-    account.collateral_count = account.collateral_count + 1;
+public(package) fun account_id(stats: &AccountStats): address {
+    stats.account_id
 }
 
-public(package) fun decrement_collateral_count(account: &mut Account) {
-    account.collateral_count = account.collateral_count - 1;
+public(package) fun collateral_count(stats: &AccountStats): u64 {
+    stats.collateral_count
 }
 
-public(package) fun increment_open_positions(account: &mut Account) {
-    account.num_open_positions = account.num_open_positions + 1;
+public(package) fun num_open_positions(stats: &AccountStats): u64 {
+    stats.num_open_positions
 }
 
-public(package) fun decrement_open_positions(account: &mut Account) {
-    account.num_open_positions = account.num_open_positions - 1;
+public(package) fun increment_collateral_count(stats: &mut AccountStats) {
+    stats.collateral_count = stats.collateral_count + 1;
+}
+
+public(package) fun decrement_collateral_count(stats: &mut AccountStats) {
+    stats.collateral_count = stats.collateral_count - 1;
+}
+
+public(package) fun increment_open_positions(stats: &mut AccountStats) {
+    stats.num_open_positions = stats.num_open_positions + 1;
+}
+
+public(package) fun decrement_open_positions(stats: &mut AccountStats) {
+    stats.num_open_positions = stats.num_open_positions - 1;
+}
+
+public(package) fun zero_out_liquidated_counters(stats: &mut AccountStats) {
+    stats.num_open_positions = 0;
+    stats.collateral_count = 0;
 }
 
 public(package) fun id(account: &Account): address {
     account.id.to_address()
+}
+
+public(package) fun stats_id(account: &Account): ID {
+    account.stats_id
 }
 
 public(package) fun assert_account_program_match(account: &Account, program: &Program) {
@@ -108,14 +140,16 @@ public fun single_position_upnl(
 }
 
 public fun sum_account_positions_upnl_pyth(
-    account: &Account,
+    account: &Account, // Keep account for validation
+   stats: &AccountStats,
     program: &Program,
     positions: &vector<Position>,
     price_infos: &vector<PriceInfoObject>,
     clock: &Clock,
     shared_decimals: u8
 ): SignedU128 {
-    assert!(vector::length(positions) == account.num_open_positions, 0);
+    assert_account_stats_match(account, stats); // Add check
+    assert!(vector::length(positions) == stats.num_open_positions, 0);
     
     assert!(vector::length(price_infos) == vector::length(positions), 0);
 
@@ -167,15 +201,18 @@ public fun assert_inital_margin(
 }
 
 public fun assert_total_upnl_is_positive_pyth(
-    account: &Account,
+    account: &Account, 
+   stats: &AccountStats,
     program: &Program,
     positions: &vector<Position>,
     price_infos: &vector<PriceInfoObject>,
     clock: &Clock
 ) {
+    assert_account_stats_match(account, stats); 
     let shared_decimals = program.shared_price_decimals();
     let total_upnl = sum_account_positions_upnl_pyth(
         account,
+        stats,
         program,
         positions,
         price_infos,
@@ -188,15 +225,19 @@ public fun assert_total_upnl_is_positive_pyth(
 }
 
 public fun assert_total_upnl_is_negative_pyth(
-    account: &Account,
+    account: &Account, 
+    stats: &AccountStats,
     program: &Program,
     positions: &vector<Position>,
     price_infos: &vector<PriceInfoObject>,
     clock: &Clock
 ) {
+    //This function needs to validate that the account = stats = program = positions
+    assert_account_stats_match(account, stats); 
     let shared_decimals = program.shared_price_decimals();
     let total_upnl = sum_account_positions_upnl_pyth(
         account,
+        stats,
         program,
         positions,
         price_infos,

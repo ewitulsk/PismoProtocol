@@ -26,7 +26,12 @@ use pismo_protocol::tokens::{
 };
 use pismo_protocol::accounts::{
     Account, assert_account_program_match, id as account_id,
-    increment_collateral_count, decrement_collateral_count, collateral_count 
+    AccountStats,
+    increment_collateral_count,
+    collateral_count,
+    stats_id as account_stats_id,
+    assert_account_stats_match,
+    account_id as stats_account_id
 };
 use pismo_protocol::lp::{Self as lp, Vault, deposit_coin};
 use pismo_protocol::main::Global;
@@ -54,8 +59,14 @@ public struct Collateral<phantom CoinType> has key, store {
     collateral_index: u64
 }
 
-public entry fun post_collateral<CoinType>(account: &mut Account, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
+// Helper function to validate Collateral against AccountStats
+public(package) fun assert_collateral_stats_match<CoinType>(collateral: &Collateral<CoinType>, stats: &AccountStats) {
+    assert!(get_collateral_account_id(collateral) == stats_account_id(stats), E_COLLATERAL_ACCOUNT_MISMATCH);
+}
+
+public entry fun post_collateral<CoinType>(account: &Account, stats: &mut AccountStats, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
     assert_account_program_match(account, program);
+    assert_account_stats_match(account, stats);
 
     let type_str = type_name::get<CoinType>().into_string();
     let mut i = 0;
@@ -73,7 +84,7 @@ public entry fun post_collateral<CoinType>(account: &mut Account, program: &Prog
                     collateral_index: i
                 }
             );
-            account.increment_collateral_count();
+            stats.increment_collateral_count();
             return;
         };
         i = i + 1;
@@ -82,8 +93,9 @@ public entry fun post_collateral<CoinType>(account: &mut Account, program: &Prog
     coin.destroy_zero();
 }
 
-public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(account_id_addr: address, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
-    let coin_bal = coin.value();
+public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(account_id_addr: address, stats: &mut AccountStats, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
+    assert!(stats_account_id(stats) == account_id_addr, E_COLLATERAL_ACCOUNT_MISMATCH); //We are running this check on multiple levels. I'm leaving it for rn, we can change it once the contracts are more finalized.
+
     let type_str = type_name::get<CoinType>().into_string();
     let mut i = 0;
     while(i < program.supported_collateral().length()){
@@ -100,8 +112,7 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
                     collateral_index: i
                 }
             );
-            // Note: This internal function does *not* modify the account's counter.
-            // The caller would need to manage that if using this.
+            stats.increment_collateral_count();
             return;
         };
         i = i + 1;
@@ -110,8 +121,7 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
     coin.destroy_zero();
 }
 
-// Simple internal destructor
-fun destroy_collateral_internal<CoinType>(collateral: Collateral<CoinType>) {
+fun destroy_collateral_internal<CoinType>(collateral: Collateral<CoinType>, stats: &mut AccountStats) {
     let Collateral {
         id,
         account_id: _,
@@ -121,14 +131,16 @@ fun destroy_collateral_internal<CoinType>(collateral: Collateral<CoinType>) {
     } = collateral;
     object::delete(id);
     coin.destroy_zero();
+    stats.decrement_collateral_count();
 }
 
-public(package) fun return_collateral<CoinType>(collateral: Collateral<CoinType>) {
+public(package) fun return_collateral<CoinType>(collateral: Collateral<CoinType>, stats: &mut AccountStats) {
     if (collateral.value() > 0) {
         transfer::share_object(collateral);
     }
     else{
-        collateral.destroy_collateral_internal();
+        stats.decrement_collateral_count();
+        collateral.destroy_collateral_internal(stats);
     };
 }
 
@@ -194,15 +206,17 @@ public struct CollateralValueAssertionObject has store, key {
 
 public fun start_collateral_value_assertion(
     account: &Account,
+    stats: &AccountStats,
     program: &Program,
     ctx: &mut TxContext
 ) {
-    assert_account_program_match(account, program); 
+    assert_account_program_match(account, program);
+    assert_account_stats_match(account, stats);
     let mut collat_assertion = CollateralValueAssertionObject {
         id: object::new(ctx),
-        account_id: account.id(), 
-        program_id: program.id(), 
-        num_open_collateral_objects: account.collateral_count(), 
+        account_id: account_id(account),
+        program_id: program.id(),
+        num_open_collateral_objects: collateral_count(stats),
         visited_collateral_object_ids: vector::empty<address>(),
         collateral_values: vector::empty<u128>(),
         collateral_set_times: vector::empty<u64>()
@@ -278,73 +292,3 @@ public fun sum_collateral_values_assertion(
     };
     total_value
 }
-
-
-// /// Takes exactly `amount` from the `collaterals` vector, consolidating it into a single Coin.
-// /// Destroys any collateral objects emptied in the process using swap_remove.
-// /// Deposits the resulting Coin into the `vault`.
-// /// Asserts if the total value in `collaterals` is less than `amount`.
-// public(package) fun rip_collateral_to_vault<CoinType, LPType>(
-//     amount: u64,
-//     collaterals: &mut vector<Collateral<CoinType>>,
-//     vault: &mut Vault<CoinType, LPType>,
-//     global: &mut Global,
-//     ctx: &mut TxContext
-// ) {
-//     assert!(amount > 0, 0); // Cannot rip zero amount
-
-//     let mut amount_needed = amount;
-//     // Create an empty coin to collect the value
-//     let mut collected_coin = coin::zero<CoinType>(ctx);
-
-//     let mut i = 0;
-//     // Iterate while we still need amount and there are collaterals left
-//     while (i < vector::length(collaterals) && amount_needed > 0) {
-//         // Get a mutable reference to the collateral at index i
-//         let collateral = vector::borrow_mut(collaterals, i);
-//         let collateral_value = value(collateral);
-
-//         if (collateral_value == 0) {
-//             // This collateral is already empty. Remove it and check the next element (which is now at index i).
-//             let removed_collateral = vector::swap_remove(collaterals, i);
-//             destroy_collateral(removed_collateral);
-//             // Do not increment i, as swap_remove replaced the element at i.
-//             // The loop condition handles the decreased vector length.
-//             continue;
-//         };
-
-//         if (collateral_value <= amount_needed) {
-//             // This collateral has less than or equal to the amount needed. Take it all.
-//             let taken_balance = take_coin(collateral, collateral_value);
-//             // Add the taken balance (converted to coin) to our collected coin
-//             coin::join(&mut collected_coin, taken_balance.into_coin(ctx));
-//             // Decrease the amount still needed
-//             amount_needed = amount_needed - collateral_value;
-
-//             // The collateral is now empty. Remove it from the vector and destroy it.
-//             let removed_collateral = vector::swap_remove(collaterals, i);
-//             destroy_collateral(removed_collateral);
-//             // Do not increment i.
-//         } else {
-//             // This collateral has more than the amount needed. Take only what's needed.
-//             // collateral_value > amount_needed
-//             let taken_balance = take_coin(collateral, amount_needed);
-//             // Add the taken balance (converted to coin) to our collected coin
-//             coin::join(&mut collected_coin, taken_balance.into_coin(ctx));
-//             // We now have the full amount needed
-//             amount_needed = 0;
-
-//             // This collateral still has value, so keep it and move to the next index.
-//             i = i + 1;
-//         }
-//     };
-
-//     // After the loop, ensure we collected exactly the required amount.
-//     // If amount_needed is not 0, it means the provided collaterals were insufficient.
-//     assert!(amount_needed == 0, E_INSUFFICIENT_COLLATERAL_PROVIDED);
-//     // Double check the collected coin value (should always pass if amount_needed is 0)
-//     assert!(collected_coin.value() == amount, 0); // Internal consistency check
-
-//     // Deposit the fully collected coin into the specified vault.
-//     lp::deposit_coin<CoinType, LPType>(global, vault, collected_coin);
-// }

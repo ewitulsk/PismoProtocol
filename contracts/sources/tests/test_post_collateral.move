@@ -13,7 +13,7 @@ use pismo_protocol::programs::{Program, init_program_internal, destroy_program};
 #[test_only]
 use pismo_protocol::tokens::new_token_identifier;
 #[test_only]
-use pismo_protocol::accounts::{Account, init_account};
+use pismo_protocol::accounts::{Account, AccountStats, init_account};
 #[test_only]
 use pismo_protocol::collateral::{Collateral, post_collateral, E_INVALID_COLLATERAL, value};
 #[test_only]
@@ -108,9 +108,11 @@ public fun test_post_collateral_bad() {
 
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+    let mut stats = scenario.take_shared<AccountStats>();
 
-    post_collateral( &mut account, &program, coin, scenario.ctx());
+    post_collateral( &account, &mut stats, &program, coin, scenario.ctx());
     
+    test_scenario::return_shared(stats);
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
     destroy_program(program);
@@ -206,12 +208,13 @@ public fun test_post_collateral_good() {
 
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+    let mut stats = scenario.take_shared<AccountStats>();
 
-    post_collateral(&mut account, &program, coin, scenario.ctx());
+    post_collateral(&account, &mut stats, &program, coin, scenario.ctx());
     
-    // Check collateral count is 1 after successful post
-    assert!(account.collateral_count() == 1, 0);
+    assert!(stats.collateral_count() == 1, 0);
     
+    test_scenario::return_shared(stats);
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
     
@@ -264,12 +267,13 @@ public fun test_post_collateral_good_2() {
 
     let mut account = scenario.take_from_sender<Account>();
     let coin = scenario.take_from_sender<Coin<TEST_COIN>>();
+    let mut stats = scenario.take_shared<AccountStats>();
 
-    post_collateral(&mut account, &program, coin, scenario.ctx());
+    post_collateral(&account, &mut stats, &program, coin, scenario.ctx());
     
-    // Check collateral count is 1 after successful post
-    assert!(account.collateral_count() == 1, 0);
+    assert!(stats.collateral_count() == 1, 0);
     
+    test_scenario::return_shared(stats);
     scenario.return_to_sender<TreasuryCap<TEST_COIN>>(t_cap);
     scenario.return_to_sender<Account>(account);
     
