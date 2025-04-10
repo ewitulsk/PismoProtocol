@@ -17,10 +17,10 @@ use std::type_name;
 use std::debug;
 use std::u128::pow;
 
-use pismo_protocol::programs::{Program, CollateralIdentifier, new_collateral_identifier};
+use pismo_protocol::programs::Program;
+use pismo_protocol::tokens::{TokenIdentifier, OracleInfoObjects, assert_price_obj_match_identifiers};
 use pismo_protocol::accounts::{Account, assert_account_program_match};
 
-const E_PRICE_OBJS_DONT_MATCH_COLLATS: u64 = 0;
 const E_INVALID_COLLATERAL: u64 = 9999999999;
 
 public struct Collateral<phantom CoinType> has key {
@@ -44,61 +44,27 @@ public(package) fun ensure_collateral_balance_length(program: &Program, account_
     }
 }
 
-fun assert_price_obj_match_collateral(price_objs: &vector<PriceInfoObject>, collaterals: &vector<CollateralIdentifier>) {
-    let mut i = 0;
-    assert!(price_objs.length() == collaterals.length(), E_PRICE_OBJS_DONT_MATCH_COLLATS);
-    while(i < price_objs.length()){
-        let p_obj = price_objs.borrow(i);
-        let p_id = p_obj.get_price_info_from_price_info_object().get_price_feed().get_price_identifier().get_bytes();
-        let collat = collaterals.borrow(i);
-        assert!(p_id == collat.price_feed_id_bytes(), E_PRICE_OBJS_DONT_MATCH_COLLATS);
-        i = i + 1;
-    };
-}
-
 public(package) fun sum_collateral_balances(
     clock: &Clock,
-    price_info_objects: &vector<PriceInfoObject>,
+    oracle_info_objects: &vector<OracleInfoObjects>,
     account: &Account,
     program: &Program
 ): u128 {
     assert_account_program_match(account, program);
-    assert_price_obj_match_collateral(price_info_objects, program.supported_collateral());
-    let max_age_seconds = 3;
+    assert_price_obj_match_identifiers(oracle_info_objects, program.supported_collateral());
 
     let shared_decimals = program.shared_price_decimals();
 
     let mut total_collateral_value = 0;
     
     let mut i = 0;
-    while(i < price_info_objects.length()){
-        let account_balance = account.collateral_balances().borrow(i);
-        let collat_id = program.supported_collateral().borrow(i);
-        let price_info_object = price_info_objects.borrow(i);
-        let price_struct = pyth::get_price_no_older_than(price_info_object,clock, max_age_seconds);
+    while(i < oracle_info_objects.length()){
+        let account_balance = *account.collateral_balances().borrow(i);
+        let token_id = program.supported_collateral().borrow(i);
+        let oracle_info_object = oracle_info_objects.borrow(i);
 
-        let price_decimal_i64 = price::get_expo(&price_struct);
-        let price_i64 = price::get_price(&price_struct);
-
-        let price_decimal_u8 = (price_decimal_i64).get_magnitude_if_negative() as u8; //There's a chance this needs to be .get_magnitude_if_positive
-        let price_u128 = price_i64.get_magnitude_if_positive() as u128;
-        let token_decimal = collat_id.token_decimals();
-        let token_balance_u128 = *account_balance as u128;
-
-        let local_decimals = price_decimal_u8 + token_decimal;
-        let value = price_u128 * token_balance_u128;
-
-        let mut normalized_value = value; 
-        if(local_decimals > shared_decimals){
-            let diff = local_decimals-shared_decimals;
-            normalized_value = value / pow(10, diff);
-        }
-        else if(shared_decimals > local_decimals){
-            let diff = shared_decimals-local_decimals;
-            normalized_value = value * pow(10, diff);
-        };
-        //If shared_decimals == local_decimals, price will already by normalized;
-        //normalized_value is now the value of the asset in shared_decimals
+        let normalized_value = token_id.get_value(oracle_info_object, account_balance, shared_decimals);
+        
 
         total_collateral_value = total_collateral_value + normalized_value;
 
