@@ -22,10 +22,15 @@ const { networkConfig } = createNetworkConfig({
 	},
 });
 
+// Determine the default network from the environment variable, defaulting to 'testnet' if not set
+const defaultNetwork = (process.env.SUI_NETWORK as "localnet" | "mainnet" | "testnet") || 'testnet';
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networkConfig}>
+      {/* Use the defaultNetwork variable */}
+      <SuiClientProvider networks={networkConfig} defaultNetwork={defaultNetwork}>
+        {/* Consider adding autoConnect={true} if you want the wallet to connect automatically on page load */}
         <WalletProvider theme={customTheme}>
           {children}
         </WalletProvider>
