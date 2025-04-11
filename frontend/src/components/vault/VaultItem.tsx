@@ -1,32 +1,45 @@
 "use client";
 import React from "react";
-import { vaultsData } from "@/data/vaults";
 
+// Define props based on backend data passed from Sidebar
 interface VaultItemProps {
-  id: string;
-  name: string;
-  symbol: string;
+  id: string; // This will be the coin_type
+  coin_type: string;
+  value: number;
   isActive: boolean;
   onSelect: (vaultId: string) => void;
 }
 
-const VaultItem: React.FC<VaultItemProps> = ({ id, name, symbol, isActive, onSelect }) => {
-  const handleClick = () => {
-    onSelect(id);
-  };
+// Helper to extract a display name/symbol from coin_type
+const getDisplayName = (coinType: string): string => {
+  const parts = coinType.split('::');
+  return parts[parts.length - 1] || "Unknown"; // Return last part (e.g., BTC, ETH)
+};
 
-  // Get additional data for this vault
-  const vaultData = vaultsData.find(vault => vault.id === id);
-  const apy = vaultData ? `${vaultData.apy}%` : "N/A";
-  const tvl = vaultData ? new Intl.NumberFormat('en-US', {
+// Helper to format currency (simplified)
+const formatCompactCurrency = (value: number): string => {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     notation: 'compact',
     maximumFractionDigits: 1
-  }).format(vaultData.totalValueLocked.amount) : "N/A";
+  }).format(value);
+};
+
+const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, onSelect }) => {
+  const handleClick = () => {
+    onSelect(id); // Pass coin_type (as id) back up
+  };
+
+  // Derive display name and symbol from coin_type
+  const displayName = getDisplayName(coin_type);
+  const symbol = displayName; // Use derived name as symbol for now
+
+  // Format the value (TVL)
+  const tvl = formatCompactCurrency(value);
 
   return (
-    <div 
+    <div
       className={`flex gap-4 items-center px-4 py-4 rounded-xl cursor-pointer max-md:min-w-[280px] ${
         isActive ? "bg-secondary" : "bg-darkBackground"
       }`}
@@ -35,30 +48,26 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, name, symbol, isActive, onSel
       tabIndex={0}
       aria-pressed={isActive}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.key === "Enter" || e.key === " ") {
           handleClick();
         }
       }}
     >
+      {/* Placeholder Icon */}
       <div className="w-8 h-8 rounded-full bg-zinc-300" />
       <div className="flex flex-col flex-grow">
         <div className="flex justify-between items-center">
+          {/* Display derived name */}
           <h3
             className={`text-base font-bold ${
               isActive ? "text-black" : "text-white"
             }`}
           >
-            {name}
+            {displayName} Vault {/* Add " Vault" for clarity */}
           </h3>
-          <span 
-            className={`text-xs font-bold ${
-              isActive ? "text-black" : "text-secondary"
-            }`}
-          >
-            {apy}
-          </span>
         </div>
         <div className="flex justify-between items-center">
+          {/* Display derived symbol */}
           <p
             className={`text-sm font-bold ${
               isActive ? "text-black" : "text-primary"
@@ -66,7 +75,8 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, name, symbol, isActive, onSel
           >
             {symbol}
           </p>
-          <span 
+          {/* Display formatted value (TVL) */}
+          <span
             className={`text-xs ${
               isActive ? "text-black" : "text-gray-400"
             }`}

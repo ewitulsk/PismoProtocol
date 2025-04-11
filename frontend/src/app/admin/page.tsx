@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'; // Import useEffect
 import {
-  useSignTransaction,
+  useSignAndExecuteTransaction,
   useCurrentAccount,
   useSuiClient,
 } from '@mysten/dapp-kit';
@@ -41,7 +41,7 @@ const AdminPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const { mutate: signTransaction } = useSignTransaction();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
   const suiClient = useSuiClient();
 
@@ -121,7 +121,7 @@ const AdminPage = () => {
       });
 
       // Sign and execute the transaction block
-      signTransaction(
+      signAndExecuteTransaction(
         {
           transaction: txb,
           // Use the dynamically determined chain identifier
@@ -129,8 +129,9 @@ const AdminPage = () => {
         },
         {
           // Use the correct type for the callback parameter
-          onSuccess: (data) => { // Try accessing digest via data.transactionBlock?.digest
+          onSuccess: (data) => { // The data structure might differ slightly, adjust if needed based on console logs
             console.log('Vault initialized successfully:', data);
+            // Consider adding user feedback here, e.g., a success message
           },
           onError: (error: Error) => {
             console.error('Error initializing vault:', error);

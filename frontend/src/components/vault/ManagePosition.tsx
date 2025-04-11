@@ -39,7 +39,7 @@ const ManagePosition: React.FC<ManagePositionProps> = ({ vault }) => {
 
   return (
     <section className="card flex flex-col pb-6 border border-secondary h-full">
-      <h2 className="header-title text-2xl">Manage Position</h2>
+      <h2 className="header-title text-2xl">Manage LP</h2>
 
       <div className="flex gap-2 mt-6 font-semibold text-center whitespace-nowrap">
         <TabButton
@@ -73,8 +73,8 @@ const ManagePosition: React.FC<ManagePositionProps> = ({ vault }) => {
 
       <div className="flex gap-5 justify-between mt-6 text-sm">
         <div className="text-label">
-          <div>Available Balance</div>
-          <div className="mt-2">Current Position</div>
+          <div>Wallet Balance</div>
+          <div className="mt-2">Current LP</div>
         </div>
         <div className="flex flex-col text-value">
           <div className="self-start">1.45 {vault.symbol}</div>
