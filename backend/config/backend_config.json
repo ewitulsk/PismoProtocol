@@ -4,6 +4,7 @@
   "pyth_price_feed_url": "https://hermes.pyth.network/v2/updates/price/latest?",
   "sui_api_url": "https://fullnode.testnet.sui.io:443",
   "vault_addresses": [
-    "0x815436a2eac2aa5e7dcb93c8c61df0c21c19afb9569f5f2128d85773525510bd"
+    "0x815436a2eac2aa5e7dcb93c8c61df0c21c19afb9569f5f2128d85773525510bd",
+    "0xd21a7b73ca05b287f3ec46cd1a6b3ddfa0231796b6f1e724b6ab0717b3d1940a"
   ]
 }
