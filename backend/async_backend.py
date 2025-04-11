@@ -335,8 +335,8 @@ async def calc_total_vault_values() -> Dict:
                 # Get the vault's balance/amount
                 coin = float(fields.get('coin', 0))
                 if coin == 0:
-                    #print(f"No coin balance found for vault: {vault_data.get('objectId', '')}")
-                    continue
+                    print(f"No coin balance found for vault: {vault_data.get('objectId', '')}")
+                    
                 
                 # Parse token type to extract underlying asset information
                 coin_type = await parse_vault_token_type(vault_type)
@@ -369,10 +369,12 @@ async def calc_total_vault_values() -> Dict:
         # Execute all price feed requests concurrently
         if price_feed_tasks:
             price_feed_results = await asyncio.gather(*price_feed_tasks, return_exceptions=True)
+            #print(f"\n\nPrice feed results:\n {price_feed_results}\n")
             
             # Calculate values using price feed results
             for i, (vault_info, price_result) in enumerate(zip(vault_coin_types, price_feed_results)):
                 try:
+                    #print(price_result)
                     if not isinstance(price_result, Exception):
                         # Get token info from global object based on coin type
                         coin_type = vault_info['coin_type']
