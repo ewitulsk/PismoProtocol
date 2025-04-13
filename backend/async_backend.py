@@ -355,7 +355,7 @@ async def calc_total_vault_values() -> Dict:
                         # Add to list of tasks
                         price_feed_tasks.append(get_price_feed(session, feed_id, pyth_url))
                         vault_coin_types.append({
-                            "id": vault_data.get('objectId', ''),
+                            "object_id": vault_data.get('objectId', ''),
                             "type": vault_type,
                             "coin": coin,
                             "coin_type": coin_type,
@@ -397,7 +397,7 @@ async def calc_total_vault_values() -> Dict:
                             cumulative_vault_total += value
                             
                             vault_detail = {
-                                #"id": vault_info['id'],
+                                "object_id": vault_info['object_id'],
                                 "type": vault_info['type'],
                                 "coin": vault_info['coin'],
                                 "coin_type": vault_info['coin_type'],
