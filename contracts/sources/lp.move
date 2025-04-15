@@ -8,11 +8,38 @@ use std::string::{Self, String};
 use sui::transfer;
 use sui::object::{Self, UID};
 use sui::tx_context::{Self, TxContext};
+use sui::clock::Clock;
+use std::ascii;
+use std::vector;
+
+use pyth::price_info::PriceInfoObject;
 
 use pismo_protocol::math;
 use pismo_protocol::main::{Self, AdminCap, Global};
+use pismo_protocol::tokens::{get_value_pyth, TokenIdentifier};
+
+/// Error code for when a vault is not found for a given token info
+const E_VAULT_NOT_FOUND: u64 = 1;
 
 public struct LPToken<phantom CoinType> has drop, store {}
+
+// When a vault transfer is created, it becomes a shared object. But it is referenced in a Vault Marker.
+public struct VaultTransfer has key, store {
+    id: UID,
+    amount: u64,
+    fufilled: bool,
+    to_user_address: address
+}
+
+public struct VaultMarker has key, store {
+    id: UID,
+    vault_id: address,
+    vault_amount: u64, //We need to ensure that any time we reference a vaults value, we use this instead of the vault.
+    vault_value: u128,
+    vault_value_set_timestamp_ms: u64,
+    transfers: vector<VaultTransfer>,
+    token_id: TokenIdentifier
+}
 
 public struct Vault<phantom CoinType, phantom LPType> has key {
     id: UID,
@@ -22,24 +49,35 @@ public struct Vault<phantom CoinType, phantom LPType> has key {
     deprecated: bool,
 }
 
-public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Global, vault_price_feed_bytes: vector<u8>, ctx: &mut TxContext) {
+public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Global, supported_lp_global_indx: u64, ctx: &mut TxContext) {
+
+    let token_id = global.get_supported_lp(supported_lp_global_indx);
 
     let lp_supply = balance::create_supply(LPToken<LPType>{});
 
+    let vault_id = object::new(ctx);
+    let vault_marker_id = object::new(ctx);
+
+    let vault_marker = VaultMarker {
+        id: vault_marker_id,
+        vault_id: vault_id.to_address(),
+        vault_amount: 0,
+        vault_value: 0,
+        vault_value_set_timestamp_ms: 0,
+        transfers: vector::empty(),
+        token_id
+    };
+
     let vault = Vault<CoinType, LPType> {
-        id: object::new(ctx),
+        id: vault_id,
         coin: balance::zero(),
         lp: lp_supply,
-        global_index: global.get_supported_lp_length(),
+        global_index: supported_lp_global_indx,
         deprecated: false,
     };
 
     transfer::share_object(vault);
-
-    let token_info = type_name::get<CoinType>().into_string();
-    global.push_supported_lp(token_info.to_string());
-    global.push_vault_balance(0);
-    global.push_price_feed_bytes(vault_price_feed_bytes);
+    transfer::share_object(vault_marker);
 }
 
 fun calc_amount_to_mint(supply_amount: u64, lp_supply: u64, reserve_amount: u64): u64 {
@@ -58,8 +96,8 @@ fun calc_amount_to_remove(lp_amount: u64, reserve_amount: u64, lp_supply: u64): 
 }
 
 public entry fun deposit_lp<CoinType, LPType>(
-    global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
+    marker: &mut VaultMarker,
     coin: Coin<CoinType>,
     ctx: &mut TxContext
 ) {
@@ -73,17 +111,15 @@ public entry fun deposit_lp<CoinType, LPType>(
     let amount_out = calc_amount_to_mint(supply_amount, lp_supply, reserve_amount);
     let balance_out = vault.lp.increase_supply(amount_out);
 
+    marker.add_amount(coin.balance().value());
     vault.coin.join(coin.into_balance());
-    
-    global.push_vault_balance(vault.coin.value());
-    global.swap_remove_vault_balance(vault.global_index);
     
     transfer::public_transfer(balance_out.into_coin(ctx), ctx.sender());
 }
 
 public entry fun withdraw_lp<CoinType, LPType>(
-    global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
+    marker: &mut VaultMarker,
     lp_token: Coin<LPToken<LPType>>,
     ctx: &mut TxContext
 ) {
@@ -94,42 +130,47 @@ public entry fun withdraw_lp<CoinType, LPType>(
     let amount_remove = calc_amount_to_remove(lp_amount, reserve_amount, lp_supply);
     vault.lp.decrease_supply(lp_token.into_balance());
 
+    marker.remove_amount(amount_remove);
     let balance_out = vault.coin.split(amount_remove);
-    
-    global.push_vault_balance(vault.coin.value());
-    global.swap_remove_vault_balance(vault.global_index);
     
     transfer::public_transfer(balance_out.into_coin(ctx), ctx.sender());
 }
 
 public(package) fun extract_coin<CoinType, LPType>(
-    global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
+    marker: &mut VaultMarker,
     amount: u64,
     ctx: &mut TxContext
 ): Coin<CoinType> {
     assert!(vault.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = vault.coin.split(amount);
     
-    global.push_vault_balance(vault.coin.value());
-    global.swap_remove_vault_balance(vault.global_index);
-    
+    marker.remove_amount(balance_out.value());
     balance_out.into_coin(ctx)
 }
 
 public(package) fun deposit_coin<CoinType, LPType>(
-    global: &mut Global,
     vault: &mut Vault<CoinType, LPType>,
+    marker: &mut VaultMarker,
     coin: Coin<CoinType>
 ) {
+    marker.add_amount(coin.balance().value());
     vault.coin.join(coin.into_balance());
-    
-    global.push_vault_balance(vault.coin.value());
-    global.swap_remove_vault_balance(vault.global_index);
 }
 
-public fun coin_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
-    return vault.coin.value()
+//We don't need to substract from the vault marker, it has already been subtracted from.
+//We need to make a execute_vault_transfer_to_collateral. We just need to put it into a seperate file.
+public(package) fun execute_vault_transfer<CoinType, LPType>(
+    vault: &mut Vault<CoinType, LPType>,
+    transfer: &mut VaultTransfer,
+    ctx: &mut TxContext
+){
+    let amount = transfer.amount;
+    assert!(vault.coin.value() >= amount, 0); // Insufficient balance
+    let balance_out = vault.coin.split(amount);
+    let coin = balance_out.into_coin(ctx);
+    transfer::public_transfer(coin, transfer.to_user_address);
+    transfer.fufilled = true;
 }
 
 public fun lp_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
@@ -144,16 +185,70 @@ public fun get_id(global: &Global): address {
     global.get_id_address()
 }
 
-public fun get_supported_lp(global: &Global): vector<String> {
-    global.get_supported_lp_vec()
+public fun get_vault_id(marker: &VaultMarker): address {
+    marker.vault_id
 }
 
-public fun get_price_feed_bytes(global: &Global): vector<vector<u8>> {
-    global.get_price_feed_bytes_vec()
+public fun token_id(marker: &VaultMarker): TokenIdentifier { //We need to straighten the nomenclature between getters. I.E. get_token_info() and token_info()
+    marker.token_id
 }
 
-public fun get_vault_balances(global: &Global): vector<u64> {
-    global.get_vault_balances_vec()
+public fun get_value_set_time(marker: &VaultMarker): u64 {
+    marker.vault_value_set_timestamp_ms
+}
+
+public fun find_vault_address(markers: &vector<VaultMarker>, token_info: String): Option<address> {
+    let mut i = 0;
+    let len = vector::length(markers);
+    while(i < len){
+        let marker = vector::borrow(markers, i);
+        let marker_token_info_str = marker.token_id.token_info();
+        if (marker_token_info_str == token_info) {
+            return option::some(marker.vault_id)
+        };
+        i = i + 1;
+    };
+
+    abort E_VAULT_NOT_FOUND;
+    return option::none()
+}
+
+public(package) fun set_vault_marker_value(marker: &mut VaultMarker, value: u128, clock: &Clock) {
+    marker.vault_value = value;
+    marker.vault_value_set_timestamp_ms = clock.timestamp_ms();
+}
+
+public(package) fun add_amount(marker: &mut VaultMarker, amount: u64) {
+    marker.vault_amount = marker.vault_amount + amount;
+}
+
+public(package) fun remove_amount(marker: &mut VaultMarker, amount: u64) {
+    marker.vault_amount = marker.vault_amount - amount;
+}
+
+public(package) fun create_vault_transfer(marker: &mut VaultMarker, amount: u64, to_user_address: address, ctx: &mut TxContext){
+    let transfer = VaultTransfer {
+        id: object::new(ctx),
+        amount,
+        fufilled: false,
+        to_user_address,
+    };
+
+    vector::push_back(&mut marker.transfers, transfer);
+    marker.vault_amount = marker.vault_amount - amount;
+}
+
+
+public fun set_vault_value<CoinType, LPType>(
+    global: &Global,
+    vault: &Vault<CoinType, LPType>,
+    marker: &mut VaultMarker,
+    price_info_obj: &PriceInfoObject,
+    clock: &Clock
+) {
+    let token_id = global.get_supported_positions()[vault.global_index];
+    let vault_value = get_value_pyth(&token_id, price_info_obj, clock, marker.vault_amount, token_id.token_decimals());
+    marker.set_vault_marker_value(vault_value, clock);
 }
 
 public fun is_deprecated<CoinType, LPType>(vault: &Vault<CoinType, LPType>): bool {

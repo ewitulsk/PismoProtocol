@@ -1,5 +1,7 @@
 module pismo_protocol::signed;
 
+//We need to validate that 0 is handled consistently as either a positive or negative number.
+
 public enum Sign has drop, copy {
     Positive,
     Negative
@@ -76,6 +78,23 @@ public(package) fun add_signed_u128(a: &SignedU128, b: &SignedU128): SignedU128 
             new_signed_u128(amount(a) - amount(b), sign(a))
         } else {
             new_signed_u128(amount(b) - amount(a), sign(b))
+        }
+    }
+}
+
+public(package) fun add_u128_to_signed(a: &SignedU128, b: u128): SignedU128 {
+    let sign_a = sign(a);
+    let amount_a = amount(a);
+
+    if (sign_a == Sign::Positive) {
+        new_signed_u128(amount_a + b, Sign::Positive)
+    } else { // a is Negative
+        if (amount_a >= b) {
+            // e.g., -5 + 3 = -2
+            new_signed_u128(amount_a - b, Sign::Negative)
+        } else {
+            // e.g., -3 + 5 = 2
+            new_signed_u128(b - amount_a, Sign::Positive)
         }
     }
 }
