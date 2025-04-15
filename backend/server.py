@@ -70,4 +70,4 @@ async def calculate_total_value_locked():
     
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=3030, debug=True)

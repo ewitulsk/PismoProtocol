@@ -41,6 +41,7 @@ const E_VALUE_UPDATED_TOO_LONG_AGO: u64 = 98888; // Keep for now
 const E_INSUFFICIENT_COLLATERAL_PROVIDED: u64 = 97777; // Keep for now
 const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9; // New error code from accounts.move
 const E_COLLATERAL_PROGRAM_MISMATCH: u64 = 10; // New error code from accounts.move
+const E_COLLATERAL_MARKER_MISMATCH: u64 = 10101;
 const E_COLLATERAL_PRICE_FEED_MISMATCH: u64 = 11; // New error code from accounts.move
 const E_INPUT_LENGTH_MISMATCH: u64 = 12; // New error code from accounts.move
 const E_CANNOT_WITHDRAW_ZERO: u64 = 13;
@@ -48,6 +49,7 @@ const E_COLLATERAL_ALREADY_VISITED: u64 = 14;
 const E_VISITED_TOO_MANY_COLLATERALS: u64 = 15;
 const E_PRICE_OBJS_DONT_MATCH_COLLATS: u64 = 16;
 const E_INCOMPLETE_COLLATERAL_ASSERTION: u64 = 17; // Added error code
+const E_MARKER_DOES_NOT_HAVE_AMOUNT: u64 = 18;
 
 
 // Collateral struct needs key for sharing, and store for passing by value
@@ -55,8 +57,30 @@ public struct Collateral<phantom CoinType> has key, store {
     id: UID,
     account_id: address,
     program_id: address,
+    collateral_marker_id: address,
     coin: Balance<CoinType>,
-    collateral_index: u64
+    collateral_index: u64 //Index into the program supported collateral array
+}
+
+// When a collateral transfer is created, it becomes a shared object. But it is referenced in a Collateral Marker.
+public struct CollateralTransfer has key, store {
+    id: UID,
+    amount: u64,
+    fufilled: bool,
+    to_vault_address: address
+}
+
+
+//Everytime a CollateralTransfer is created, the remaining collateral is decremented.
+public struct CollateralMarker has key, store {
+    id: UID,
+    collateral_id: address,
+    account_id: address,
+    remaining_collateral: u64, //We need to ensure that any time we refernce a collaterals amount, we reference this.  //decremented every time collateral is transfered out. 
+    remaining_collateral_value: u128,
+    remaining_collateral_value_set_timestamp_ms: u64, //We need to validate this everytime we use the remaining_collateral_value
+    transfers: vector<CollateralTransfer>, //Can be infinitely long. Never iterate through.=
+    token_id: TokenIdentifier
 }
 
 // Helper function to validate Collateral against AccountStats
@@ -75,11 +99,28 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
         if(type_str.to_string() == token_id.token_info()){
             assert!(!token_id.is_deprecated(), E_INVALID_COLLATERAL);
 
+            let collateral_marker_id = object::new(ctx);
+            let collateral_id = object::new(ctx);
+
+            let collateral_marker_id_address = collateral_marker_id.to_address();
+
+            transfer::share_object(CollateralMarker {
+                id: collateral_marker_id,
+                collateral_id: collateral_id.to_address(),
+                account_id: account.id(),
+                remaining_collateral: coin.value(),
+                remaining_collateral_value: 0,
+                remaining_collateral_value_set_timestamp_ms: 0,
+                transfers: vector::empty(),
+                token_id
+            });
+
             transfer::share_object( 
                 Collateral<CoinType> {
-                    id: object::new(ctx),
+                    id: collateral_id,
                     account_id: account.id(),
                     program_id: program.id(),
+                    collateral_marker_id: collateral_marker_id_address,
                     coin: coin.into_balance(),
                     collateral_index: i
                 }
@@ -103,11 +144,29 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
         if(type_str.to_string() == token_id.token_info()){
              // Check if token is deprecated
             assert!(!token_id.is_deprecated(), E_INVALID_COLLATERAL);
+
+            let collateral_marker_id = object::new(ctx);
+            let collateral_id = object::new(ctx);
+
+            let collateral_marker_id_address = collateral_marker_id.to_address();
+
+            transfer::share_object(CollateralMarker {
+                id: collateral_marker_id,
+                collateral_id: collateral_id.to_address(),
+                account_id: account_id_addr,
+                remaining_collateral: coin.value(),
+                remaining_collateral_value: 0,
+                remaining_collateral_value_set_timestamp_ms: 0,
+                transfers: vector::empty(),
+                token_id
+            });
+
             transfer::share_object(
                 Collateral<CoinType> {
-                    id: object::new(ctx),
+                    id: collateral_id,
                     account_id: account_id_addr,
                     program_id: program.id(),
+                    collateral_marker_id: collateral_marker_id_address,
                     coin: coin.into_balance(),
                     collateral_index: i
                 }
@@ -126,6 +185,7 @@ fun destroy_collateral_internal<CoinType>(collateral: Collateral<CoinType>, stat
         id,
         account_id: _,
         program_id: _,
+        collateral_marker_id: _,
         coin,
         collateral_index: _
     } = collateral;
@@ -153,6 +213,51 @@ public(package) fun get_collateral_account_id<CoinType>(collateral: &Collateral<
     collateral.account_id
 }
 
+public(package) fun get_collateral_marker_account_id(marker: &CollateralMarker): address {
+    marker.account_id
+}
+
+public(package) fun assert_collateral_remaining_amount(marker: &CollateralMarker, to_assert: u64) {
+    assert!(marker.remaining_collateral >= to_assert, E_MARKER_DOES_NOT_HAVE_AMOUNT);
+}
+
+public(package) fun remaining_collateral(marker: &CollateralMarker): u64 {
+    marker.remaining_collateral
+}
+
+public(package) fun create_collateral_transfer(marker: &mut CollateralMarker, amount: u64, vault_address: address, ctx: &mut TxContext){
+    let transfer = CollateralTransfer {
+        id: object::new(ctx),
+        amount,
+        fufilled: false,
+        to_vault_address: vault_address,
+    };
+
+    vector::push_back(&mut marker.transfers, transfer);
+    marker.remaining_collateral = marker.remaining_collateral - amount;
+}
+
+public(package) fun get_token_id(marker: &mut CollateralMarker): TokenIdentifier {
+    marker.token_id
+}
+
+public(package) fun set_remaining_collateral_value(marker: &mut CollateralMarker, value: u128, clock: &Clock) {
+    marker.remaining_collateral_value = value;
+    marker.remaining_collateral_value_set_timestamp_ms = clock.timestamp_ms();
+}
+
+public(package) fun get_remaining_collateral_value(marker: &CollateralMarker): u128 {
+    marker.remaining_collateral_value
+}
+
+public(package) fun get_token_info(marker: &CollateralMarker): String {
+    marker.token_id.token_info()
+}
+
+public(package) fun get_price_feed_bytes(marker: &CollateralMarker): vector<u8> {
+    marker.token_id.token_price_feed_id_bytes()
+}
+
 // Renamed for consistency
 public(package) fun get_collateral_program_id<CoinType>(collateral: &Collateral<CoinType>): address {
     collateral.program_id
@@ -161,6 +266,14 @@ public(package) fun get_collateral_program_id<CoinType>(collateral: &Collateral<
 // Renamed for consistency
 public(package) fun get_collateral_index<CoinType>(collateral: &Collateral<CoinType>): u64 {
     collateral.collateral_index
+}
+
+public(package) fun id<CoinType>(collateral: &Collateral<CoinType>): address {
+    collateral.id.to_address()
+}
+
+public(package) fun get_value_set_time(collateral_marker: &CollateralMarker): u64 {
+    collateral_marker.remaining_collateral_value_set_timestamp_ms
 }
 
 // This function allows taking value *without* destroying the collateral object or updating the account count.
@@ -237,13 +350,14 @@ public fun set_collateral_value_assertion<CoinType>(
     cva: &mut CollateralValueAssertionObject, 
     program: &Program,
     collateral: &Collateral<CoinType>,
+    collateral_marker: &mut CollateralMarker,
     price_info_obj: &PriceInfoObject,
     clock: &Clock
 ) {
     let collat_acc_id = get_collateral_account_id(collateral);
     assert!(collat_acc_id == cva.account_id, E_COLLATERAL_ACCOUNT_MISMATCH); 
-
     assert!(program.id() == cva.program_id, E_COLLATERAL_PROGRAM_MISMATCH);
+    assert!(collateral.id() == collateral_marker.collateral_id, E_COLLATERAL_MARKER_MISMATCH);
 
     let collat_obj_id = collateral.id.to_address();
     assert!(!id_in_vector(&cva.visited_collateral_object_ids, collat_obj_id), E_COLLATERAL_ALREADY_VISITED); 
@@ -251,12 +365,14 @@ public fun set_collateral_value_assertion<CoinType>(
     assert!(vector::length(&cva.visited_collateral_object_ids) < cva.num_open_collateral_objects, E_VISITED_TOO_MANY_COLLATERALS); 
 
     let collat_idx = get_collateral_index(collateral);
-    let collat_amount = value(collateral);
+    let collat_amount = collateral_marker.remaining_collateral();
 
     let token_id = program.supported_collateral()[collat_idx];
     assert_price_obj_match_token_id(price_info_obj, &token_id);
 
     let collat_value = token_id.token_get_value_pyth(price_info_obj, clock, collat_amount, program.shared_price_decimals());
+
+    collateral_marker.set_remaining_collateral_value(collat_value, clock);
 
     let current_val_ref = vector::borrow_mut(&mut cva.collateral_values, collat_idx);
     *current_val_ref = *current_val_ref + (collat_value as u128);
@@ -291,4 +407,14 @@ public fun sum_collateral_values_assertion(
         i = i + 1;
     };
     total_value
+}
+
+public(package) fun liquidate_all_markers(markers: &mut vector<CollateralMarker>) {
+    let len = vector::length(markers);
+    let mut i = 0;
+    while (i < len) {
+        let marker = vector::borrow_mut(markers, i);
+        marker.remaining_collateral = 0;
+        i = i + 1;
+    }
 }

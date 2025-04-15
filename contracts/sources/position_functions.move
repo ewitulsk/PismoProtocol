@@ -2,7 +2,7 @@ module pismo_protocol::position_functions;
 
 use sui::clock::Clock;
 use sui::tx_context::TxContext;
-
+use std::type_name;
 use std::vector;
 
 use pyth::price_info::PriceInfoObject;
@@ -19,17 +19,21 @@ use pismo_protocol::positions::{
     account_id as get_position_account_id,
     supported_positions_token_i, close_position_internal, TransferData,
 };
+use pismo_protocol::positions as positions;
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth as token_get_price_feed_bytes_pyth};
 use pismo_protocol::collateral::{
     Collateral, CollateralValueAssertionObject, sum_collateral_values_assertion,
+    CollateralMarker,
 };
 use pismo_protocol::signed::{new_signed_u128, new_sign};
 use pismo_protocol::main::Global;
-use pismo_protocol::lp::Vault;
-use pismo_protocol::value_transfers::{Self, handle_transfer};
+use pismo_protocol::lp::{Vault, find_vault_address, VaultMarker};
+use pismo_protocol::value_transfers::{Self};
 
 const E_TOKEN_INFO_PRICE_FEED_MISMATCH: u64 = 1;
 const E_NOT_POSITION_OWNER: u64 = 8;
+const E_COLLATERAL_MUST_HAVE_ASSOCIATED_VAULT: u64 = 100;
+const E_COLLATERAL_PRICE_DOES_NOT_MATCH: u64 = 1005;
 
 public fun open_position_pyth(
     global: &Global,
@@ -74,23 +78,25 @@ public fun open_position_pyth(
     );
 } 
 
-public fun close_position_same_collateral_pyth<VaultCollateralCoinType, VaultLPType>(
+public fun close_position_pyth(
     global: &mut Global,
     program: &Program,
     account: &Account,
     stats: &mut AccountStats,
     position: Position,
-    price_info: &PriceInfoObject,
-    vault: &mut Vault<VaultCollateralCoinType, VaultLPType>,
-    eligible_collateral: &mut vector<Collateral<VaultCollateralCoinType>>,
+    position_price_info: &PriceInfoObject,
+    all_collateral_markers: &mut vector<CollateralMarker>,
+    all_collateral_price_info: &vector<PriceInfoObject>,
+    all_vault_markers: &mut vector<VaultMarker>,
     clock: &Clock,
     ctx: &mut TxContext
 ) {
     assert_account_program_match(account, program);
     assert_account_stats_match(account, stats);
     assert!(position.account_id() == account.id(), E_NOT_POSITION_OWNER);
+    assert!(vector::length(all_collateral_markers) == vector::length(all_collateral_price_info), E_COLLATERAL_PRICE_DOES_NOT_MATCH);
 
-    let (exit_price, exit_price_decimal) = get_price_pyth(price_info, clock);
+    let (exit_price, exit_price_decimal) = get_price_pyth(position_price_info, clock);
 
     let pos_token_i = supported_positions_token_i(&position);
 
@@ -100,17 +106,50 @@ public fun close_position_same_collateral_pyth<VaultCollateralCoinType, VaultLPT
         exit_price_decimal,
         pos_token_i
     );
+    
+    let mut transfer_value = transfer_data.transfer_amount();
+    if (transfer_data.is_transfer_to_vault()) {
+        let mut i = 0;
+        while(i < vector::length(all_collateral_markers) || transfer_value == 0) {
+            let collateral_price_info = vector::borrow(all_collateral_price_info, i);
+            let collateral_marker = vector::borrow_mut(all_collateral_markers, i);
+            let collateral_token_id = collateral_marker.get_token_id();
+            //find_vault_address is WILDLY inefficient and we need to change it asap.
+            let maybe_vault_address = find_vault_address(all_vault_markers, collateral_token_id.token_info());
+            //When we support colalteral -> vault token swapping, we'll be able to replace this and the find_vault_address
+            //Instead, we'll just evenly split the transfer value across all the vaults.
+            assert!(maybe_vault_address.is_some(), E_COLLATERAL_MUST_HAVE_ASSOCIATED_VAULT);
+            let vault_address = *option::borrow(&maybe_vault_address);
 
-    value_transfers::handle_transfer<VaultCollateralCoinType, VaultLPType>(
-        global,
-        vault,
-        stats,
-        transfer_data,
-        eligible_collateral,
-        account.id(),
-        program,
-        ctx
-    );
+            let collateral_price_info_byte = token_get_price_feed_bytes_pyth(collateral_price_info);
+            assert!(collateral_price_info_byte == collateral_token_id.price_feed_id_bytes(), E_COLLATERAL_PRICE_DOES_NOT_MATCH);
+
+            let remaining_collateral = collateral_marker.remaining_collateral();
+            let collateral_value = collateral_marker.get_token_id().get_value_pyth(collateral_price_info, clock, remaining_collateral, collateral_token_id.token_decimals()); //The decimals might be fucked up here.
+            if(collateral_value > transfer_value){
+                //We need to write a function to "get target value" that, given a target value, and amount of an asset, tells us how much of that asset we need to cover that value... or something like that.
+                transfer_value = 0;
+            } else {
+                collateral_marker.create_collateral_transfer(remaining_collateral, vault_address, ctx);
+                transfer_value = transfer_value - collateral_value;
+            }
+            
+        };
+    }; //else if (positions::is_transfer_to_user(&transfer_data)) {
+    //     transfer_same_vault_to_collateral_internal<CoinType, LPType>(
+    //         global,
+    //         vault,
+    //         account_id,
+    //         program,
+    //         account_stats,
+    //         amount,
+    //         ctx
+    //     );
+    // } else {
+    //   abort(0);
+    // };
+
+    positions::destroy_transfer_data(transfer_data);
 
     stats.decrement_open_positions();
 }

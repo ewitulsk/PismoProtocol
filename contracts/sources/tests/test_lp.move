@@ -1,4 +1,4 @@
-module pismo_protocol::test_lp;
+module pismo_protocol::test_lp_coin;
 
 use pismo_protocol::lp;
 use pismo_protocol::lp::{Vault, LPToken};

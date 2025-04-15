@@ -10,7 +10,7 @@ import { Transaction } from '@mysten/sui/transactions'; // Keep this path
 import { bcs } from '@mysten/bcs';
 // Assuming constants are correctly exported from a path relative to this file
 // Adjust the import path as necessary
-import { SUI_PACKAGE_ID, GLOBAL_OBJECT_ID } from '../../../../typescript/src/constants'; // Adjust path if needed
+import { SUI_PACKAGE_ID, GLOBAL_OBJECT_ID } from '../../constants'; // Adjust path if needed
 import Layout from '../../components/common/Layout'; // Import the Layout component
 
 // Define the AdminCap type string based on constants
