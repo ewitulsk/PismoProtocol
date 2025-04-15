@@ -5,6 +5,8 @@ import json
 from typing import Dict, List, Any
 import os
 from dotenv import load_dotenv
+import ssl
+import certifi
 
 load_dotenv()
 
@@ -190,7 +192,8 @@ async def calc_total_account_value(owner: str, account: str, contract_address: s
     if not sui_api_url or not contract_address:
         raise ValueError("SUI API URL or Contract Address not specified in config or parameters")
     
-    async with aiohttp.ClientSession() as session:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
         collateral_triples = await form_coin_type_prgm_triples(session, sui_api_url, owner, account, contract_address)
         
         account_value = 0
@@ -292,10 +295,12 @@ async def calc_total_vault_values() -> Dict:
     if not sui_api_url or not vault_addresses or not global_address:
         raise ValueError("Error loading config: One or more fields are missing")
     
-    async with aiohttp.ClientSession() as session:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
         # Get all vault objects using multiGetObjects
         vault_objects = await get_objects(session, sui_api_url, vault_addresses)
         global_object = await get_objects(session, sui_api_url, [global_address])
+        
         if not global_object:
             raise ValueError("Could not retrieve global object")
         
@@ -334,8 +339,7 @@ async def calc_total_vault_values() -> Dict:
                 
                 # Get the vault's balance/amount
                 coin = float(fields.get('coin', 0))
-                if coin == 0:
-                    print(f"No coin balance found for vault: {vault_data.get('objectId', '')}")
+                
                     
                 
                 # Parse token type to extract underlying asset information

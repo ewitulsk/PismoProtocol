@@ -81,6 +81,63 @@ public(package) fun get_value_pyth(token_id: &TokenIdentifier, price_info_obj: &
     normalize_value(value, local_decimals, shared_decimals)
 }
 
+//This might be right, this might be fucked. Idk.
+fun internal_amount_for_target_value(
+    price_u64: u64,
+    price_decimals: u8,
+    token_decimals: u8,
+    target_value: u128,
+    shared_decimals: u8
+): u64 {
+    let price = price_u64 as u128;
+    let local_decimals: u8 = price_decimals + token_decimals;
+
+    let amount_u128: u128;
+    if (local_decimals > shared_decimals) {
+        let diff: u8 = local_decimals - shared_decimals;
+        let pow10: u128 = pow(10, diff);
+        let numerator: u128 = target_value * pow10;
+        let mut quotient: u128 = numerator / price;
+        if (numerator % price != 0) {
+            quotient = quotient + 1;
+        };
+        amount_u128 = quotient;
+    } else {
+        let diff: u8 = shared_decimals - local_decimals;
+        let pow10: u128 = pow(10, diff);
+        let denom: u128 = price * pow10;
+        let mut quotient: u128 = target_value / denom;
+        if (target_value % denom != 0) {
+            quotient = quotient + 1;
+        };
+        amount_u128 = quotient;
+    };
+
+    assert!(amount_u128 <= 0xffffffffffffffff, 0);
+    amount_u128 as u64
+}
+
+public fun amount_for_target_value_numeric(
+    token_decimals: u8,
+    price: u64,
+    price_decimals: u8,
+    target_value: u128,
+    shared_decimals: u8
+): u64 {
+    internal_amount_for_target_value(price, price_decimals, token_decimals, target_value, shared_decimals)
+}
+
+public(package) fun amount_for_target_value_pyth(
+    token_id: &TokenIdentifier, //This is the collateral token id
+    price_info_obj: &PriceInfoObject, //This is the collateral price id
+    clock: &Clock,
+    target_value: u128,
+    shared_decimals: u8
+): u64 {
+    assert!(token_id.price_feed_id_bytes() == get_price_feed_bytes_pyth(price_info_obj));
+    let (price_u64, price_decimals) = get_price_pyth(price_info_obj, clock);
+    internal_amount_for_target_value(price_u64, price_decimals, token_id.token_decimals(), target_value, shared_decimals)
+}
 
 // The order of PriceInfoObjects is the same order as they appear in the indentifiers vector.
 // So, if Token Identifiers is in the order of [pyth, supra, pyth, pyth, stork, stork, stork, pyth]

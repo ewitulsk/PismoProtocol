@@ -43,7 +43,7 @@ public struct PositionClosedEvent has copy, drop {
     close_price: u64,
     close_price_decimals: u8,
     price_delta: u64,
-    transfer_amount: u64,
+    transfer_amount: u128,
     transfer_to: TransferTo,
     account_id: address
 }
@@ -161,14 +161,14 @@ public enum TransferTo has drop, copy {
 //THIS FUNCTION SHOULD NEVER HAVE THE DROP ABILITY. IF YOU NEED TO DROP IT, YOU'RE DOING SOMETHING WRONG.
 public struct TransferData {
     transfer_to: TransferTo,
-    amount: u64
+    amount: u128
 }
 
 public(package) fun transfer_to(data: &TransferData): TransferTo {
     data.transfer_to
 }
 
-public(package) fun transfer_amount(data: &TransferData): u64 {
+public(package) fun transfer_amount(data: &TransferData): u128 {
     data.amount
 }
 
@@ -195,24 +195,18 @@ public(package) fun close_position_internal(
     close_price: u64,
     close_price_decimals: u8,
     supported_positions_token_i: u64,
-): TransferData {
-    let position_id = object::uid_to_address(&position.id);
-    let position_type = position._type;
-    let amount = position.amount;
-    let leverage_multiplier = position.leverage_multiplier;
-    let entry_price = position.entry_price;
-    let entry_price_decimals = position.entry_price_decimals;
-    
+): TransferData {    
     let Position {
         id,
-        _type,
-        amount: _,
-        leverage_multiplier: _,
-        entry_price: _,
-        entry_price_decimals: _,
+        _type: position_type,
+        amount,
+        leverage_multiplier,
+        entry_price,
+        entry_price_decimals,
         supported_positions_token_i: pos_token_i,
         account_id
     } = position;
+    let position_id = object::uid_to_address(&id);
     object::delete(id);
 
     assert!(pos_token_i == supported_positions_token_i, 0);
@@ -226,19 +220,21 @@ public(package) fun close_position_internal(
         close_price - entry_price
     };
 
-    let transfer_data = match (_type) {
+    let transfer_amount = (price_delta as u128) * (amount as u128) * (leverage_multiplier as u128);
+
+    let transfer_data = match (position_type) {
         PositionType::Long => {
             match (sign) {
                 Sign::Positive => {
                     TransferData {
                         transfer_to: TransferTo::User,
-                        amount: price_delta
+                        amount: transfer_amount
                     }
                 },
                 Sign::Negative => {
                     TransferData {
                         transfer_to: TransferTo::Vault,
-                        amount: price_delta
+                        amount: transfer_amount
                     }
                 }
             }
@@ -248,13 +244,13 @@ public(package) fun close_position_internal(
                 Sign::Positive => {
                     TransferData {
                         transfer_to: TransferTo::Vault,
-                        amount: price_delta
+                        amount: transfer_amount
                     }
                 },
                 Sign::Negative => {
                     TransferData {
                         transfer_to: TransferTo::User,
-                        amount: price_delta
+                        amount: transfer_amount
                     }
                 }
             }

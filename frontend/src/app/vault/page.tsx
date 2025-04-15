@@ -13,7 +13,7 @@ async function getVaultData(): Promise<VaultData[]> {
   try {
     // Replace with your actual backend API endpoint URL
     // Consider using an environment variable for the base URL
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://172.24.219.19:5000/'; // Example URL
+    const backendUrl = process.env.BACKEND_API_URL || 'http://172.24.219.19:5000/'; // Example URL
     const response = await fetch(`${backendUrl}/api/calculateTotalValueLocked`, {
       method: 'POST', // Change to POST
       headers: {
