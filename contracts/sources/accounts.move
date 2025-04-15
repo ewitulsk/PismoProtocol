@@ -31,14 +31,12 @@ use pismo_protocol::lp::Vault;
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_INVALID_INITAL_MARGIN: u64 = 3;
 const E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE: u64 = 4;
-const E_NEGATIVE_TOTAL_UPNL: u64 = 5;
-const E_ZERO_TOTAL_UPNL: u64 = 6;
-const E_POSITIVE_TOTAL_UPNL: u64 = 7;
 const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9;
 const E_INPUT_LENGTH_MISMATCH: u64 = 12;
 const E_ACCOUNT_STATS_MISMATCH: u64 = 13;
 
-public struct AccountStats has key {
+//Accounts are owned objects, but we need to modify these fields without requiring the user to provide the account object
+public struct AccountStats has key { //We should normalize this to be name "AccountMarker"
     id: UID,
     account_id: address,
     num_open_positions: u64,
@@ -158,7 +156,7 @@ public fun single_position_upnl(
     sub_signed_u128(cur_value, entry_value)
 }
 
-public fun sum_account_positions_upnl_pyth(
+public fun account_positions_upnl(
     account: &Account, 
     stats: &AccountStats,
     program: &Program,
@@ -216,51 +214,4 @@ public fun assert_inital_margin(
 ) { 
     assert!(is_positive(&collateral_value), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
     assert!(signed_amount(&collateral_value) > calc_inital_margin(position_size, mark_price, leverage), E_INVALID_INITAL_MARGIN);
-}
-
-public fun assert_total_upnl_is_positive_pyth(
-    account: &Account, 
-    stats: &AccountStats,
-    program: &Program,
-    positions: &vector<Position>,
-    price_infos: &vector<PriceInfoObject>,
-    clock: &Clock
-) {
-    assert_account_stats_program_positions_match(account, stats, program, positions);
-    let shared_decimals = program.shared_price_decimals();
-    let total_upnl = sum_account_positions_upnl_pyth(
-        account,
-        stats,
-        program,
-        positions,
-        price_infos,
-        clock,
-        shared_decimals
-    );
-
-    assert!(is_positive(&total_upnl), E_NEGATIVE_TOTAL_UPNL);
-    assert!(total_upnl.amount() > 0, E_ZERO_TOTAL_UPNL);
-}
-
-public fun assert_total_upnl_is_negative_pyth(
-    account: &Account, 
-    stats: &AccountStats,
-    program: &Program,
-    positions: &vector<Position>,
-    price_infos: &vector<PriceInfoObject>,
-    clock: &Clock
-) {
-    assert_account_stats_program_positions_match(account, stats, program, positions);
-    let shared_decimals = program.shared_price_decimals();
-    let total_upnl = sum_account_positions_upnl_pyth(
-        account,
-        stats,
-        program,
-        positions,
-        price_infos,
-        clock,
-        shared_decimals
-    );
-
-    assert!(is_negative(&total_upnl) || total_upnl.amount() > 0, E_POSITIVE_TOTAL_UPNL);
 }
