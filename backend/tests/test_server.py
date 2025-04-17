@@ -142,5 +142,54 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertTrue("Failed to calculate total value locked" in data["error"])
         mock_calc.assert_called_once()
 
+    @patch('server.get_lp_balance')
+    def test_lp_balance_success(self, mock_get_lp_balance):
+        mock_get_lp_balance.return_value = 123456.0
+        response = self.app.post(
+            '/api/lpBalance',
+            json={"owner": "0xowner", "vault_id": "<LP_TYPE_1>"},
+            content_type='application/json'
+        )
+        data = json.loads(response.data)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["lpBalance"], 123456.0)
+        mock_get_lp_balance.assert_called_once_with("0xowner", "<LP_TYPE_1>")
+
+    def test_lp_balance_missing_params(self):
+        response = self.app.post(
+            '/api/lpBalance',
+            json={"owner": "0xowner"},  # Missing vault_id
+            content_type='application/json'
+        )
+        data = json.loads(response.data)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", data)
+
+    @patch('server.get_lp_balance')
+    def test_lp_balance_vault_not_found(self, mock_get_lp_balance):
+        mock_get_lp_balance.side_effect = ValueError("Vault not found for id: bad_vault")
+        response = self.app.post(
+            '/api/lpBalance',
+            json={"owner": "0xowner", "vault_id": "bad_vault"},
+            content_type='application/json'
+        )
+        data = json.loads(response.data)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", data)
+        self.assertIn("Vault not found", data["error"])
+
+    @patch('server.get_lp_balance')
+    def test_lp_balance_exception(self, mock_get_lp_balance):
+        mock_get_lp_balance.side_effect = Exception("Unexpected error")
+        response = self.app.post(
+            '/api/lpBalance',
+            json={"owner": "0xowner", "vault_id": "<LP_TYPE_1>"},
+            content_type='application/json'
+        )
+        data = json.loads(response.data)
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("error", data)
+        self.assertIn("Failed to retrieve LP balance", data["error"])
+
 if __name__ == '__main__':
     unittest.main()
