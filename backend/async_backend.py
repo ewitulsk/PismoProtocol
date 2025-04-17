@@ -5,6 +5,12 @@ import json
 from typing import Dict, List, Any
 import os
 from dotenv import load_dotenv
+import logging
+
+# Initialize logging
+logger = logging.getLogger(__name__)
+if not logging.root.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
@@ -15,44 +21,60 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Configuration containing all fields from the config file
     """
+    # Determine config file path: use env var or default to backend/config/backend_config.json
+    config_file_path = os.environ.get('CONFIG_FILE_PATH')
+    if not config_file_path:
+        base_dir = os.path.dirname(__file__)
+        config_file_path = os.path.join(base_dir, 'config', 'backend_config.json')
     try:
-        config_file_path = os.environ.get('CONFIG_FILE_PATH', "")
-        
         with open(config_file_path, 'r') as f:
             config = json.load(f)
+            # Expose vault addresses list for backward compatibility and convenience
+            config['vault_addresses'] = [v.get('vault_address') for v in config.get('vaults', [])]
             return config
     except Exception as e:
-        raise RuntimeError(f"Failed to load config file: {str(e)}")
+        raise RuntimeError(f"Failed to load config file at {config_file_path}: {str(e)}")
 
 
 async def get_owned_objects(session: aiohttp.ClientSession, sui_api_url: str, owner: str) -> List[Dict[str, Any]]:
     """
-    Asynchronously retrieve owned objects for a given owner.
+    Asynchronously retrieve all owned objects for a given owner, handling pagination.
     """
-    request = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "suix_getOwnedObjects",
-        "params": [
-            owner,
-            {
-                "options": {
-                    "showType": True,
-                    "showOwner": False,
-                    "showPreviousTransaction": False,
-                    "showDisplay": False,
-                    "showContent": True,
-                    "showBcs": False,
-                    "showStorageRebate": False
-                }
+    all_objects = []
+    cursor = None
+    # Pagination loop
+    while True:
+        # Build query object with options and optional cursor
+        query = {
+            "options": {
+                "showType": True,
+                "showOwner": False,
+                "showPreviousTransaction": False,
+                "showDisplay": False,
+                "showContent": True,
+                "showBcs": False,
+                "showStorageRebate": False
             }
-        ]
-    }
-    
-    async with session.post(sui_api_url, json=request) as response:
-        result = await response.json()
-        owned_objects = result['result']['data']
-        return owned_objects
+        }
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "suix_getOwnedObjects",
+            "params": [owner, query, cursor]
+        }
+        logger.debug(f"suix_getOwnedObjects request: %s", request)
+        async with session.post(sui_api_url, json=request) as response:
+            result = await response.json()
+        logger.debug("suix_getOwnedObjects response: %s", result)
+        data = result.get('result', {})
+        all_objects.extend(data.get('data', []))
+        # Update cursor for next page
+        if data.get('hasNextPage'):
+            cursor = data.get('nextCursor')
+            logger.debug("Next cursor: %s", cursor)
+        else:
+            break
+    return all_objects
 
 
 async def get_collateral_objects(session: aiohttp.ClientSession, sui_api_url: str, owner: str, account: str, contract_address: str) -> List[Dict[str, Any]]:
@@ -257,10 +279,6 @@ async def parse_vault_token_type(token_type: str) -> str:
     Example: 0x...::lp::Vault<0x...::test_coin::TEST_COIN, 0x...::test_coin::TEST_COIN>
     
     Returns:
-        Dict containing parsed information including:
-        - raw_type: original type string
-        - package_id: the package ID (part before ::lp::Vault)
-        - token_types: list of token types within the angle brackets
         - coin_type: the first token type (the coin that the vault holds)
     """
     
@@ -289,7 +307,7 @@ async def calc_total_vault_values() -> Dict:
     global_address = config.get("contract_global", None)
     pyth_url = config.get("pyth_price_feed_url", None)
     
-    if not sui_api_url or not vault_addresses or not global_address:
+    if not sui_api_url or not vault_addresses or not global_address or not pyth_url:
         raise ValueError("Error loading config: One or more fields are missing")
     
     async with aiohttp.ClientSession() as session:
@@ -335,8 +353,8 @@ async def calc_total_vault_values() -> Dict:
                 # Get the vault's balance/amount
                 coin = float(fields.get('coin', 0))
                 if coin == 0:
-                    print(f"No coin balance found for vault: {vault_data.get('objectId', '')}")
-                    
+                    logger.warning(f"No coin balance found for vault: {vault_data.get('objectId', '')}")
+                
                 
                 # Parse token type to extract underlying asset information
                 coin_type = await parse_vault_token_type(vault_type)
@@ -408,10 +426,46 @@ async def calc_total_vault_values() -> Dict:
                     else:
                         raise Exception(f"Failed to fetch price for {vault_info['coin_type']}: {str(price_result)}")
                 except Exception as e:
-                    print(f"Error calculating vault value: {str(e)}")
+                    logger.error(f"Error calculating vault value: {str(e)}")
         
         return {
             "totalValueLocked": cumulative_vault_total,
             "vaults": vault_details,
             "count": len(vault_details)
         }
+
+
+async def get_lp_balance(owner: str, vault_id: str) -> float:
+    """
+    Retrieve the LP token balance for a given owner and vault using getOwnedObjects.
+    Args:
+        owner (str): The Sui address of the owner
+        vault_id (str): The vault identifier (can be vault_address, coin_type, or lp_type)
+    Returns:
+        float: The LP token balance for the owner in the specified vault
+    """
+    config = load_config()
+    sui_api_url = config["sui_api_url"]
+    vaults = config["vaults"]
+
+    # Find the vault entry by vault_id (match against vault_address, coin_type, or lp_type)
+    vault = next((v for v in vaults if vault_id in (v["vault_address"], v["coin_type"], v["lp_type"])), None)
+    if not vault:
+        raise ValueError(f"Vault not found for id: {vault_id}")
+    lp_type = vault["lp_type"]
+
+    async with aiohttp.ClientSession() as session:
+        owned_objects = await get_owned_objects(session, sui_api_url, owner)
+        # Filter for objects matching the LP token type
+        lp_objects = [obj for obj in owned_objects if obj.get('data', {}).get('type') == lp_type]
+        logger.debug("Number of LP objects: %s", len(lp_objects))
+        logger.debug("Filtered LP objects: %s", lp_objects)
+        # Sum balances from object fields
+        total = 0
+        for obj in lp_objects:
+            try:
+                balance = int(obj['data']['content']['fields'].get('balance', 0))
+                total += balance
+            except Exception:
+                continue
+        return float(total)
