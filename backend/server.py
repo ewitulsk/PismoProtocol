@@ -6,7 +6,8 @@ from functools import wraps
 
 from async_backend import (
     calc_total_account_value,
-    calc_total_vault_values
+    calc_total_vault_values,
+    get_lp_balance
 )
 
 app = Flask(__name__)
@@ -67,6 +68,26 @@ async def calculate_total_value_locked():
     except Exception as e:
         print(f"Error calculating total value locked: {str(e)}")
         return jsonify({"error": f"Failed to calculate total value locked: {str(e)}"}), 500
+    
+
+@app.route('/api/lpBalance', methods=['POST'])
+@async_route
+async def lp_balance():
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Invalid JSON data"}), 400
+        owner = data.get('owner')
+        vault_id = data.get('vault_id')
+        if not owner or not vault_id:
+            return jsonify({"error": "Missing required parameters: owner and vault_id"}), 400
+        balance = await get_lp_balance(owner, vault_id)
+        return jsonify({"lpBalance": balance}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        print(f"Error retrieving LP balance: {str(e)}")
+        return jsonify({"error": f"Failed to retrieve LP balance: {str(e)}"}), 500
     
 
 if __name__ == "__main__":
