@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 
 // Define props based on backend data passed from Sidebar
 interface VaultItemProps {
@@ -18,15 +18,25 @@ const getDisplayName = (coinType: string): string => {
 
 // Helper to format currency (simplified)
 const formatCompactCurrency = (value: number): string => {
+  // Allow up to 2 decimal places for compact notation
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     notation: 'compact',
-    maximumFractionDigits: 1
+    minimumFractionDigits: 0, // Keep minimum 0
+    maximumFractionDigits: 2  // Allow up to 2 decimals
   }).format(value);
 };
 
 const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, onSelect }) => {
+  // State to hold the client-side formatted value
+  const [formattedTvl, setFormattedTvl] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Format the value only on the client after mount
+    setFormattedTvl(formatCompactCurrency(value));
+  }, [value]); // Re-run if the value prop changes
+
   const handleClick = () => {
     onSelect(id); // Pass coin_type (as id) back up
   };
@@ -34,9 +44,6 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
   // Derive display name and symbol from coin_type
   const displayName = getDisplayName(coin_type);
   const symbol = displayName; // Use derived name as symbol for now
-
-  // Format the value (TVL)
-  const tvl = formatCompactCurrency(value);
 
   return (
     <div
@@ -75,13 +82,13 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
           >
             {symbol}
           </p>
-          {/* Display formatted value (TVL) */}
+          {/* Display formatted value (TVL) - Render only when formattedTvl is ready */}
           <span
             className={`text-xs ${
               isActive ? "text-black" : "text-gray-400"
             }`}
           >
-            {tvl}
+            {formattedTvl} {/* Render the state variable */}
           </span>
         </div>
       </div>
