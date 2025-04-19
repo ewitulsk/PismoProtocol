@@ -1,0 +1,18 @@
+[package]
+name = "pismo-connect"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7", features = ["ws", "macros"] }
+tokio = { version = "1.37", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+qrcode = "0.13"
+image = { version = "0.24", features = ["png"] }
+bytes = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dashmap = "5"
+futures = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing = "0.1" 
