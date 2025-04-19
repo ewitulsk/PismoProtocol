@@ -21,9 +21,18 @@ use uuid::Uuid;
 // Maps UUID to a channel that will deliver outgoing websocket messages
 pub type Subscribers = DashMap<Uuid, UnboundedSender<Message>>;
 
+// Renamed Subscribers -> Wallets for clarity
+pub type Wallets = DashMap<Uuid, UnboundedSender<Message>>;
+
+// after subscribers alias
+pub type Frontends = DashMap<Uuid, UnboundedSender<Message>>;
+
 #[derive(Clone, Default)]
 struct AppState {
-    subscribers: Arc<Subscribers>,
+    // Clients that subscribe with "wallet-subscribe" (e.g. mobile wallet) and will receive HTTP forwarded bytes
+    wallets: Arc<Wallets>,
+    // Frontend websocket connections that subscribe with "frontend-subscribe" and will receive messages coming from the corresponding subscriber
+    frontends: Arc<Frontends>,
 }
 
 #[tokio::main]
@@ -33,7 +42,8 @@ async fn main() {
         .init();
 
     let state = AppState {
-        subscribers: Arc::new(DashMap::new()),
+        wallets: Arc::new(DashMap::new()),
+        frontends: Arc::new(DashMap::new()),
     };
 
     let app = Router::new()
@@ -70,27 +80,69 @@ async fn handle_socket(stream: WebSocket, state: AppState) {
         }
     });
 
-    // First message is expected to be subscription JSON {"type":"subscribe","uuid":"..."}
-    // Keep variable for uuid to remove later
+    // First message is expected to be subscription JSON {"type":"wallet-subscribe","uuid":"..."} or {"type":"frontend-subscribe","uuid":"..."}
+    // Keep variable for uuid and role to remove later
     let mut maybe_uuid: Option<Uuid> = None;
+    let mut role: Option<Role> = None;
+
+    #[derive(Clone, Copy)]
+    enum Role {
+        Wallet,
+        Frontend,
+    }
 
     while let Some(Ok(msg)) = receiver_ws.next().await {
         match msg {
             Message::Text(text) => {
                 if let Ok(SubMessage { r#type, uuid }) = serde_json::from_str::<SubMessage>(&text) {
-                    if r#type == "subscribe" {
-                        match Uuid::parse_str(&uuid) {
-                            Ok(parsed) => {
-                                state.subscribers.insert(parsed, sender_tx.clone());
-                                maybe_uuid = Some(parsed);
-                                let _ = sender_tx.send(Message::Text("subscribed".into()));
+                    match r#type.as_str() {
+                        "wallet-subscribe" => {
+                            match Uuid::parse_str(&uuid) {
+                                Ok(parsed) => {
+                                    state.wallets.insert(parsed, sender_tx.clone());
+                                    maybe_uuid = Some(parsed);
+                                    role = Some(Role::Wallet);
+                                    let _ = sender_tx.send(Message::Text("subscribed".into()));
+                                }
+                                Err(e) => {
+                                    let _ = sender_tx.send(Message::Text(format!("invalid uuid: {}", e)));
+                                }
                             }
-                            Err(e) => {
-                                let _ = sender_tx.send(Message::Text(format!("invalid uuid: {}", e)));
+                        }
+                        "frontend-subscribe" => {
+                            match Uuid::parse_str(&uuid) {
+                                Ok(parsed) => {
+                                    state.frontends.insert(parsed, sender_tx.clone());
+                                    maybe_uuid = Some(parsed);
+                                    role = Some(Role::Frontend);
+                                    let _ = sender_tx.send(Message::Text("frontend-subscribed".into()));
+                                }
+                                Err(e) => {
+                                    let _ = sender_tx.send(Message::Text(format!("invalid uuid: {}", e)));
+                                }
                             }
+                        }
+                        _ => {}
+                    }
+                }
+                // For non-control text messages from a wallet, forward to frontend
+                if let Some(u) = maybe_uuid {
+                    if matches!(role, Some(Role::Wallet)) {
+                        if let Some(front) = state.frontends.get(&u) {
+                            let _ = front.send(Message::Text(text));
                         }
                     }
                 }
+            }
+            Message::Binary(bin) => {
+                // Forward binary messages from wallet to frontend
+                if let (Some(u), Some(Role::Wallet)) = (maybe_uuid, role) {
+                    if let Some(front) = state.frontends.get(&u) {
+                        let _ = front.send(Message::Binary(bin.clone()));
+                    }
+                }
+
+                // ignore otherwise
             }
             Message::Close(_) => {
                 break;
@@ -101,7 +153,15 @@ async fn handle_socket(stream: WebSocket, state: AppState) {
 
     // Connection ended. Clean up.
     if let Some(id) = maybe_uuid {
-        state.subscribers.remove(&id);
+        match role {
+            Some(Role::Wallet) => {
+                state.wallets.remove(&id);
+            }
+            Some(Role::Frontend) => {
+                state.frontends.remove(&id);
+            }
+            None => {}
+        }
     }
 
     // ensure send task ends
@@ -155,7 +215,7 @@ async fn send_tx(
     State(state): State<AppState>,
     body: Bytes,
 ) -> impl IntoResponse {
-    if let Some(sender) = state.subscribers.get(&uuid) {
+    if let Some(sender) = state.wallets.get(&uuid) {
         if sender.send(Message::Binary(body.to_vec())).is_err() {
             return StatusCode::INTERNAL_SERVER_ERROR;
         }
