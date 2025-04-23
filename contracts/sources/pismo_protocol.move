@@ -41,7 +41,7 @@ module pismo_protocol::main {
         
         let global = Global {
             id: object::new(ctx),
-            supported_lp: vector[],
+            supported_lp: vector[], //This kinda thing really needs to be defined at the Program level.
             supported_positions: vector[]
         };
 
@@ -69,6 +69,10 @@ module pismo_protocol::main {
     public(package) fun get_id_address(global: &Global): address {
         global.id.to_address()
     }
+
+    public(package) fun get_supported_lp(global: &Global, supported_lp_i: u64): TokenIdentifier {
+        global.supported_lp[supported_lp_i]
+    } 
     
     #[test_only]
     public fun create_admin_cap_for_testing(ctx: &mut TxContext): AdminCap {

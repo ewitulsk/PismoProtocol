@@ -35,6 +35,7 @@ use pismo_protocol::accounts::{
 };
 use pismo_protocol::lp::{Self as lp, Vault, deposit_coin};
 use pismo_protocol::main::Global;
+use pismo_protocol::lp::VaultMarker;
 
 const E_INVALID_COLLATERAL: u64 = 9999999999;
 const E_VALUE_UPDATED_TOO_LONG_AGO: u64 = 98888; // Keep for now
@@ -280,6 +281,24 @@ public(package) fun get_value_set_time(collateral_marker: &CollateralMarker): u6
 // Use with caution, primarily for internal logic like liquidations or partial withdrawals where the object persists.
 public(package) fun take_coin<CoinType>(collateral: &mut Collateral<CoinType>, amount: u64): Balance<CoinType> {
     collateral.coin.split(amount)
+}
+
+//We don't need to substract from the collateral marker, it has already been subtracted from.
+public fun execute_collateral_transfer<CoinType, LPType>(
+    collateral: &mut Collateral<CoinType>,
+    transfer: &mut CollateralTransfer,
+    vault: &mut Vault<CoinType, LPType>,
+    vault_marker: &mut VaultMarker,
+    ctx: &mut TxContext
+){
+    let amount = transfer.amount;
+    assert!(collateral.coin.value() >= amount, 0); // Insufficient balance
+    let balance_out = collateral.coin.split(amount);
+    let coin = balance_out.into_coin(ctx);
+    
+    lp::deposit_coin(vault, vault_marker, coin);
+
+    transfer.fufilled = true;
 }
 
 public(package) fun ensure_collateral_vector_length<T: drop + copy>(program: &Program, vec: &mut vector<T>, default: T){

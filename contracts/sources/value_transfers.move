@@ -21,49 +21,6 @@ const E_COLLATERAL_MARKERS_MISMATCH: u64 = 10;
 const E_COLLATERAL_VALUE_TOO_OLD: u64 = 11;
 const E_VAULT_VALUE_TOO_OLD: u64 = 12;
 
-public fun transfer_collateral_to_vault_internal<CoinType, LPType>(
-    global: &mut Global,
-    eligible_collateral: &mut vector<Collateral<CoinType>>,
-    eligible_collateral_markers: &vector<CollateralMarker>,
-    vault: &mut Vault<CoinType, LPType>,
-    account_stats: &mut AccountStats,
-    amount: u64,
-    ctx: &mut TxContext
-) {
-    let markers_len = vector::length(eligible_collateral_markers);
-    assert!(markers_len == vector::length(eligible_collateral), E_COLLATERAL_MARKERS_MISMATCH);
-    let mut i = 0;
-    while(i < markers_len) {
-        let marker = vector::borrow(eligible_collateral_markers, i);
-        let collat = vector::borrow(eligible_collateral, i);
-        assert!(marker.get_collateral_marker_account_id() == collat.get_collateral_account_id(), E_COLLATERAL_MARKERS_MISMATCH);
-    };
-
-    let mut coin_bal = balance::zero<CoinType>();
-    while(coin_bal.value() < amount && !vector::is_empty(eligible_collateral)){
-        let mut collat = vector::pop_back(eligible_collateral);
-
-        assert_collateral_stats_match(&collat, account_stats);
-
-        let take_amount = if (collat.value() < amount) {
-            amount
-        } else {
-            collat.value()
-        };
-        let taken_coin = collat.take_coin(take_amount);
-        coin_bal.join(taken_coin);
-
-        collat.return_collateral(account_stats);
-    };
-    
-    lp::deposit_coin(global, vault, coin::from_balance(coin_bal, ctx));
-
-    while (!vector::is_empty(eligible_collateral)) {
-        let collat = vector::pop_back(eligible_collateral);
-        collat.return_collateral(account_stats);
-    };
-}
-
 //Before this can be called all collaterals must be valued, and all vaults must be valued.
 public(package) fun create_collateral_to_vault_transfer(
     all_collaterals: &vector<CollateralMarker>,
@@ -101,20 +58,3 @@ public(package) fun create_collateral_to_vault_transfer(
         i = i + 1;
     }; 
 }
-
-//This method transfers from a vault to collateral
-//It checks if the vault has enough coin before executing the transfer
-// public(package) fun transfer_same_vault_to_collateral_internal<CoinType, LPType>(
-//     global: &mut Global,
-//     vault: &mut Vault<CoinType, LPType>,
-//     account_id: address,
-//     program: &Program,
-//     account_stats: &mut AccountStats,
-//     amount: u64,
-//     ctx: &mut TxContext
-// ) {
-//     assert!(lp::coin_value(vault) >= amount, 0);
-//     let coin = lp::extract_coin(global, vault, amount, ctx);
-//     assert!(stats_account_id(account_stats) == account_id, E_COLLATERAL_ACCOUNT_MISMATCH);
-//     collateral::post_collateral_to_arbitrary_account_internal(account_id, account_stats, program, coin, ctx);
-// }

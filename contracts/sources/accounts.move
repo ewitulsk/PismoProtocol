@@ -35,7 +35,8 @@ const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9;
 const E_INPUT_LENGTH_MISMATCH: u64 = 12;
 const E_ACCOUNT_STATS_MISMATCH: u64 = 13;
 
-public struct AccountStats has key {
+//Accounts are owned objects, but we need to modify these fields without requiring the user to provide the account object
+public struct AccountStats has key { //We should normalize this to be name "AccountMarker"
     id: UID,
     account_id: address,
     num_open_positions: u64,

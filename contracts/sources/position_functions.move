@@ -20,7 +20,7 @@ use pismo_protocol::positions::{
     supported_positions_token_i, close_position_internal, TransferData,
 };
 use pismo_protocol::positions as positions;
-use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth as token_get_price_feed_bytes_pyth};
+use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth as token_get_price_feed_bytes_pyth, amount_for_target_value_pyth};
 use pismo_protocol::collateral::{
     Collateral, CollateralValueAssertionObject, sum_collateral_values_assertion,
     CollateralMarker,
@@ -88,6 +88,7 @@ public fun close_position_pyth(
     all_collateral_markers: &mut vector<CollateralMarker>,
     all_collateral_price_info: &vector<PriceInfoObject>,
     all_vault_markers: &mut vector<VaultMarker>,
+    all_vault_price_info: &vector<PriceInfoObject>,
     clock: &Clock,
     ctx: &mut TxContext
 ) {
@@ -127,7 +128,14 @@ public fun close_position_pyth(
             let remaining_collateral = collateral_marker.remaining_collateral();
             let collateral_value = collateral_marker.get_token_id().get_value_pyth(collateral_price_info, clock, remaining_collateral, collateral_token_id.token_decimals()); //The decimals might be fucked up here.
             if(collateral_value > transfer_value){
-                //We need to write a function to "get target value" that, given a target value, and amount of an asset, tells us how much of that asset we need to cover that value... or something like that.
+                let amount_collateral_to_remove = amount_for_target_value_pyth( //This function could be wildly wrong.
+                    &collateral_token_id,
+                    collateral_price_info,
+                    clock,
+                    transfer_value,
+                    collateral_token_id.token_decimals() //This isn't right. We need to rethink how we're handling shared decimals
+                );
+                collateral_marker.create_collateral_transfer(amount_collateral_to_remove, vault_address, ctx);
                 transfer_value = 0;
             } else {
                 collateral_marker.create_collateral_transfer(remaining_collateral, vault_address, ctx);
@@ -135,19 +143,29 @@ public fun close_position_pyth(
             }
             
         };
-    }; //else if (positions::is_transfer_to_user(&transfer_data)) {
-    //     transfer_same_vault_to_collateral_internal<CoinType, LPType>(
-    //         global,
-    //         vault,
-    //         account_id,
-    //         program,
-    //         account_stats,
-    //         amount,
-    //         ctx
-    //     );
-    // } else {
-    //   abort(0);
-    // };
+    } else if (positions::is_transfer_to_user(&transfer_data)) {
+        //For right now, this is just going to transfer value from each of the vaults equally, ideally this still happens, but a swap takes place.
+        //This means that the user will get paid out in each vault token equally.
+        //...That could just happen in the execute transfer... this might work out extremely easily.
+        let num_vaults = all_vault_markers.length();
+        let target_value_per_vault = transfer_value / (num_vaults as u128); //We need to validate that we're handling this div correctly.
+        let mut i = 0;
+        while(i < num_vaults) {
+            let vault_marker = all_vault_markers.borrow_mut(i);
+            let vault_token_id = vault_marker.token_id();
+            let vault_price_info = all_vault_price_info.borrow(i);
+            let transfer_value = amount_for_target_value_pyth( //This function could be wildly wrong.
+                &vault_token_id,
+                vault_price_info,
+                clock,
+                target_value_per_vault,
+                vault_token_id.token_decimals() //This isn't right. We need to rethink how we're handling shared decimals
+            );
+            vault_marker.create_vault_transfer(transfer_value, ctx.sender(), ctx);
+        };
+    } else {
+      abort(0);
+    };
 
     positions::destroy_transfer_data(transfer_data);
 
