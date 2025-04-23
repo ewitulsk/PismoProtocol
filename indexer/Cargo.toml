@@ -1,0 +1,38 @@
+[package]
+name = "indexer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Sui Indexer Framework
+sui-data-ingestion-core = { git = "https://github.com/mystenlabs/sui", package = "sui-data-ingestion-core"}
+sui-types = { git = "https://github.com/mystenlabs/sui", package = "sui-types"}
+
+# Async
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+axum = "0.7" # Added Axum
+
+# Database (Diesel + Postgres + Connection Pool)
+diesel = { version = "2.2", features = ["postgres", "r2d2", "chrono", "numeric"] } # Enable features
+diesel_migrations = { version = "2", features = ["postgres"] }
+r2d2 = "0.8"
+bigdecimal = { version = "0.4", features = ["serde"] } # For NUMERIC mapping
+chrono = { version = "0.4", features = ["serde"] } # For TIMESTAMPTZ mapping
+
+# Serialization / Deserialization
+serde = { version = "1.0", features = ["derive"] }
+bcs = "0.1"
+hex = "0.4" # For handling byte vectors potentially
+
+# Utilities & Error Handling
+anyhow = "1.0"
+dotenvy = "0.15"
+lazy_static = "1.4" # Added for static event type strings
+config = { version = "0.14", features = ["toml"] } # Added for config file handling
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[workspace] # Add workspace if it doesn't exist, prevents inheriting from parent
