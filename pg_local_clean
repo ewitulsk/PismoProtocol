@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# pg_local_clean  – spin up a clean, disposable Postgres in Docker
+# Usage: pg_local_clean <container_name> [-p <host_port>]
+# Example: pg_local_clean my_pg -p 5555
+
+set -euo pipefail
+
+###############################################################################
+# 1 – Argument parsing
+###############################################################################
+if [[ $# -lt 1 ]]; then
+  printf "Usage: %s <container_name> [-p <host_port>]\n" "${0##*/}" >&2
+  exit 1
+fi
+
+CONTAINER="$1"; shift
+PORT=5432   # default
+
+while getopts ":p:" opt; do
+  case "$opt" in
+    p) PORT="$OPTARG" ;;
+    *) printf "Invalid option: -%s\n" "$opt" >&2; exit 1 ;;
+  esac
+done
+
+###############################################################################
+# 2 – Clean up any container that already has this name
+###############################################################################
+if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+  echo "Stopping and removing existing container \"$CONTAINER\" …"
+  docker rm -f "$CONTAINER" >/dev/null
+fi
+
+###############################################################################
+# 3 – Start a fresh Postgres container
+###############################################################################
+POSTGRES_PASSWORD="postgres"
+IMAGE="postgres:latest"
+
+echo "Launching Postgres container \"$CONTAINER\" (host port $PORT → 5432)…"
+docker run -d \
+  --name "$CONTAINER" \
+  -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+  -p "${PORT}:5432" \
+  "$IMAGE" >/dev/null
+
+###############################################################################
+# 4 – Wait until Postgres is ready
+###############################################################################
+echo -n "Waiting for Postgres to accept connections"
+until docker exec "$CONTAINER" pg_isready -U postgres -q >/dev/null 2>&1; do
+  echo -n "."
+  sleep 1
+done
+echo " ✔︎"
+
+###############################################################################
+# 5 – Create a database that matches the container name
+###############################################################################
+echo "Creating database \"$CONTAINER\" inside the container …"
+docker exec -u postgres "$CONTAINER" psql -v ON_ERROR_STOP=1 -Atqc \
+  "SELECT 1 FROM pg_database WHERE datname='${CONTAINER}';" | grep -q 1 \
+  || docker exec -u postgres "$CONTAINER" createdb "$CONTAINER"
+
+###############################################################################
+# 6 – Print the connection URL
+###############################################################################
+DB_URL="postgresql://postgres:${POSTGRES_PASSWORD}@localhost:${PORT}/${CONTAINER}"
+echo "Postgres is up with a fresh database \"$CONTAINER\"!"
+echo "$DB_URL"
