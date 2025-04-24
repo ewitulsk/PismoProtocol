@@ -1,6 +1,6 @@
 {
   "name": "pismo-frontend",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

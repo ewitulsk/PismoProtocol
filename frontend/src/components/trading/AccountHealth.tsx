@@ -7,7 +7,7 @@ interface AccountHealthProps {
 
 const AccountHealth: React.FC<AccountHealthProps> = ({ percentage }) => {
   return (
-    <section className="card">
+    <section className="card border border-secondary">
       <h2 className="header-title">Account Health</h2>
       <div className="progress-container">
         <div

@@ -105,7 +105,7 @@ const ActionTabs: React.FC = () => {
   };
 
   return (
-    <section className="card bg-backgroundOffset mt-4">
+    <section className="card bg-backgroundOffset mt-4 border border-secondary">
       {/* Tabs */}
       <div className="flex gap-2 font-semibold text-center whitespace-nowrap">
         <button
