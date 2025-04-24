@@ -26,8 +26,8 @@ const ChartContainer: React.FC = () => {
 
   return (
     <section className="trading-chart">
-      <div className="trading-controls max-sm:flex-col max-sm:space-y-2">
-        <div className="flex justify-between max-sm:w-full items-center">
+      <div className="trading-controls w-full max-sm:flex-col max-sm:space-y-2">
+        <div className="flex justify-between w-full max-sm:w-full items-center">
           <TimeFrameSelector
             selectedTimeFrame={selectedInterval}
             onTimeFrameChange={handleTimeFrameChange}
