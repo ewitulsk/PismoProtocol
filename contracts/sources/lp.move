@@ -11,6 +11,7 @@ use sui::tx_context::{Self, TxContext};
 use sui::clock::Clock;
 use std::ascii;
 use std::vector;
+use sui::event;
 
 use pyth::price_info::PriceInfoObject;
 
@@ -22,6 +23,13 @@ use pismo_protocol::tokens::{get_value_pyth, TokenIdentifier};
 const E_VAULT_NOT_FOUND: u64 = 1;
 
 public struct LPToken<phantom CoinType> has drop, store {}
+
+public struct VaultCreatedEvent has copy, drop, store {
+    vault_address: address,
+    vault_marker_address: address,
+    coin_token_info: String,
+    lp_token_info: String,
+}
 
 // When a vault transfer is created, it becomes a shared object. But it is referenced in a Vault Marker.
 public struct VaultTransfer has key, store {
@@ -57,10 +65,17 @@ public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Glob
 
     let vault_id = object::new(ctx);
     let vault_marker_id = object::new(ctx);
+    let vault_address = object::uid_to_address(&vault_id);
+    let vault_marker_address = object::uid_to_address(&vault_marker_id);
+    let coin_token_info_str = token_id.token_info();
+    let lp_token_info_type_name = type_name::get<LPType>();
+    let lp_token_info_ascii_str = type_name::into_string(lp_token_info_type_name);
+    let lp_token_info_bytes = ascii::into_bytes(lp_token_info_ascii_str);
+    let lp_token_info_str = string::utf8(lp_token_info_bytes);
 
     let vault_marker = VaultMarker {
         id: vault_marker_id,
-        vault_id: vault_id.to_address(),
+        vault_id: vault_address,
         vault_amount: 0,
         vault_value: 0,
         vault_value_set_timestamp_ms: 0,
@@ -78,6 +93,13 @@ public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Glob
 
     transfer::share_object(vault);
     transfer::share_object(vault_marker);
+
+    event::emit(VaultCreatedEvent {
+        vault_address,
+        vault_marker_address,
+        coin_token_info: coin_token_info_str,
+        lp_token_info: lp_token_info_str,
+    });
 }
 
 fun calc_amount_to_mint(supply_amount: u64, lp_supply: u64, reserve_amount: u64): u64 {

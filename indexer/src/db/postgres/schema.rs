@@ -20,6 +20,28 @@ diesel::table! {
 }
 
 diesel::table! {
+    collateral_deposit_events (transaction_hash) {
+        transaction_hash -> Text,
+        collateral_id -> Text,
+        collateral_marker_id -> Text,
+        account_id -> Text,
+        token_account_address -> Text,
+        token_creation_num -> Int8,
+        amount -> Numeric,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    new_account_events (transaction_hash) {
+        transaction_hash -> Text,
+        account_id -> Text,
+        stats_id -> Text,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
     open_position_events (transaction_hash) {
         transaction_hash -> Text,
         position_id -> Text,
@@ -35,7 +57,21 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    vault_created_events (transaction_hash) {
+        transaction_hash -> Text,
+        vault_address -> Text,
+        vault_marker_address -> Text,
+        coin_token_info -> Text,
+        lp_token_info -> Text,
+        timestamp -> Timestamptz,
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(
     close_position_events,
+    collateral_deposit_events,
+    new_account_events,
     open_position_events,
+    vault_created_events,
 );

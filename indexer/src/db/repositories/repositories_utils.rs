@@ -1,6 +1,4 @@
 use std::sync::Arc;
-use diesel::prelude::*;
-use diesel::pg::PgConnection;
 use diesel::result::Error;
 use diesel::sql_types::Text;
 use diesel::RunQueryDsl;

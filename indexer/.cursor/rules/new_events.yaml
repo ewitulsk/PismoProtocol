@@ -1,0 +1,107 @@
+rules:
+  - rule: "Add a new Move event to the indexer"
+    description: |
+      Guides through the process of integrating the indexing of a new Move event type
+      emitted by the Pismo protocol into the indexer service.
+    steps:
+      - step: 1
+        description: |
+          Define the Move event struct.
+          You should have the Rust struct definition corresponding to the Move event
+          (e.g., from the `pismo_protocol` crate or provided definition).
+          Example:
+          ```rust
+          public struct MyNewEvent has copy, drop, store {
+              id: u64,
+              value: vector<u8>,
+              owner: address,
+          }
+          ```
+      - step: 2
+        description: |
+          Create database migration files.
+          - Go to `indexer/src/db/postgres/migrations/`.
+          - Create a new directory (e.g., `000004_my_new_event/`).
+          - Inside, create `up.sql` with the `CREATE TABLE` statement for the event data.
+            Include standard columns like `transaction_hash TEXT PRIMARY KEY` and `timestamp TIMESTAMPTZ NOT NULL`.
+          - Create `down.sql` with the corresponding `DROP TABLE` statement.
+      - step: 3
+        description: |
+          Create the database model struct.
+          - Go to `indexer/src/db/models/`.
+          - Create a new Rust file (e.g., `my_new_event.rs`).
+          - Define two structs:
+            - `MyNewEvent` (using `#[derive(Queryable, ...)]`, `#[diesel(table_name = my_new_events)]`)
+            - `NewMyNewEvent` (using `#[derive(Insertable, ...)]`, `#[diesel(table_name = my_new_events)]`)
+          - Ensure field types match the `up.sql` schema (e.g., `String` for `TEXT`, `BigDecimal` for `NUMERIC`, `DateTime<Utc>` for `TIMESTAMPTZ`).
+          - Add `use crate::db::postgres::schema::my_new_events;` at the top.
+      - step: 4
+        description: |
+          Update `indexer/src/db/models/mod.rs`.
+          - Add `pub mod my_new_event;`
+      - step: 5
+        description: |
+          Create the database repository struct.
+          - Go to `indexer/src/db/repositories/`.
+          - Create a new Rust file (e.g., `my_new_event.rs`).
+          - Define `MyNewEventRepository` struct holding an `Arc<DBPool>`.
+          - Implement `new`, `get_conn`, and `create` methods (copy/adapt from existing repositories).
+          - Implement `find`, `update`, `delete` if needed, otherwise mark them `#[allow(dead_code)]`.
+          - Add `use crate::db::models::my_new_event::{MyNewEvent, NewMyNewEvent};`
+          - Add `use crate::db::postgres::schema::my_new_events::dsl::*;`
+      - step: 6
+        description: |
+          Update `indexer/src/db/repositories/mod.rs`.
+          - Add `pub mod my_new_event;`
+          - Add `pub use my_new_event::MyNewEventRepository;`
+      - step: 7
+        description: |
+          Create the event struct definition and mapping.
+          - Go to `indexer/src/events/`.
+          - Create a new Rust file (e.g., `my_new_event.rs`).
+          - Define a struct `MyNewEvent` mirroring the Move event struct (Step 1), using `#[derive(Deserialize, ...)]`.
+          - Implement `impl MyNewEvent { ... }` with a `try_map_to_db(&self, tx_digest: String, timestamp: DateTime<Utc>) -> Result<NewMyNewEvent>` function.
+          - This function maps the deserialized event fields to the `NewMyNewEvent` database model struct, handling type conversions (e.g., `[u8; 32]` to hex `String`, `u64` to `BigDecimal`).
+          - Add `use crate::db::models::my_new_event::NewMyNewEvent;`
+          - Add necessary imports like `serde`, `chrono`, `anyhow`, `hex`, `bigdecimal`.
+      - step: 8
+        description: |
+          Update `indexer/src/events/mod.rs`.
+          - Add `pub mod my_new_event;`
+          - Add `pub use my_new_event::MyNewEvent as MoveMyNewEvent;` (using an alias is good practice).
+      - step: 9
+        description: |
+          Update the worker (`indexer/src/worker.rs`).
+          - Add the new repository type import: `use crate::db::repositories::my_new_event::MyNewEventRepository;`
+          - Add the new event type import: `use crate::events::my_new_event::MyNewEvent as MoveMyNewEvent;`
+          - Add a field to `PositionEventWorker` struct: `my_new_repo: Arc<MyNewEventRepository>,`
+          - Add a field for the event type string: `my_new_event_type: String,`
+          - Update `PositionEventWorker::new`:
+            - Add `my_new_repo: Arc<MyNewEventRepository>` as an argument.
+            - Calculate the event type string: `let my_new_event_type = format!("{}::module_name::MyNewEvent", package_id);` (replace `module_name`).
+            - Add `my_new_repo` and `my_new_event_type` to the struct initialization.
+            - Add an `info!` log line for the new event type.
+          - In `process_checkpoint` function, add an `else if event_type_str == self.my_new_event_type { ... }` block.
+            - Inside, deserialize using `bcs::from_bytes::<MoveMyNewEvent>`, call `try_map_to_db`, and call `self.my_new_repo.create()`.
+            - Include appropriate `info!` and `error!` logging.
+      - step: 10
+        description: |
+          Update `indexer/src/main.rs`.
+          - Import the new repository: `use crate::db::repositories::my_new_event::MyNewEventRepository;`
+          - Instantiate the new repository: `let my_new_repo = Arc::new(MyNewEventRepository::new(db_pool.clone()));`
+          - Pass the new repository instance (`my_new_repo.clone()`) as an argument when creating `PositionEventWorker::new(...)`.
+      - step: 11
+        description: |
+          Run database migrations.
+          - Ensure `DATABASE_URL` is set correctly (e.g., in `.env`).
+          - Run `diesel migration run --database-url $DATABASE_URL` (or use `diesel migration run` if `.env` is set up).
+      - step: 12
+        description: |
+          Generate/Update `schema.rs`.
+          - Run `diesel print-schema > src/db/postgres/schema.rs` (adjust path if needed).
+          - Verify the new table appears in `schema.rs`.
+      - step: 13
+        description: |
+          Check compilation and fix issues.
+          - Run `cargo check` or `cargo build`.
+          - Address any compiler errors or warnings (unused imports/code can be fixed with `cargo fix`). 

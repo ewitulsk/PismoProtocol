@@ -11,7 +11,7 @@ sui-types = { git = "https://github.com/mystenlabs/sui", package = "sui-types"}
 # Async
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
-axum = "0.7" # Added Axum
+axum = { version = "0.7", features = ["macros"] } # Added Axum and macros feature
 
 # Database (Diesel + Postgres + Connection Pool)
 diesel = { version = "2.2", features = ["postgres", "r2d2", "chrono", "numeric"] } # Enable features
@@ -28,7 +28,7 @@ hex = "0.4" # For handling byte vectors potentially
 # Utilities & Error Handling
 anyhow = "1.0"
 dotenvy = "0.15"
-lazy_static = "1.4" # Added for static event type strings
+lazy_static = "1.5" # Added for static event type strings
 config = { version = "0.14", features = ["toml"] } # Added for config file handling
 
 # Logging
