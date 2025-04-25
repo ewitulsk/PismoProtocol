@@ -1,0 +1,1 @@
+DROP TABLE vault_created_events; 

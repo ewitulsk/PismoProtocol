@@ -7,6 +7,7 @@ use sui::transfer;
 use sui::object::{Self, UID, ID};
 use sui::tx_context::TxContext;
 use sui::address;
+use sui::event;
 
 use std::vector;
 use std::string::String;
@@ -35,6 +36,12 @@ const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9;
 const E_INPUT_LENGTH_MISMATCH: u64 = 12;
 const E_ACCOUNT_STATS_MISMATCH: u64 = 13;
 
+// Define the NewAccount event struct
+public struct NewAccountEvent has copy, drop {
+    account_id: address,
+    stats_id: address
+}
+
 //Accounts are owned objects, but we need to modify these fields without requiring the user to provide the account object
 public struct AccountStats has key { //We should normalize this to be name "AccountMarker"
     id: UID,
@@ -60,6 +67,7 @@ public entry fun init_account(program: &Program, ctx: &mut TxContext) {
         collateral_count: 0
     };
     let stats_id = object::id(&stats);
+    let stats_addr = object::id_to_address(&stats_id);
     transfer::share_object(stats);
 
     let account = Account{
@@ -67,6 +75,12 @@ public entry fun init_account(program: &Program, ctx: &mut TxContext) {
         program_id: program.id(),
         stats_id: stats_id
     };
+
+    // Emit the NewAccount event
+    event::emit(NewAccountEvent {
+        account_id: account_addr,
+        stats_id: stats_addr
+    });
 
     transfer::transfer(account, ctx.sender());
 }

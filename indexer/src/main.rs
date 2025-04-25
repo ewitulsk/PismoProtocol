@@ -18,10 +18,12 @@ mod worker; // Uncomment worker module
 
 // Use the modules
 use crate::config::Config;
-use crate::db::repositories::DBPool;
 use crate::db::repositories::{
     close_position_events::ClosePositionEventRepository,
     open_position_events::OpenPositionEventRepository,
+    vault_created_events::VaultCreatedEventRepository,
+    new_account_event::NewAccountEventRepository,
+    collateral_deposit_event::CollateralDepositEventRepository,
 };
 use crate::router::create_router;
 use crate::worker::PositionEventWorker;
@@ -56,10 +58,20 @@ async fn main() -> Result<()> {
     // Repositories (Cloned Arcs needed for both worker and server state)
     let open_repo = Arc::new(OpenPositionEventRepository::new(db_pool.clone()));
     let close_repo = Arc::new(ClosePositionEventRepository::new(db_pool.clone()));
+    let vault_repo = Arc::new(VaultCreatedEventRepository::new(db_pool.clone()));
+    let new_account_repo = Arc::new(NewAccountEventRepository::new(db_pool.clone()));
+    let collateral_deposit_repo = Arc::new(CollateralDepositEventRepository::new(db_pool.clone()));
     info!("Repositories initialized.");
 
     // Worker
-    let worker = PositionEventWorker::new(open_repo.clone(), close_repo.clone(), config.package_id.clone());
+    let worker = PositionEventWorker::new(
+        open_repo.clone(),
+        close_repo.clone(),
+        vault_repo.clone(),
+        new_account_repo.clone(),
+        collateral_deposit_repo.clone(),
+        config.package_id.clone(),
+    );
     info!("PositionEventWorker initialized.");
 
     // Router (Takes DB Pool state)
