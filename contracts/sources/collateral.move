@@ -11,6 +11,7 @@ use sui::balance::{Self as balance, Balance};
 use sui::transfer;
 use sui::object::{Self, UID};
 use sui::tx_context::{Self, TxContext};
+use sui::event;
 
 use std::vector;
 use std::string::String;
@@ -52,6 +53,21 @@ const E_PRICE_OBJS_DONT_MATCH_COLLATS: u64 = 16;
 const E_INCOMPLETE_COLLATERAL_ASSERTION: u64 = 17; // Added error code
 const E_MARKER_DOES_NOT_HAVE_AMOUNT: u64 = 18;
 
+// --- Events ---
+
+/// Event emitted when collateral is deposited.
+public struct CollateralDepositEvent has copy, drop {
+    collateral_id: address,
+    collateral_marker_id: address,
+    account_id: address,
+    token_id: TokenIdentifier,
+    amount: u64
+}
+
+/// Placeholder event for collateral withdrawal.
+public struct CollateralWithdrawEvent has copy, drop {
+    // Placeholder - fields to be defined later.
+}
 
 // Collateral struct needs key for sharing, and store for passing by value
 public struct Collateral<phantom CoinType> has key, store {
@@ -94,6 +110,7 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
     assert_account_stats_match(account, stats);
 
     let type_str = type_name::get<CoinType>().into_string();
+    let initial_amount = coin.value(); // Capture the amount before consuming the coin
     let mut i = 0;
     while(i < program.supported_collateral().length()){
         let token_id = program.supported_collateral()[i];
@@ -104,10 +121,11 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
             let collateral_id = object::new(ctx);
 
             let collateral_marker_id_address = collateral_marker_id.to_address();
+            let collateral_id_address = collateral_id.to_address(); // Get address before moving
 
             transfer::share_object(CollateralMarker {
                 id: collateral_marker_id,
-                collateral_id: collateral_id.to_address(),
+                collateral_id: collateral_id_address,
                 account_id: account.id(),
                 remaining_collateral: coin.value(),
                 remaining_collateral_value: 0,
@@ -127,6 +145,16 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
                 }
             );
             stats.increment_collateral_count();
+
+            // Emit the deposit event
+            event::emit(CollateralDepositEvent {
+                collateral_id: collateral_id_address,
+                collateral_marker_id: collateral_marker_id_address,
+                account_id: account.id(),
+                token_id: token_id,
+                amount: initial_amount
+            });
+
             return;
         };
         i = i + 1;
@@ -139,6 +167,7 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
     assert!(stats_account_id(stats) == account_id_addr, E_COLLATERAL_ACCOUNT_MISMATCH); //We are running this check on multiple levels. I'm leaving it for rn, we can change it once the contracts are more finalized.
 
     let type_str = type_name::get<CoinType>().into_string();
+    let initial_amount = coin.value(); // Capture the amount before consuming the coin
     let mut i = 0;
     while(i < program.supported_collateral().length()){
          let token_id = program.supported_collateral()[i];
@@ -150,10 +179,11 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
             let collateral_id = object::new(ctx);
 
             let collateral_marker_id_address = collateral_marker_id.to_address();
+            let collateral_id_address = collateral_id.to_address(); // Get address before moving
 
             transfer::share_object(CollateralMarker {
                 id: collateral_marker_id,
-                collateral_id: collateral_id.to_address(),
+                collateral_id: collateral_id_address,
                 account_id: account_id_addr,
                 remaining_collateral: coin.value(),
                 remaining_collateral_value: 0,
@@ -173,6 +203,16 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
                 }
             );
             stats.increment_collateral_count();
+
+            // Emit the deposit event
+            event::emit(CollateralDepositEvent {
+                collateral_id: collateral_id_address,
+                collateral_marker_id: collateral_marker_id_address,
+                account_id: account_id_addr,
+                token_id: token_id,
+                amount: initial_amount
+            });
+
             return;
         };
         i = i + 1;
