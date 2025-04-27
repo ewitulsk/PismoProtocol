@@ -43,6 +43,15 @@ impl VaultCreatedEventRepository {
             .optional()
     }
 
+    /// Finds a VaultCreatedEvent by its vault address.
+    pub fn find_by_vault_address(&self, address: String) -> Result<Option<VaultCreatedEvent>, Error> {
+        let mut conn = self.get_conn()?;
+        vault_created_events // Use DSL directly
+            .filter(vault_address.eq(address))
+            .first(&mut conn)
+            .optional()
+    }
+
     /// Retrieves all VaultCreatedEvent records from the database.
     pub fn find_all(&self) -> Result<Vec<VaultCreatedEvent>, Error> {
         let mut conn = self.get_conn()?;
