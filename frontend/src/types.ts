@@ -6,3 +6,17 @@ export interface VaultData {
   coin_type: string;  // Type of the underlying coin, e.g., 0x...::btc::BTC
   value: number;      // USD value of the coins held in the vault
 }
+
+export interface PositionData {
+  transaction_hash: string;
+  position_id: string;
+  position_type: "Long" | "Short";
+  amount: string; // Amount is likely a large integer string
+  leverage_multiplier: string; // Leverage is a string
+  entry_price: string; // Entry price is a string
+  entry_price_decimals: number; // Decimals for entry price
+  supported_positions_token_i: number; // Index for the token
+  price_feed_id_bytes: string;
+  account_id: string;
+  timestamp: string;
+}
