@@ -3,6 +3,7 @@ from flask_cors import CORS
 import asyncio
 import concurrent.futures
 from functools import wraps
+import json
 
 from async_backend import (
     calc_total_account_value,
@@ -91,4 +92,11 @@ async def lp_balance():
     
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Load configuration
+    with open('config/backend_config.json', 'r') as f:
+        config = json.load(f)
+
+    host = config.get('host', '0.0.0.0')  # Default host if not in config
+    port = config.get('port', 5000)      # Default port if not in config
+
+    app.run(host=host, port=port, debug=True)
