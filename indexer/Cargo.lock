@@ -3572,9 +3572,11 @@ dependencies = [
  "lazy_static",
  "r2d2",
  "serde",
+ "serde_json",
  "sui-data-ingestion-core",
  "sui-types",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
 ]
