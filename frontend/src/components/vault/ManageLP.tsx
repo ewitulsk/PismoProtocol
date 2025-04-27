@@ -8,9 +8,17 @@ import {
     useSuiClient,
 } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
-import { SUI_PACKAGE_ID, GLOBAL_OBJECT_ID } from '../../../../typescript/src/constants';
 import NotificationPopup from '../common/NotificationPopup';
 import { useRefresh } from '@/contexts/RefreshContext'; // Import useRefresh
+
+// Read constants from environment variables
+const SUI_PACKAGE_ID = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID;
+const GLOBAL_OBJECT_ID = process.env.NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID;
+
+// Ensure environment variables are set
+if (!SUI_PACKAGE_ID || !GLOBAL_OBJECT_ID) {
+  throw new Error("Required environment variables NEXT_PUBLIC_SUI_PACKAGE_ID or NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID are not set.");
+}
 
 interface TabButtonProps {
     label: string;

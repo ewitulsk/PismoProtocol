@@ -1,18 +1,9 @@
 {
-  "contract_address": "0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4",
-  "contract_global": "0xf1905820b04efdc3b4284482304bb5091567359a91ae72402a1d038a6d36ab54",
-  "pyth_price_feed_url": "https://hermes.pyth.network/v2/updates/price/latest?",
+  "contract_address": "0xdb094aafef09a5925a71ac418279bab3196e1153d3c3d93c23154390d883ca01",
+  "contract_global": "0xb2865a1c0784c46c7d7be6572bc3c5b835a6899a2ae6008c0bfbd89dc084bb0d",
+  "pyth_price_feed_url": "https://hermes-beta.pyth.network/v2/updates/price/latest?",
   "sui_api_url": "https://fullnode.testnet.sui.io:443",
-  "vaults": [
-    {
-      "vault_address": "0x815436a2eac2aa5e7dcb93c8c61df0c21c19afb9569f5f2128d85773525510bd",
-      "coin_type": "0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::test_coin::TEST_COIN",
-      "lp_type": "0x2::coin::Coin<0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::lp::LPToken<0xaf05e950da30954a3c13a93d122390ecf8db1d26ff1de9ab6ada403f78bc84b4::test_coin::TEST_COIN>>"
-    },
-    {
-      "vault_address": "0xd21a7b73ca05b287f3ec46cd1a6b3ddfa0231796b6f1e724b6ab0717b3d1940a",
-      "coin_type": "0xf38326e8cfe02507ba7b47bcf33f476ca4a98b57911b0a023f4f4dbe7add2b8d::ANOTHER_TEST_COIN::ANOTHER_TEST_COIN",
-      "lp_type": "0xf38326e8cfe02507ba7b47bcf33f476ca4a98b57911b0a023f4f4dbe7add2b8d::ANOTHER_LP_COIN::ANOTHER_LP_COIN"
-    }
-  ]
+  "indexer_url": "http://0.0.0.0:3001",
+  "host": "0.0.0.0",
+  "port": 5080
 }

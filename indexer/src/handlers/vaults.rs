@@ -9,17 +9,7 @@ use tracing::{error, debug};
 
 // Import AppState and Repository
 use crate::router::AppState;
-use crate::db::models::vault_created_events::VaultCreatedEvent;
 use crate::db::repositories::vault_created_events::VaultCreatedEventRepository;
-
-pub struct VaultCreatedEventResponse {
-    pub transaction_hash: String,
-    pub vault_address: String,
-    pub vault_marker_address: String,
-    pub coin_token_info: String,
-    pub lp_token_info: String,
-    pub timestamp: DateTime<Utc>,
-}
 
 #[axum::debug_handler]
 pub async fn get_all_vaults(
@@ -39,6 +29,36 @@ pub async fn get_all_vaults(
         Err(db_err) => {
             // Handle Diesel error
             error!("Database error fetching vaults: {}", db_err);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", db_err)))
+        }
+    }
+}
+
+#[axum::debug_handler]
+pub async fn get_vault_by_address(
+    State(state): State<AppState>,
+    axum::extract::Path(vault_addr): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    debug!("Fetching vault with address: {}", vault_addr);
+
+    // Create repository instance
+    let repo = VaultCreatedEventRepository::new(state.pool.clone());
+
+    // Call the repository function
+    match repo.find_by_vault_address(vault_addr.clone()) { // Clone vault_addr as it's moved into find_by_vault_address
+        Ok(Some(vault)) => {
+            // Successfully fetched the vault
+            Ok(Json(vault))
+        },
+        Ok(None) => {
+            // Vault not found
+            let error_msg = format!("Vault with address {} not found", vault_addr);
+            error!(error_msg);
+            Err((StatusCode::NOT_FOUND, error_msg))
+        },
+        Err(db_err) => {
+            // Handle Diesel error
+            error!("Database error fetching vault by address {}: {}", vault_addr, db_err);
             Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", db_err)))
         }
     }
