@@ -40,7 +40,7 @@ impl PositionEventWorker {
         collateral_deposit_repo: Arc<CollateralDepositEventRepository>,
         package_id: String,
     ) -> Self {
-        let vault_created_event_type = format!("{}::vaults::VaultCreatedEvent", package_id);
+        let vault_created_event_type = format!("{}::lp::VaultCreatedEvent", package_id);
         let position_created_event_type = format!("{}::positions::PositionCreatedEvent", package_id);
         let position_closed_event_type = format!("{}::positions::PositionClosedEvent", package_id);
         let new_account_event_type = format!("{}::positions::NewAccountEvent", package_id);
@@ -93,8 +93,6 @@ impl Worker for PositionEventWorker {
             if let Some(events) = &transaction_data.events {
                 for event in &events.data {
                      let event_type_str = event.type_.to_string();
-                     debug!("Processing event type: {}", event_type_str);
-
                      if event_type_str == self.position_created_event_type {
                         match bcs::from_bytes::<MovePositionCreatedEvent>(&event.contents) {
                             Ok(parsed_event) => {

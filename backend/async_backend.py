@@ -6,6 +6,8 @@ from typing import Dict, List, Any
 import os
 from dotenv import load_dotenv
 import logging
+import ssl
+import certifi
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -29,11 +31,32 @@ def load_config() -> Dict[str, Any]:
     try:
         with open(config_file_path, 'r') as f:
             config = json.load(f)
-            # Expose vault addresses list for backward compatibility and convenience
-            config['vault_addresses'] = [v.get('vault_address') for v in config.get('vaults', [])]
             return config
+    except FileNotFoundError:
+        raise RuntimeError(f"Config file not found at {config_file_path}")
+    except json.JSONDecodeError:
+        raise RuntimeError(f"Error decoding JSON from config file at {config_file_path}")
     except Exception as e:
         raise RuntimeError(f"Failed to load config file at {config_file_path}: {str(e)}")
+
+
+async def get_vaults_from_indexer(session: aiohttp.ClientSession, indexer_url: str) -> List[Dict[str, Any]]:
+    """
+    Asynchronously retrieve all vault data from the indexer.
+    """
+    vaults_endpoint = f"{indexer_url}/v0/vaults"
+    try:
+        async with session.get(vaults_endpoint) as response:
+            response.raise_for_status()  # Raise an exception for bad status codes
+            vaults = await response.json()
+            logger.info(f"Successfully fetched {len(vaults)} vaults from indexer.")
+            return vaults
+    except aiohttp.ClientError as e:
+        logger.error(f"Error fetching vaults from indexer at {vaults_endpoint}: {str(e)}")
+        raise ValueError(f"Could not connect to or fetch data from the indexer: {str(e)}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while fetching vaults: {str(e)}")
+        raise ValueError(f"An unexpected error occurred: {str(e)}")
 
 
 async def get_owned_objects(session: aiohttp.ClientSession, sui_api_url: str, owner: str) -> List[Dict[str, Any]]:
@@ -193,8 +216,8 @@ def join_collaterals(dict_list1: List[Dict[str, Any]], dict_list2: List[Dict[str
 
 async def calc_total_account_value(owner: str, account: str, contract_address: str) -> float:
     """
-    Asynchronously calculate the total account value.
-    
+    Calculate the total value of a specific account using the provided parameters.
+
     Args:
         owner (str): Owner address
         account (str): Account ID
@@ -212,7 +235,10 @@ async def calc_total_account_value(owner: str, account: str, contract_address: s
     if not sui_api_url or not contract_address:
         raise ValueError("SUI API URL or Contract Address not specified in config or parameters")
     
-    async with aiohttp.ClientSession() as session:
+    # Create SSL context using certifi
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
         collateral_triples = await form_coin_type_prgm_triples(session, sui_api_url, owner, account, contract_address)
         
         account_value = 0
@@ -295,7 +321,7 @@ async def parse_vault_token_type(token_type: str) -> str:
 
 async def calc_total_vault_values() -> Dict:
     """
-    Calculate the total value locked across all vaults defined in the config.
+    Calculate the total value locked across all vaults fetched from the indexer.
         
     Returns:
         Dict: Dictionary containing vault value information
@@ -303,15 +329,33 @@ async def calc_total_vault_values() -> Dict:
     # Load config once at the beginning
     config = load_config()
     sui_api_url = config.get("sui_api_url", None)
-    vault_addresses = config.get("vault_addresses", None)
+    indexer_url = config.get("indexer_url", None) 
     global_address = config.get("contract_global", None)
     pyth_url = config.get("pyth_price_feed_url", None)
     
-    if not sui_api_url or not vault_addresses or not global_address or not pyth_url:
-        raise ValueError("Error loading config: One or more fields are missing")
+    if not sui_api_url or not global_address or not pyth_url or not indexer_url:
+        raise ValueError("Error loading config: One or more required fields are missing (sui_api_url, contract_global, pyth_price_feed_url, indexer_url)")
     
-    async with aiohttp.ClientSession() as session:
-        # Get all vault objects using multiGetObjects
+    # Create SSL context using certifi
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+        # Fetch vault data from the indexer
+        indexer_vaults = await get_vaults_from_indexer(session, indexer_url)
+        if not indexer_vaults:
+            logger.warning("No vaults returned from the indexer.")
+            return {
+                "totalValueLocked": 0.0,
+                "vaults": [],
+                "count": 0
+            }
+
+        # Extract vault addresses from the indexer data
+        vault_addresses = [v['vault_address'] for v in indexer_vaults]
+        # Create a mapping from vault_address to coin_token_info for later use
+        vault_address_to_coin_info = {v['vault_address']: v['coin_token_info'] for v in indexer_vaults}
+
+        # Get all vault objects using multiGetObjects with the extracted addresses
         vault_objects = await get_objects(session, sui_api_url, vault_addresses)
         global_object = await get_objects(session, sui_api_url, [global_address])
         if not global_object:
@@ -321,25 +365,40 @@ async def calc_total_vault_values() -> Dict:
         global_data = global_object[0]['data']['content']['fields']
         #print(f"\n\nGLOBAL DATA:\n {global_data}\n")
         supported_lp = global_data.get('supported_lp', [])
-        price_feed_bytes = global_data.get('price_feed_bytes', [])
-        
-        if not supported_lp or not price_feed_bytes:
-            raise ValueError("Global object missing supported_lp or price_feed_bytes")
-        
-        # Create a mapping of coin type to its index in the supported_lp list
-        coin_type_to_index = {}
-        for i, lp_entry in enumerate(supported_lp):
-            #print(i, lp_entry)
-            coin_type_to_index[f"0x{lp_entry}"] = i
-        #print(f"\nCoin type to index mapping: {coin_type_to_index}\n")
-        
+        # price_feed_bytes = global_data.get('price_feed_bytes', []) # Removed: This field is now inside TokenIdentifier
+
+        if not supported_lp: # Changed check: Only need supported_lp
+            raise ValueError("Global object missing supported_lp")
+
+        # Create a mapping from coin type (token_info) to its price feed bytes and decimals
+        coin_type_to_token_data = {}
+        for token_id_obj in supported_lp:
+            # Assuming the structure from Sui API follows: { type: "...", fields: { ... } }
+            fields = token_id_obj.get('fields', {})
+            token_info = fields.get('token_info')
+            price_feed_bytes = fields.get('price_feed_id_bytes')
+            token_decimals = fields.get('token_decimals')
+            if token_info and price_feed_bytes is not None and token_decimals is not None:
+                 # Ensure token_info starts with 0x for consistency if needed, adjust if format differs
+                 # formatted_token_info = token_info if token_info.startswith("0x") else f"0x{token_info}"
+                 # Using raw token_info as key for now, assuming parse_vault_token_type returns matching format
+                coin_type_to_token_data[token_info] = {
+                    'price_feed_id_bytes': price_feed_bytes,
+                    'token_decimals': token_decimals
+                }
+            else:
+                logger.warning(f"Skipping invalid TokenIdentifier in supported_lp: {token_id_obj}")
+
+        #print(f"\nCoin type to token data mapping: {coin_type_to_token_data}\n")
+
         cumulative_vault_total = 0.0
         vault_details = []
-        
+        error_occurred = False # Flag to track errors
+
         # Create price feed fetch tasks for concurrent execution
         price_feed_tasks = []
         vault_coin_types = []
-        
+
         # Process each vault object to prepare price feed requests
         for vault in vault_objects:
             try:
@@ -349,85 +408,112 @@ async def calc_total_vault_values() -> Dict:
                 content = vault_data.get('content', {})
                 fields = content.get('fields', {})
                 #print(f"\n\nFIELDS:\n {fields}\n")
-                
+
                 # Get the vault's balance/amount
                 coin = float(fields.get('coin', 0))
-                if coin == 0:
-                    logger.warning(f"No coin balance found for vault: {vault_data.get('objectId', '')}")
-                
-                
+                # No need to warn here if coin is 0, handled later
+
                 # Parse token type to extract underlying asset information
                 coin_type = await parse_vault_token_type(vault_type)
                 #print(f"\nCOIN_TYPE: {coin_type}\n")
-                
-                # Find the index of this coin type in the supported_lp list
-                if coin_type in coin_type_to_index:
-                    index = coin_type_to_index[coin_type]
-                    if index < len(price_feed_bytes):
-                        # Get the corresponding price feed bytes
-                        feed_bytes = price_feed_bytes[index]
-                        
-                        # Convert feed bytes to hex string for Pyth API
-                        feed_id = convert_feed_bytes_to_hex_str(feed_bytes)
-                        
-                        # Add to list of tasks
-                        price_feed_tasks.append(get_price_feed(session, feed_id, pyth_url))
-                        vault_coin_types.append({
-                            "object_id": vault_data.get('objectId', ''),
-                            "type": vault_type,
-                            "coin": coin,
-                            "coin_type": coin_type,
-                            "feed_id": feed_id
-                        })
+
+                # Find the token data for this coin type in the mapping
+                if coin_type in coin_type_to_token_data:
+                    token_data = coin_type_to_token_data[coin_type]
+                    feed_bytes = token_data['price_feed_id_bytes']
+                    token_decimals = token_data['token_decimals']
+
+                    # Convert feed bytes to hex string for Pyth API
+                    feed_id = convert_feed_bytes_to_hex_str(feed_bytes)
+
+                    # Add to list of tasks
+                    price_feed_tasks.append(get_price_feed(session, feed_id, pyth_url))
+                    vault_coin_types.append({
+                        "object_id": vault_data.get('objectId', ''),
+                        "type": vault_type,
+                        "coin": coin,
+                        "coin_type": coin_type,
+                        "feed_id": feed_id,
+                        "token_decimals": token_decimals # Store decimals
+                    })
                 else:
-                    raise ValueError(f"Coin type not found in supported_lp: {coin_type}")
+                    # If coin type is not supported, this is an error condition for the entire process
+                    logger.error(f"Coin type '{coin_type}' from vault {vault_data.get('objectId', 'N/A')} not found in supported_lp mapping.")
+                    error_occurred = True
+                    break # Stop processing vaults
             except Exception as e:
-                raise ValueError(f"Error processing vault object: {str(e)}")
+                # Log the specific vault object causing the error and set error flag
+                logger.error(f"Error processing vault object {vault.get('data', {}).get('objectId', 'N/A')}: {str(e)}")
+                error_occurred = True
+                break # Stop processing vaults
         
+        # If an error occurred while processing vault objects, raise immediately
+        if error_occurred:
+            raise ValueError("Failed to process one or more vault objects.")
+
         # Execute all price feed requests concurrently
         if price_feed_tasks:
             price_feed_results = await asyncio.gather(*price_feed_tasks, return_exceptions=True)
             #print(f"\n\nPrice feed results:\n {price_feed_results}\n")
-            
+
             # Calculate values using price feed results
             for i, (vault_info, price_result) in enumerate(zip(vault_coin_types, price_feed_results)):
                 try:
-                    #print(price_result)
-                    if not isinstance(price_result, Exception):
-                        # Get token info from global object based on coin type
-                        coin_type = vault_info['coin_type']
-                        #print(f"Processing vault for coin type: {coin_type}\n")
-                        #print(f'price_result: {price_result}\n')
-                        index = coin_type_to_index.get(coin_type)
-                        
-                        if index is not None and index < len(supported_lp):                            
-                            # Calculate value based on price feed data
-                            if isinstance(price_result, dict):
-                                price = price_result.get('price', {}).get('price', 0)
-                                expo = price_result.get('price', {}).get('expo', 0)
-                                
-                                # Apply decimal conversion based on token decimals and price expo
-                                value = vault_info['coin'] * int(price) * pow(10, expo)
-                            else:
-                                raise Exception(f"Invalid price result format for {vault_info['coin_type']}")
-                            
-                            # Add to total and details
-                            cumulative_vault_total += value
-                            
-                            vault_detail = {
-                                "object_id": vault_info['object_id'],
-                                "type": vault_info['type'],
-                                "coin": vault_info['coin'],
-                                "coin_type": vault_info['coin_type'],
-                                "value": value
-                            }
-                            
-                            vault_details.append(vault_detail)
+                    token_decimals = vault_info['token_decimals'] # Retrieve decimals
+
+                    # Check if price fetching failed for this specific vault
+                    if isinstance(price_result, Exception):
+                        logger.error(f"Failed to fetch price for {vault_info['coin_type']} (Feed ID: {vault_info['feed_id']}): {str(price_result)}")
+                        error_occurred = True
+                        break # Stop processing values
+
+                    # Handle zero balance case (not an error, just zero value)
+                    if vault_info['coin'] == 0:
+                        value = 0.0
                     else:
-                        raise Exception(f"Failed to fetch price for {vault_info['coin_type']}: {str(price_result)}")
-                except Exception as e:
-                    logger.error(f"Error calculating vault value: {str(e)}")
-        
+                        # Proceed if balance is non-zero and price result is valid
+                        if isinstance(price_result, dict):
+                            price_data = price_result.get('price', {})
+                            price = price_data.get('price')
+                            expo = price_data.get('expo')
+
+                            if price is not None and expo is not None:
+                                price = int(price)
+                                # Apply decimal conversion
+                                value = vault_info['coin'] * price * pow(10, expo - token_decimals)
+                            else:
+                                logger.error(f"Price or expo missing in price feed result for {vault_info['coin_type']}: {price_result}")
+                                error_occurred = True
+                                break # Stop processing values
+                        else:
+                            # Should not happen if gather didn't return an Exception, but good to check
+                            logger.error(f"Invalid price result format for {vault_info['coin_type']}: {price_result}")
+                            error_occurred = True
+                            break # Stop processing values
+
+                    # Add to total and details (only if no error occurred so far in this loop)
+                    cumulative_vault_total += value
+                    vault_detail = {
+                        "object_id": vault_info['object_id'],
+                        "type": vault_info['type'],
+                        "coin": vault_info['coin'],
+                        "coin_type": vault_info['coin_type'],
+                        "value": value,
+                        "token_decimals": token_decimals
+                    }
+                    vault_details.append(vault_detail)
+
+                except (TypeError, ValueError, KeyError, Exception) as e:
+                    # Catch potential errors during calculation or data access
+                    logger.error(f"Error calculating vault value for {vault_info.get('object_id', 'N/A')} (Coin Type: {vault_info.get('coin_type', 'N/A')}): {str(e)}")
+                    error_occurred = True
+                    break # Stop processing values
+            
+            # Check if an error occurred during value calculation/price processing
+            if error_occurred:
+                raise ValueError("Failed to process prices or calculate value for one or more vaults.")
+
+        # If we reach here without errors
         return {
             "totalValueLocked": cumulative_vault_total,
             "vaults": vault_details,
@@ -438,34 +524,61 @@ async def calc_total_vault_values() -> Dict:
 async def get_lp_balance(owner: str, vault_id: str) -> float:
     """
     Retrieve the LP token balance for a given owner and vault using getOwnedObjects.
+    Fetches specific vault configuration from the indexer using the vault_address.
     Args:
         owner (str): The Sui address of the owner
-        vault_id (str): The vault identifier (can be vault_address, coin_type, or lp_type)
+        vault_id (str): The vault identifier (must be the vault_address)
     Returns:
         float: The LP token balance for the owner in the specified vault
     """
     config = load_config()
     sui_api_url = config["sui_api_url"]
-    vaults = config["vaults"]
-
-    # Find the vault entry by vault_id (match against vault_address, coin_type, or lp_type)
-    vault = next((v for v in vaults if vault_id in (v["vault_address"], v["coin_type"], v["lp_type"])), None)
-    if not vault:
-        raise ValueError(f"Vault not found for id: {vault_id}")
-    lp_type = vault["lp_type"]
+    indexer_url = config["indexer_url"]
 
     async with aiohttp.ClientSession() as session:
+        # Construct the specific vault endpoint URL
+        vault_endpoint = f"{indexer_url}/v0/vaults/{vault_id}"
+        logger.debug(f"Fetching vault details from: {vault_endpoint}")
+
+        try:
+            # Fetch the specific vault data from the indexer
+            async with session.get(vault_endpoint) as response:
+                if response.status == 404:
+                    raise ValueError(f"Vault not found at indexer for address: {vault_id}")
+                response.raise_for_status() # Raise an exception for other bad status codes (e.g., 500)
+                vault = await response.json()
+                logger.debug(f"Successfully fetched vault data: {vault}")
+        except aiohttp.ClientError as e:
+            logger.error(f"Error fetching vault from indexer at {vault_endpoint}: {str(e)}")
+            raise ValueError(f"Could not connect to or fetch data from the indexer: {str(e)}")
+        except Exception as e:
+            # Catch potential JSON decoding errors or other issues
+            logger.error(f"An unexpected error occurred fetching vault {vault_id}: {str(e)}")
+            raise ValueError(f"An unexpected error occurred fetching vault details: {str(e)}")
+
+        # Extract the lp_token_info which corresponds to the LP token type needed for filtering
+        lp_token_info = vault.get("lp_token_info")
+        if not lp_token_info:
+             raise ValueError(f"Indexer response for vault {vault_id} missing 'lp_token_info' field.")
+             
+        lp_type = f"0x2::coin::Coin<0x{lp_token_info}>" # Construct the full Coin<T> type
+        logger.debug(f"Looking for LP type: {lp_type} for owner {owner}")
+
+        # Get owned objects for the user
         owned_objects = await get_owned_objects(session, sui_api_url, owner)
-        # Filter for objects matching the LP token type
+        
+        # Filter for objects matching the specific LP token type
         lp_objects = [obj for obj in owned_objects if obj.get('data', {}).get('type') == lp_type]
-        logger.debug("Number of LP objects: %s", len(lp_objects))
+        logger.debug(f"Number of LP objects found for type {lp_type}: {len(lp_objects)}")
         logger.debug("Filtered LP objects: %s", lp_objects)
+        
         # Sum balances from object fields
         total = 0
         for obj in lp_objects:
             try:
                 balance = int(obj['data']['content']['fields'].get('balance', 0))
                 total += balance
-            except Exception:
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(f"Could not parse balance for object {obj.get('data', {}).get('objectId', '(unknown ID)')}: {e}")
                 continue
         return float(total)

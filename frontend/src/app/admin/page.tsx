@@ -1,47 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react'; // Import useEffect
+import React, { useState, useEffect } from 'react';
 import {
   useSignAndExecuteTransaction,
   useCurrentAccount,
   useSuiClient,
 } from '@mysten/dapp-kit';
-import { Transaction } from '@mysten/sui/transactions'; // Keep this path
-import { bcs } from '@mysten/bcs';
-// Assuming constants are correctly exported from a path relative to this file
-// Adjust the import path as necessary
-import { SUI_PACKAGE_ID, GLOBAL_OBJECT_ID } from '../../../../typescript/src/constants'; // Adjust path if needed
-import Layout from '../../components/common/Layout'; // Import the Layout component
+import Layout from '../../components/common/Layout';
+import InitializeVaultForm from '../../components/admin/InitializeVaultForm';
+import AddSupportedLpForm from '../../components/admin/AddSupportedLpForm';
+
+// Read constants from environment variables
+const SUI_PACKAGE_ID = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID;
+const GLOBAL_OBJECT_ID = process.env.NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID;
+
+// Ensure environment variables are set
+if (!SUI_PACKAGE_ID || !GLOBAL_OBJECT_ID) {
+  throw new Error("Required environment variables NEXT_PUBLIC_SUI_PACKAGE_ID or NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID are not set.");
+}
 
 // Define the AdminCap type string based on constants
 const ADMIN_CAP_TYPE = `${SUI_PACKAGE_ID}::main::AdminCap`;
-
-// Helper function to convert hex string to Uint8Array (browser-compatible)
-function hexToBytes(hex: string): Uint8Array {
-  const hexString = hex.startsWith('0x') ? hex.slice(2) : hex;
-  if (hexString.length % 2 !== 0) {
-    throw new Error('Hex string must have an even number of digits');
-  }
-  const bytes = new Uint8Array(hexString.length / 2);
-  for (let i = 0; i < hexString.length; i += 2) {
-    bytes[i / 2] = parseInt(hexString.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
 
 // Determine the network from the environment variable, defaulting to 'testnet' if not set
 const network = process.env.SUI_NETWORK || 'testnet';
 // Construct the chain identifier string
 const chainIdentifier: `${string}:${string}` = `sui:${network}`;
 
-const AdminPage = () => {
-  const [coinType, setCoinType] = useState('');
-  const [lpType, setLpType] = useState('');
-  const [priceFeedId, setPriceFeedId] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+type AdminFunction = 'init_lp_vault' | 'add_supported_lp';
 
-  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+const AdminPage = () => {
+  const [selectedFunction, setSelectedFunction] = useState<AdminFunction>('init_lp_vault');
+  const [fetchErrorMsg, setFetchErrorMsg] = useState<string | null>(null);
+
   const currentAccount = useCurrentAccount();
   const suiClient = useSuiClient();
 
@@ -49,20 +40,21 @@ const AdminPage = () => {
   useEffect(() => {
     if (currentAccount) {
       console.log('[AdminPage] Connected Account:', currentAccount.address);
+      setFetchErrorMsg(null);
     } else {
       console.log('[AdminPage] No account connected.');
     }
   }, [currentAccount]);
 
   const fetchAdminCapForAccount = async (accountAddress: string): Promise<string | null> => {
+    setFetchErrorMsg(null);
     try {
       const objects = await suiClient.getOwnedObjects({
         owner: accountAddress,
         filter: { StructType: ADMIN_CAP_TYPE },
-        options: { showType: true, showContent: true }, // Ensure we get necessary details
+        options: { showType: true, showContent: true },
       });
 
-      // Filter for the exact type match, just in case
       const adminCaps = objects.data.filter(obj => obj.data?.type === ADMIN_CAP_TYPE);
 
       if (adminCaps.length === 0) {
@@ -76,85 +68,16 @@ const AdminPage = () => {
       return adminCaps[0].data?.objectId ?? null;
     } catch (error) {
       console.error("Error fetching AdminCap:", error);
-      setErrorMsg(`Error fetching AdminCap: ${error instanceof Error ? error.message : String(error)}`);
+      const errorStr = `Error fetching AdminCap: ${error instanceof Error ? error.message : String(error)}`;
+      setFetchErrorMsg(errorStr);
       return null;
     }
   };
 
-  const handleInitializeVault = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setErrorMsg(null);
-
-    if (!currentAccount) {
-      setErrorMsg('Please connect your wallet.');
-      setIsLoading(false);
-      return;
-    }
-
-    console.log('Fetching AdminCap for current account...');
-    const adminCapId = await fetchAdminCapForAccount(currentAccount.address);
-
-    if (!adminCapId) {
-      setErrorMsg(`No AdminCap found for your account (${currentAccount.address}). You might not have permission.`);
-      setIsLoading(false);
-      return;
-    }
-
-    console.log(`Using AdminCap ID: ${adminCapId}`);
-    console.log('Initializing vault with:', { coinType, lpType, priceFeedId });
-
-    try {
-      // Convert price feed ID hex string to bytes using helper
-      const priceFeedBytes = hexToBytes(priceFeedId);
-
-      const txb = new Transaction();
-
-      txb.moveCall({
-        target: `${SUI_PACKAGE_ID}::lp::init_lp_vault`,
-        typeArguments: [coinType, lpType],
-        arguments: [
-          txb.object(adminCapId), // AdminCap object ID fetched for the user
-          txb.object(GLOBAL_OBJECT_ID), // Global object ID from constants
-          txb.pure(bcs.vector(bcs.u8()).serialize(priceFeedBytes).toBytes()) // Serialized Price feed ID bytes (Uint8Array)
-        ],
-      });
-
-      // Sign and execute the transaction block
-      signAndExecuteTransaction(
-        {
-          transaction: txb,
-          // Use the dynamically determined chain identifier
-          chain: chainIdentifier,
-        },
-        {
-          // Use the correct type for the callback parameter
-          onSuccess: (data) => { // The data structure might differ slightly, adjust if needed based on console logs
-            console.log('Vault initialized successfully:', data);
-            // Consider adding user feedback here, e.g., a success message
-          },
-          onError: (error: Error) => {
-            console.error('Error initializing vault:', error);
-            setErrorMsg(`Error signing/executing transaction: ${error.message}`);
-          },
-          onSettled: () => {
-            setIsLoading(false);
-          },
-        }
-      );
-    } catch (error) {
-      console.error('Failed to prepare transaction:', error);
-      setErrorMsg(`Failed to prepare transaction: ${error instanceof Error ? error.message : String(error)}`);
-      setIsLoading(false);
-    }
-  };
-
   return (
-    // Wrap the page content with the Layout component
-    // Pass an empty string or null to activePage if you don't want any nav item highlighted
     <Layout >
       <div className="container mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-4">Admin - Initialize LP Vault</h1>
+        <h1 className="text-2xl font-bold mb-4">Admin Functions</h1>
 
         {/* Display Connection Status */}
         <div className="mb-4 p-3 border rounded bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
@@ -169,71 +92,60 @@ const AdminPage = () => {
           )}
         </div>
 
+        {/* Function Selector */}
+        <div className="mb-6">
+            <label htmlFor="adminFunctionSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Function:</label>
+            <select
+                id="adminFunctionSelect"
+                value={selectedFunction}
+                onChange={(e) => setSelectedFunction(e.target.value as AdminFunction)}
+                className="block w-full max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black dark:text-white"
+            >
+                <option value="init_lp_vault">Initialize LP Vault</option>
+                <option value="add_supported_lp">Add Supported LP</option>
+            </select>
+        </div>
+
         {!currentAccount && (
-          <p className="text-red-500 mb-4">Please connect your wallet to use this admin function.</p>
+          <p className="text-red-500 mb-4">Please connect your wallet to use admin functions.</p>
         )}
 
-        <form onSubmit={handleInitializeVault} className="space-y-4 max-w-lg">
-          <div>
-            <label htmlFor="coinType" className="block text-sm font-medium text-gray-700">Coin Type:</label>
-            <input
-              type="text"
-              id="coinType"
-              name="coinType"
-              value={coinType}
-              onChange={(e) => setCoinType(e.target.value)}
-              placeholder="e.g., 0xPACKAGE::btc::BTC"
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
-            />
-            <p className="mt-1 text-xs text-gray-500">The full struct type of the coin for the vault.</p>
+        {/* Display fetch error if any */}
+        {fetchErrorMsg && currentAccount && (
+            <p className="text-red-500 text-sm mb-4">{fetchErrorMsg}</p>
+        )}
+
+        {/* Conditionally Rendered Forms */}
+        {currentAccount && (
+          <div className="mt-4 p-4 border rounded bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+            {selectedFunction === 'init_lp_vault' && (
+              <div>
+                <h2 className="text-xl font-semibold mb-3">Initialize LP Vault</h2>
+                <InitializeVaultForm
+                   suiPackageId={SUI_PACKAGE_ID}
+                   globalObjectId={GLOBAL_OBJECT_ID}
+                   chainIdentifier={chainIdentifier}
+                   fetchAdminCapForAccount={fetchAdminCapForAccount}
+                 />
+              </div>
+            )}
+
+            {selectedFunction === 'add_supported_lp' && (
+              <div>
+                <h2 className="text-xl font-semibold mb-3">Add Supported LP</h2>
+                 <AddSupportedLpForm
+                   suiPackageId={SUI_PACKAGE_ID}
+                   globalObjectId={GLOBAL_OBJECT_ID}
+                   adminCapType={ADMIN_CAP_TYPE}
+                   chainIdentifier={chainIdentifier}
+                   fetchAdminCapForAccount={fetchAdminCapForAccount}
+                  />
+              </div>
+            )}
           </div>
-
-          <div>
-            <label htmlFor="lpType" className="block text-sm font-medium text-gray-700">LP Token Type:</label>
-            <input
-              type="text"
-              id="lpType"
-              name="lpType"
-              value={lpType}
-              onChange={(e) => setLpType(e.target.value)}
-              placeholder="e.g., 0xPACKAGE::lp_token::BTC_LP"
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
-            />
-            <p className="mt-1 text-xs text-gray-500">The full struct type for the LP token to be created.</p>
-          </div>
-
-          <div>
-            <label htmlFor="priceFeedId" className="block text-sm font-medium text-gray-700">Pyth Price Feed ID (Hex):</label>
-            <input
-              type="text"
-              id="priceFeedId"
-              name="priceFeedId"
-              value={priceFeedId}
-              onChange={(e) => setPriceFeedId(e.target.value)}
-              placeholder="e.g., e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43"
-              required
-              pattern="^[a-fA-F0-9]+$" // Basic hex pattern validation
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-black"
-            />
-            <p className="mt-1 text-xs text-gray-500">The Pyth Network Price Feed ID for the coin, as a hex string (without 0x prefix is fine).</p>
-          </div>
-
-          {errorMsg && (
-            <p className="text-red-500 text-sm">{errorMsg}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={isLoading || !currentAccount}
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Processing...' : 'Initialize Vault'}
-          </button>
-        </form>
+        )}
       </div>
-    </Layout> // Close the Layout component
+    </Layout>
   );
 };
 
