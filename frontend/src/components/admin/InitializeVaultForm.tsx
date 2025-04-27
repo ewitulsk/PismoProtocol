@@ -3,9 +3,16 @@
 import React, { useState } from 'react';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
+import NotificationPopup from '../ui/NotificationPopup';
 // import { bcs } from '@mysten/bcs'; // No longer needed for priceFeedBytes
 
-// Helper function removed as hexToBytes is no longer needed here
+// Define NotificationState type (copied from previous files)
+type NotificationState = {
+  show: boolean;
+  message: string;
+  type: 'success' | 'error' | 'info';
+  digest?: string;
+} | null;
 
 interface InitializeVaultFormProps {
   suiPackageId: string;
@@ -25,8 +32,7 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
   // const [priceFeedId, setPriceFeedId] = useState(''); // Removed
   const [supportedLpGlobalIndex, setSupportedLpGlobalIndex] = useState(''); // Added
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [notification, setNotification] = useState<NotificationState>(null); // State for notification popup
 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
@@ -34,11 +40,10 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
   const handleInitializeVault = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
+    setNotification(null); // Clear previous notifications
 
     if (!currentAccount) {
-      setErrorMsg('Wallet not connected.');
+      setNotification({ show: true, message: 'Wallet not connected.', type: 'error' });
       setIsLoading(false);
       return;
     }
@@ -46,16 +51,16 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
     // Validate index input
     const index = parseInt(supportedLpGlobalIndex, 10);
     if (isNaN(index) || index < 0) {
-        setErrorMsg('Supported LP Global Index must be a non-negative number.');
-        setIsLoading(false);
-        return;
+      setNotification({ show: true, message: 'Supported LP Global Index must be a non-negative number.', type: 'error' });
+      setIsLoading(false);
+      return;
     }
 
     console.log('Fetching AdminCap for current account...');
     const adminCapId = await fetchAdminCapForAccount(currentAccount.address);
 
     if (!adminCapId) {
-      setErrorMsg(`No AdminCap found for your account (${currentAccount.address}). You might not have permission.`);
+      setNotification({ show: true, message: `No AdminCap found for your account (${currentAccount.address}). You might not have permission.`, type: 'error' });
       setIsLoading(false);
       return;
     }
@@ -87,7 +92,12 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
         {
           onSuccess: (data) => {
             console.log('Vault initialized successfully:', data);
-            setSuccessMsg(`Vault initialized for ${coinType} at index ${index}. Digest: ${data.digest}`);
+            setNotification({
+              show: true,
+              message: `Vault initialized for ${coinType} at index ${index}.`,
+              type: 'success',
+              digest: data.digest,
+            });
             // Reset form
             setCoinType('');
             setLpType('');
@@ -96,7 +106,7 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
           },
           onError: (error: Error) => {
             console.error('Error initializing vault:', error);
-            setErrorMsg(`Error signing/executing transaction: ${error.message}`);
+            setNotification({ show: true, message: `Error signing/executing transaction: ${error.message}`, type: 'error' });
           },
           onSettled: () => {
             setIsLoading(false);
@@ -105,13 +115,23 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
       );
     } catch (error) {
       console.error('Failed to prepare transaction:', error);
-      setErrorMsg(`Failed to prepare transaction: ${error instanceof Error ? error.message : String(error)}`);
+      setNotification({ show: true, message: `Failed to prepare transaction: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
       setIsLoading(false);
     }
   };
 
   return (
     <form onSubmit={handleInitializeVault} className="space-y-4 max-w-lg">
+      {/* Render Notification Popup */}
+      {notification?.show && (
+        <NotificationPopup
+          message={notification.message}
+          type={notification.type}
+          digest={notification.digest}
+          onClose={() => setNotification(null)} // Function to hide the popup
+        />
+      )}
+
       <div>
         <label htmlFor="coinType" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Coin Type:</label>
         <input
@@ -160,8 +180,7 @@ const InitializeVaultForm: React.FC<InitializeVaultFormProps> = ({
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">The index of this LP in the Global object's `supported_lp` vector (u64).</p>
       </div>
 
-      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-      {successMsg && <p className="text-green-500 text-sm">{successMsg}</p>}
+      {/* Removed inline error/success messages */}
 
       <button
         type="submit"
