@@ -4,6 +4,15 @@ import React, { useState } from 'react';
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/bcs';
+import NotificationPopup from '../ui/NotificationPopup'; // Import the notification popup
+
+// Define NotificationState type (can be moved to a shared types file later)
+type NotificationState = {
+  show: boolean;
+  message: string;
+  type: 'success' | 'error' | 'info';
+  digest?: string;
+} | null;
 
 // Helper function to convert hex string to Uint8Array (copied from admin/page.tsx)
 function hexToBytes(hex: string): Uint8Array {
@@ -38,8 +47,7 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
   const [priceFeedId, setPriceFeedId] = useState('');
   const [oracleFeed, setOracleFeed] = useState('0'); // Default to 0 (Pyth)
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [notification, setNotification] = useState<NotificationState>(null); // State for notification popup
 
 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
@@ -49,26 +57,25 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
   const handleAddSupportedLP = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
+    setNotification(null); // Clear previous notifications
 
 
     if (!currentAccount) {
-      setErrorMsg('Please connect your wallet.');
+      setNotification({ show: true, message: 'Please connect your wallet.', type: 'error' });
       setIsLoading(false);
       return;
     }
 
     const decimals = parseInt(tokenDecimals, 10);
     if (isNaN(decimals) || decimals < 0 || decimals > 255) {
-        setErrorMsg('Token Decimals must be a number between 0 and 255.');
+        setNotification({ show: true, message: 'Token Decimals must be a number between 0 and 255.', type: 'error' });
         setIsLoading(false);
         return;
     }
 
     const feed = parseInt(oracleFeed, 10);
      if (isNaN(feed) || feed < 0 || feed > 65535) {
-        setErrorMsg('Oracle Feed must be a number between 0 and 65535.');
+        setNotification({ show: true, message: 'Oracle Feed must be a number between 0 and 65535.', type: 'error' });
         setIsLoading(false);
         return;
     }
@@ -79,7 +86,7 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
     const adminCapId = await fetchAdminCapForAccount(currentAccount.address);
 
     if (!adminCapId) {
-      setErrorMsg(`No AdminCap found for your account (${currentAccount.address}). You might not have permission.`);
+      setNotification({ show: true, message: `No AdminCap found for your account (${currentAccount.address}). You might not have permission.`, type: 'error' });
       setIsLoading(false);
       return;
     }
@@ -112,7 +119,12 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
         {
           onSuccess: (data) => {
             console.log('Supported LP added successfully:', data);
-            setSuccessMsg(`Successfully added LP: ${tokenInfo}. Digest: ${data.digest}`);
+            setNotification({
+                show: true,
+                message: `Successfully added LP: ${tokenInfo}.`,
+                type: 'success',
+                digest: data.digest,
+            });
             // Reset form potentially
             setTokenInfo('');
             setTokenDecimals('');
@@ -121,7 +133,7 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
           },
           onError: (error: Error) => {
             console.error('Error adding supported LP:', error);
-            setErrorMsg(`Error signing/executing transaction: ${error.message}`);
+            setNotification({ show: true, message: `Error signing/executing transaction: ${error.message}`, type: 'error' });
           },
           onSettled: () => {
             setIsLoading(false);
@@ -130,13 +142,23 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
       );
     } catch (error) {
       console.error('Failed to prepare transaction:', error);
-      setErrorMsg(`Failed to prepare transaction: ${error instanceof Error ? error.message : String(error)}`);
+      setNotification({ show: true, message: `Failed to prepare transaction: ${error instanceof Error ? error.message : String(error)}`, type: 'error' });
       setIsLoading(false);
     }
   };
 
   return (
     <form onSubmit={handleAddSupportedLP} className="space-y-4 max-w-lg">
+      {/* Render Notification Popup */} 
+      {notification?.show && (
+        <NotificationPopup
+          message={notification.message}
+          type={notification.type}
+          digest={notification.digest}
+          onClose={() => setNotification(null)} // Function to hide the popup
+        />
+      )}
+
        <div>
           <label htmlFor="tokenInfo" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Token Info (Struct Type):</label>
           <input
@@ -198,10 +220,6 @@ const AddSupportedLpForm: React.FC<AddSupportedLpFormProps> = ({
           </select>
            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Identifier for the oracle provider (currently only 0 for Pyth is expected by contract).</p>
       </div>
-
-      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-      {successMsg && <p className="text-green-500 text-sm">{successMsg}</p>}
-
 
       <button
         type="submit"
