@@ -9,6 +9,7 @@ import {
 import Layout from '../../components/common/Layout';
 import InitializeVaultForm from '../../components/admin/InitializeVaultForm';
 import AddSupportedLpForm from '../../components/admin/AddSupportedLpForm';
+import InitProgramForm from '../../components/admin/InitProgramForm';
 
 // Read constants from environment variables
 const SUI_PACKAGE_ID = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID;
@@ -27,7 +28,7 @@ const network = process.env.SUI_NETWORK || 'testnet';
 // Construct the chain identifier string
 const chainIdentifier: `${string}:${string}` = `sui:${network}`;
 
-type AdminFunction = 'init_lp_vault' | 'add_supported_lp';
+type AdminFunction = 'init_lp_vault' | 'add_supported_lp' | 'init_program';
 
 const AdminPage = () => {
   const [selectedFunction, setSelectedFunction] = useState<AdminFunction>('init_lp_vault');
@@ -103,6 +104,7 @@ const AdminPage = () => {
             >
                 <option value="init_lp_vault">Initialize LP Vault</option>
                 <option value="add_supported_lp">Add Supported LP</option>
+                <option value="init_program">Initialize Program</option>
             </select>
         </div>
 
@@ -140,6 +142,17 @@ const AdminPage = () => {
                    chainIdentifier={chainIdentifier}
                    fetchAdminCapForAccount={fetchAdminCapForAccount}
                   />
+              </div>
+            )}
+
+            {selectedFunction === 'init_program' && (
+              <div>
+                 <h2 className="text-xl font-semibold mb-3">Initialize Program</h2>
+                 <InitProgramForm
+                    suiPackageId={SUI_PACKAGE_ID}
+                    chainIdentifier={chainIdentifier}
+                    fetchAdminCapForAccount={fetchAdminCapForAccount}
+                 />
               </div>
             )}
           </div>

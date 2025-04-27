@@ -110,7 +110,7 @@ public(package) fun new_position_internal (
     leverage_multiplier: u16,
     entry_price: u64,
     entry_price_decimals: u8,
-    supported_positions_token_i: u64,
+    supported_positions_token_i: u64, //We have a supported positions on both Global and Program... We shouldn't have the global one...
     account_id: address,
     ctx: &mut TxContext
 ) {
