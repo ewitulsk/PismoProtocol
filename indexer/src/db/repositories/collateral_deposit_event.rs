@@ -65,6 +65,22 @@ impl CollateralDepositEventRepository {
         }
     }
 
+    pub fn find_by_account_id_and_token_address(&self, target_account_id: &str, target_token_address: &str) -> Result<Vec<CollateralDepositEvent>> {
+        let mut conn = self.get_conn()?;
+        match collateral_deposit_events
+            .filter(account_id.eq(target_account_id))
+            .filter(token_address.eq(target_token_address))
+            .load::<CollateralDepositEvent>(&mut conn)
+        {
+            Ok(events) => Ok(events),
+            Err(DieselError::NotFound) => Ok(Vec::new()),
+            Err(e) => {
+                error!(account_id = %target_account_id, token_address = %target_token_address, error = ?e, "Failed to find CollateralDepositEvents by account ID and token info");
+                Err(anyhow::anyhow!("Failed to find CollateralDepositEvents by account ID and token info: {}", e))
+            }
+        }
+    }
+
     // Implement update/delete if needed, otherwise leave as dead_code
     #[allow(dead_code)]
     fn update(&self) -> Result<()> { Ok(()) }

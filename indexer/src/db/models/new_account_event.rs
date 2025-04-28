@@ -1,8 +1,9 @@
 use crate::db::postgres::schema::new_account_events;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use serde::Serialize;
 
-#[derive(Queryable, Selectable, Identifiable, Debug, PartialEq, Clone)]
+#[derive(Queryable, Selectable, Identifiable, Debug, PartialEq, Clone, Serialize)]
 #[diesel(table_name = new_account_events)]
 #[diesel(primary_key(transaction_hash))]
 pub struct NewAccountEvent {

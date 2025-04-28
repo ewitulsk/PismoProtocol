@@ -1,20 +1,6 @@
-# Configuration for the Indexer (Testnet)
-
-# Connection string for the PostgreSQL database
 database_url = "postgresql://postgres:postgres@localhost:7654/indexer"
-
-# Deployed Package ID of the pismo_protocol module
-package_id = "0xdb094aafef09a5925a71ac418279bab3196e1153d3c3d93c23154390d883ca01"
-
-# URL of the Sui remote checkpoint store (e.g., testnet, mainnet)
+package_id = "0xc93a7b65baee3a6c143a5ca27bfb28cf4414cd0477dd24e6ac768ce9a4015da0"
 remote_store_url = "https://checkpoints.testnet.sui.io"
-
-# Checkpoint sequence number to start indexing from
-start_checkpoint = 189253799
-
-# Number of concurrent checkpoint processing tasks
-# Adjust based on your machine resources and workload
+start_checkpoint = 192_696_118
 concurrency = 5
-
-# Address and port for the API server to listen on
-listen_addr = "0.0.0.0:3001" 
+listen_addr = "0.0.0.0:3001"

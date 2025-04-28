@@ -14,7 +14,7 @@ use sui::tx_context::{Self, TxContext};
 use sui::event;
 
 use std::vector;
-use std::string::String;
+use std::string::{Self, String};
 use std::type_name;
 use std::debug;
 use std::u128::pow;
@@ -39,6 +39,7 @@ use pismo_protocol::main::Global;
 use pismo_protocol::lp::VaultMarker;
 
 const E_INVALID_COLLATERAL: u64 = 9999999999;
+const COLLATERAL_DEPRECATED: u64 = 8888888888;
 const E_VALUE_UPDATED_TOO_LONG_AGO: u64 = 98888; // Keep for now
 const E_INSUFFICIENT_COLLATERAL_PROVIDED: u64 = 97777; // Keep for now
 const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9; // New error code from accounts.move
@@ -109,13 +110,15 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
     assert_account_program_match(account, program);
     assert_account_stats_match(account, stats);
 
-    let type_str = type_name::get<CoinType>().into_string();
+    let type_str_ascii = type_name::get<CoinType>().into_string();
+    let type_str = string::from_ascii(type_str_ascii);
+
     let initial_amount = coin.value(); // Capture the amount before consuming the coin
     let mut i = 0;
     while(i < program.supported_collateral().length()){
         let token_id = program.supported_collateral()[i];
-        if(type_str.to_string() == token_id.token_info()){
-            assert!(!token_id.is_deprecated(), E_INVALID_COLLATERAL);
+        if(type_str == token_id.token_info()){
+            assert!(!token_id.is_deprecated(), COLLATERAL_DEPRECATED);
 
             let collateral_marker_id = object::new(ctx);
             let collateral_id = object::new(ctx);
@@ -166,12 +169,14 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
 public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(account_id_addr: address, stats: &mut AccountStats, program: &Program, coin: Coin<CoinType>, ctx: &mut TxContext) {
     assert!(stats_account_id(stats) == account_id_addr, E_COLLATERAL_ACCOUNT_MISMATCH); //We are running this check on multiple levels. I'm leaving it for rn, we can change it once the contracts are more finalized.
 
-    let type_str = type_name::get<CoinType>().into_string();
+    let type_str_ascii = type_name::get<CoinType>().into_string();
+    let type_str = string::from_ascii(type_str_ascii);
+
     let initial_amount = coin.value(); // Capture the amount before consuming the coin
     let mut i = 0;
     while(i < program.supported_collateral().length()){
-         let token_id = program.supported_collateral()[i];
-        if(type_str.to_string() == token_id.token_info()){
+        let token_id = program.supported_collateral()[i];
+        if(type_str == token_id.token_info()){
              // Check if token is deprecated
             assert!(!token_id.is_deprecated(), E_INVALID_COLLATERAL);
 
@@ -216,6 +221,8 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
             return;
         };
         i = i + 1;
+        debug::print(&type_str);
+        debug::print(&token_id.token_info());
     };
     assert!(false, E_INVALID_COLLATERAL);
     coin.destroy_zero();

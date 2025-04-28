@@ -5,8 +5,9 @@ edition = "2024"
 
 [dependencies]
 # Sui Indexer Framework
-sui-data-ingestion-core = { git = "https://github.com/mystenlabs/sui", package = "sui-data-ingestion-core"}
-sui-types = { git = "https://github.com/mystenlabs/sui", package = "sui-types"}
+sui-data-ingestion-core = { git = "https://github.com/mystenlabs/sui", package = "sui-data-ingestion-core" }
+sui-types = { git = "https://github.com/mystenlabs/sui", package = "sui-types" }
+tower-http = { version = "0.5.2", features = ["cors"] }
 
 # Async
 tokio = { version = "1", features = ["full"] }
@@ -36,3 +37,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [workspace] # Add workspace if it doesn't exist, prevents inheriting from parent
+
+[workspace.dependencies]
+# ... existing code ...

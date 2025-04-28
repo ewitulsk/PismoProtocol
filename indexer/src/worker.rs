@@ -43,7 +43,7 @@ impl PositionEventWorker {
         let vault_created_event_type = format!("{}::lp::VaultCreatedEvent", package_id);
         let position_created_event_type = format!("{}::positions::PositionCreatedEvent", package_id);
         let position_closed_event_type = format!("{}::positions::PositionClosedEvent", package_id);
-        let new_account_event_type = format!("{}::positions::NewAccountEvent", package_id);
+        let new_account_event_type = format!("{}::accounts::NewAccountEvent", package_id);
         let collateral_deposit_event_type = format!("{}::collateral::CollateralDepositEvent", package_id);
 
         info!("Worker configured for package ID: {}", package_id);
@@ -175,7 +175,10 @@ impl Worker for PositionEventWorker {
                                 match parsed_event.try_map_to_db(tx_digest_str.clone(), checkpoint_time) {
                                     Ok(db_event) => {
                                          match self.collateral_deposit_repo.create(db_event) {
-                                            Ok(_) => info!("Successfully stored CollateralDepositEvent for tx {}", tx_digest_str),
+                                            Ok(_) => {
+                                                info!("Successfully stored CollateralDepositEvent for tx {}", tx_digest_str);
+                                                println!("Successfully stored CollateralDepositEvent for tx {}", tx_digest_str);
+                                            },
                                             Err(e) => error!("DB Error storing CollateralDepositEvent for tx {}: {}", tx_digest_str, e),
                                         }
                                     },

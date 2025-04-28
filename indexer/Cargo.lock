@@ -3575,6 +3575,7 @@ dependencies = [
  "sui-data-ingestion-core",
  "sui-types",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
 ]
