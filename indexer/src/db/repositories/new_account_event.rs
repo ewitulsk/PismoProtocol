@@ -50,6 +50,34 @@ impl NewAccountEventRepository {
         }
     }
 
+    // New method to find by account_id
+    pub fn find_by_account_id(&self, acc_id: &str) -> Result<Option<NewAccountEvent>> {
+        let mut conn = self.get_conn()?;
+        match new_account_events
+            .filter(account_id.eq(acc_id))
+            .first::<NewAccountEvent>(&mut conn)
+        {
+            Ok(event) => Ok(Some(event)),
+            Err(DieselError::NotFound) => Ok(None),
+            Err(e) => {
+                error!(account_id = %acc_id, error = ?e, "Failed to find NewAccountEvent by account_id");
+                Err(anyhow::anyhow!("Failed to find NewAccountEvent by account_id: {}", e))
+            }
+        }
+    }
+
+    // New method to find all account events
+    pub fn find_all(&self) -> Result<Vec<NewAccountEvent>> {
+        let mut conn = self.get_conn()?;
+        match new_account_events.load::<NewAccountEvent>(&mut conn) {
+            Ok(events) => Ok(events),
+            Err(e) => {
+                error!(error = ?e, "Failed to load all NewAccountEvents");
+                Err(anyhow::anyhow!("Failed to load all NewAccountEvents: {}", e))
+            }
+        }
+    }
+
     // Implement update/delete if needed, otherwise leave as dead_code
     #[allow(dead_code)]
     fn update(&self) -> Result<()> { Ok(()) }

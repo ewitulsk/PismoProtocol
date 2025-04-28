@@ -25,8 +25,7 @@ diesel::table! {
         collateral_id -> Text,
         collateral_marker_id -> Text,
         account_id -> Text,
-        token_account_address -> Text,
-        token_creation_num -> Int8,
+        token_address -> Text,
         amount -> Numeric,
         timestamp -> Timestamptz,
     }

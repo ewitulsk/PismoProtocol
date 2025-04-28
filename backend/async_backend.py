@@ -521,6 +521,53 @@ async def calc_total_vault_values() -> Dict:
         }
 
 
+async def get_program_supported_collateral() -> List[Dict[str, Any]]:
+    """
+    Fetch the program object using the program_id from the config and return its supported_collateral field.
+    """
+    config = load_config()
+    sui_api_url = config.get("sui_api_url")
+    program_id = config.get("program_id")
+
+    if not sui_api_url or not program_id:
+        raise ValueError("Missing sui_api_url or program_id in configuration.")
+
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
+        program_objects = await get_objects(session, sui_api_url, [program_id])
+        if not program_objects:
+            raise ValueError(f"Could not retrieve program object with ID: {program_id}")
+        
+        # Assuming the program object is the first in the list
+        program_data = program_objects[0].get('data')
+        if not program_data:
+            raise ValueError(f"Invalid data format for program object: {program_objects[0]}")
+
+        content_fields = program_data.get('content', {}).get('fields', {})
+        supported_collateral = content_fields.get('supported_collateral')
+
+        if supported_collateral is None:
+             raise ValueError(f"Could not find 'supported_collateral' field in program object: {program_id}")
+
+        # Process supported collateral items
+        for collateral_item in supported_collateral:
+            fields = collateral_item.get('fields', {})
+            
+            # Ensure token_info starts with 0x
+            token_info = fields.get('token_info')
+            if token_info and not token_info.startswith('0x'):
+                fields['token_info'] = '0x' + token_info # Modify the token_info in the fields dict
+
+            # Convert byte arrays (price_feed_id_bytes) to hex strings for JSON serialization
+            if 'price_feed_id_bytes' in fields:
+                byte_list = fields['price_feed_id_bytes']
+                fields['price_feed_id_bytes_hex'] = '0x' + bytes(byte_list).hex()
+                # Optionally remove the original byte list if not needed in the response
+                # del fields['price_feed_id_bytes'] 
+
+        return supported_collateral
+
+
 async def get_lp_balance(owner: str, vault_id: str) -> float:
     """
     Retrieve the LP token balance for a given owner and vault using getOwnedObjects.

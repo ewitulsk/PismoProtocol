@@ -10,6 +10,7 @@ import Layout from '../../components/common/Layout';
 import InitializeVaultForm from '../../components/admin/InitializeVaultForm';
 import AddSupportedLpForm from '../../components/admin/AddSupportedLpForm';
 import InitProgramForm from '../../components/admin/InitProgramForm';
+import MintTestCoinForm from '../../components/admin/MintTestCoinForm';
 
 // Read constants from environment variables
 const SUI_PACKAGE_ID = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID;
@@ -28,7 +29,8 @@ const network = process.env.SUI_NETWORK || 'testnet';
 // Construct the chain identifier string
 const chainIdentifier: `${string}:${string}` = `sui:${network}`;
 
-type AdminFunction = 'init_lp_vault' | 'add_supported_lp' | 'init_program';
+// Add 'mint_test_coin' to the type
+type AdminFunction = 'init_lp_vault' | 'add_supported_lp' | 'init_program' | 'mint_test_coin';
 
 const AdminPage = () => {
   const [selectedFunction, setSelectedFunction] = useState<AdminFunction>('init_lp_vault');
@@ -105,6 +107,7 @@ const AdminPage = () => {
                 <option value="init_lp_vault">Initialize LP Vault</option>
                 <option value="add_supported_lp">Add Supported LP</option>
                 <option value="init_program">Initialize Program</option>
+                <option value="mint_test_coin">Mint Test Coin</option>
             </select>
         </div>
 
@@ -152,6 +155,16 @@ const AdminPage = () => {
                     suiPackageId={SUI_PACKAGE_ID}
                     chainIdentifier={chainIdentifier}
                     fetchAdminCapForAccount={fetchAdminCapForAccount}
+                 />
+              </div>
+            )}
+
+            {selectedFunction === 'mint_test_coin' && (
+              <div>
+                 <h2 className="text-xl font-semibold mb-3">Mint Test Coin</h2>
+                 <MintTestCoinForm
+                    suiPackageId={SUI_PACKAGE_ID}
+                    chainIdentifier={chainIdentifier}
                  />
               </div>
             )}
