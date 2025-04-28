@@ -8,7 +8,8 @@ import json
 from async_backend import (
     calc_total_account_value,
     calc_total_vault_values,
-    get_lp_balance
+    get_lp_balance,
+    get_program_supported_collateral
 )
 
 app = Flask(__name__)
@@ -70,6 +71,24 @@ async def calculate_total_value_locked():
         print(f"Error calculating total value locked: {str(e)}")
         return jsonify({"error": f"Failed to calculate total value locked: {str(e)}"}), 500
     
+
+@app.route('/api/supportedCollateral', methods=['GET'])
+@async_route
+async def get_supported_collateral_route():
+    try:
+        # Fetch the supported collateral list using the new async function
+        supported_collateral_list = await get_program_supported_collateral()
+        
+        return jsonify({"supportedCollateral": supported_collateral_list}), 200
+    
+    except ValueError as e:
+        # Handle specific value errors (e.g., config missing, object not found)
+        print(f"Error fetching supported collateral: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        # Handle other unexpected errors
+        print(f"Error fetching supported collateral: {str(e)}")
+        return jsonify({"error": f"Failed to fetch supported collateral: {str(e)}"}), 500
 
 @app.route('/api/lpBalance', methods=['POST'])
 @async_route

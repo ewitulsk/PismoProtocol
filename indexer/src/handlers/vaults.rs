@@ -11,7 +11,6 @@ use tracing::{error, debug};
 use crate::router::AppState;
 use crate::db::repositories::vault_created_events::VaultCreatedEventRepository;
 
-#[axum::debug_handler]
 pub async fn get_all_vaults(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -34,7 +33,6 @@ pub async fn get_all_vaults(
     }
 }
 
-#[axum::debug_handler]
 pub async fn get_vault_by_address(
     State(state): State<AppState>,
     axum::extract::Path(vault_addr): axum::extract::Path<String>,

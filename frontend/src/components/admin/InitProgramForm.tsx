@@ -29,7 +29,6 @@ function hexToBytes(hex: string): Uint8Array {
 
 interface InitProgramFormProps {
   suiPackageId: string;
-  // globalObjectId: string; // Not needed for init_program
   chainIdentifier: `${string}:${string}`;
   fetchAdminCapForAccount: (accountAddress: string) => Promise<string | null>;
 }
@@ -39,35 +38,17 @@ const InitProgramForm: React.FC<InitProgramFormProps> = ({
   chainIdentifier,
   fetchAdminCapForAccount,
 }) => {
-  // Input states - using comma-separated strings for vectors
-  const [collateralTokenInfo, setCollateralTokenInfo] = useState('');
-  const [collateralPriceFeedIds, setCollateralPriceFeedIds] = useState('');
-  const [collateralOracleFeedIds, setCollateralOracleFeedIds] = useState('');
-  const [positionTokenInfo, setPositionTokenInfo] = useState('');
-  const [positionPriceFeedIds, setPositionPriceFeedIds] = useState('');
-  const [positionOracleFeedIds, setPositionOracleFeedIds] = useState('');
-  const [maxLeverage, setMaxLeverage] = useState('');
-  const [sharedPriceDecimals, setSharedPriceDecimals] = useState('');
+  // Input states for the simplified init_program_single_token_collateral_and_positions
+  const [collateralTokenType, setCollateralTokenType] = useState('');
+  const [collateralPriceFeedId, setCollateralPriceFeedId] = useState(''); // Single hex string
+  const [collateralOracleFeedId, setCollateralOracleFeedId] = useState(''); // Single number (u16)
+  const [sharedPriceDecimals, setSharedPriceDecimals] = useState(''); // Single number (u8)
 
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState<NotificationState>(null);
 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
-
-  const parseStringArray = (input: string): string[] => input.split(',').map(s => s.trim()).filter(s => s);
-  const parseNumberArray = (input: string, type: 'u8' | 'u16' = 'u16'): number[] => {
-    const parsed = input.split(',').map(s => parseInt(s.trim(), 10));
-    if (parsed.some(isNaN)) throw new Error(`Invalid number found in list: ${input}`);
-    if (type === 'u8' && parsed.some(n => n < 0 || n > 255)) throw new Error('Number must be between 0 and 255');
-    if (type === 'u16' && parsed.some(n => n < 0 || n > 65535)) throw new Error('Number must be between 0 and 65535');
-    return parsed;
-  };
-   const parseHexBytesArray = (input: string): Uint8Array[] => {
-    const hexStrings = input.split(',').map(s => s.trim()).filter(s => s);
-    return hexStrings.map(hexToBytes);
-  };
-
 
   const handleInitProgram = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -82,26 +63,19 @@ const InitProgramForm: React.FC<InitProgramFormProps> = ({
 
     try {
         // Parse and validate inputs
-        const collateralInfos = parseStringArray(collateralTokenInfo);
-        const collateralFeeds = parseHexBytesArray(collateralPriceFeedIds);
-        const collateralOracles = parseNumberArray(collateralOracleFeedIds, 'u16');
+        if (!collateralTokenType.trim()) {
+            throw new Error('Collateral Token Type is required.');
+        }
+        const collateralFeedBytes = hexToBytes(collateralPriceFeedId); // Already handles '0x' prefix and validation
 
-        const positionInfos = parseStringArray(positionTokenInfo);
-        const positionFeeds = parseHexBytesArray(positionPriceFeedIds);
-        const positionOracles = parseNumberArray(positionOracleFeedIds, 'u16');
-        const leverages = parseNumberArray(maxLeverage, 'u16');
+        const parsedCollateralOracleId = parseInt(collateralOracleFeedId.trim(), 10);
+        if (isNaN(parsedCollateralOracleId) || parsedCollateralOracleId < 0 || parsedCollateralOracleId > 65535) {
+            throw new Error('Collateral Oracle Feed ID must be a number between 0 and 65535.');
+        }
 
-        const sharedDecimals = parseInt(sharedPriceDecimals, 10);
-        if (isNaN(sharedDecimals) || sharedDecimals < 0 || sharedDecimals > 255) {
+        const parsedSharedDecimals = parseInt(sharedPriceDecimals.trim(), 10);
+        if (isNaN(parsedSharedDecimals) || parsedSharedDecimals < 0 || parsedSharedDecimals > 255) {
             throw new Error('Shared Price Decimals must be a number between 0 and 255.');
-        }
-
-        // Basic length checks
-        if (collateralInfos.length !== collateralFeeds.length || collateralInfos.length !== collateralOracles.length) {
-            throw new Error('Collateral input arrays must have the same length.');
-        }
-         if (positionInfos.length !== positionFeeds.length || positionInfos.length !== positionOracles.length || positionInfos.length !== leverages.length) {
-            throw new Error('Position input arrays must have the same length.');
         }
 
         console.log('Fetching AdminCap for current account...');
@@ -112,28 +86,23 @@ const InitProgramForm: React.FC<InitProgramFormProps> = ({
         }
 
         console.log(`Using AdminCap ID: ${adminCapId}`);
-        console.log('Initializing program with:', { collateralInfos, collateralFeeds, collateralOracles, positionInfos, positionFeeds, positionOracles, leverages, sharedDecimals });
+        console.log('Initializing program with:', {
+            collateralTokenType,
+            collateralFeedBytes,
+            parsedCollateralOracleId,
+            parsedSharedDecimals,
+        });
 
         const txb = new Transaction();
 
-        // BCS encode vector<vector<u8>>
-        const collateralFeedsBytes = bcs.vector(bcs.vector(bcs.u8()))
-            .serialize(collateralFeeds).toBytes();
-        const positionFeedsBytes = bcs.vector(bcs.vector(bcs.u8()))
-            .serialize(positionFeeds).toBytes();
-
         txb.moveCall({
-            target: `${suiPackageId}::programs::init_program`,
+            target: `${suiPackageId}::programs::init_program_single_token_collateral_and_positions`,
+            typeArguments: [collateralTokenType.trim()],
             arguments: [
                 txb.object(adminCapId),
-                txb.pure(bcs.vector(bcs.string()).serialize(collateralInfos).toBytes()),
-                txb.pure(collateralFeedsBytes),
-                txb.pure(bcs.vector(bcs.u16()).serialize(collateralOracles).toBytes()),
-                txb.pure(bcs.vector(bcs.string()).serialize(positionInfos).toBytes()),
-                txb.pure(positionFeedsBytes),
-                txb.pure(bcs.vector(bcs.u16()).serialize(positionOracles).toBytes()),
-                txb.pure(bcs.vector(bcs.u16()).serialize(leverages).toBytes()),
-                txb.pure.u8(sharedDecimals),
+                txb.pure(bcs.vector(bcs.u8()).serialize(collateralFeedBytes).toBytes()),
+                txb.pure.u16(parsedCollateralOracleId),
+                txb.pure.u8(parsedSharedDecimals),
             ],
         });
 
@@ -147,18 +116,14 @@ const InitProgramForm: React.FC<InitProgramFormProps> = ({
                 console.log('Program initialized successfully:', data);
                 setNotification({
                     show: true,
-                    message: 'Program initialized successfully.',
+                    message: 'Program initialized successfully (single token).',
                     type: 'success',
                     digest: data.digest,
                 });
                 // Reset form
-                setCollateralTokenInfo('');
-                setCollateralPriceFeedIds('');
-                setCollateralOracleFeedIds('');
-                setPositionTokenInfo('');
-                setPositionPriceFeedIds('');
-                setPositionOracleFeedIds('');
-                setMaxLeverage('');
+                setCollateralTokenType('');
+                setCollateralPriceFeedId('');
+                setCollateralOracleFeedId('');
                 setSharedPriceDecimals('');
             },
             onError: (error: Error) => {
@@ -192,49 +157,27 @@ const InitProgramForm: React.FC<InitProgramFormProps> = ({
         />
       )}
 
-      <h3 className="text-lg font-semibold mb-3">Collateral Configuration</h3>
+      <h3 className="text-lg font-semibold mb-3">Collateral Configuration (Single Token)</h3>
       <div>
-        <label htmlFor="collateralTokenInfo" className={labelClass}>Collateral Token Infos (comma-separated):</label>
-        <input type="text" id="collateralTokenInfo" value={collateralTokenInfo} onChange={(e) => setCollateralTokenInfo(e.target.value)} placeholder="e.g., 0xPKG::usd::USD,0xPKG::btc::BTC" required className={inputClass} />
-        <p className={helpTextClass}>Comma-separated list of full token type strings.</p>
+        <label htmlFor="collateralTokenType" className={labelClass}>Collateral Token Type:</label>
+        <input type="text" id="collateralTokenType" value={collateralTokenType} onChange={(e) => setCollateralTokenType(e.target.value)} placeholder="e.g., 0xPKG::usd::USD" required className={inputClass} />
+        <p className={helpTextClass}>The full token type string for the single collateral.</p>
       </div>
       <div>
-        <label htmlFor="collateralPriceFeedIds" className={labelClass}>Collateral Price Feed IDs (Hex, comma-separated):</label>
-        <input type="text" id="collateralPriceFeedIds" value={collateralPriceFeedIds} onChange={(e) => setCollateralPriceFeedIds(e.target.value)} placeholder="e.g., feedIdHex1,feedIdHex2" required className={inputClass} />
-        <p className={helpTextClass}>Comma-separated list of hex price feed IDs (no 0x prefix).</p>
+        <label htmlFor="collateralPriceFeedId" className={labelClass}>Collateral Price Feed ID (Hex):</label>
+        <input type="text" id="collateralPriceFeedId" value={collateralPriceFeedId} onChange={(e) => setCollateralPriceFeedId(e.target.value)} placeholder="e.g., feedIdHex1 (no 0x prefix needed)" required className={inputClass} />
+        <p className={helpTextClass}>Hex string for the price feed ID.</p>
       </div>
       <div>
-        <label htmlFor="collateralOracleFeedIds" className={labelClass}>Collateral Oracle Feed IDs (u16, comma-separated):</label>
-        <input type="text" id="collateralOracleFeedIds" value={collateralOracleFeedIds} onChange={(e) => setCollateralOracleFeedIds(e.target.value)} placeholder="e.g., 0,0" required className={inputClass} />
-        <p className={helpTextClass}>Comma-separated list of oracle feed numbers (0 for Pyth).</p>
-      </div>
-
-      <h3 className="text-lg font-semibold mb-3 pt-4">Position Configuration</h3>
-      <div>
-        <label htmlFor="positionTokenInfo" className={labelClass}>Position Token Infos (comma-separated):</label>
-        <input type="text" id="positionTokenInfo" value={positionTokenInfo} onChange={(e) => setPositionTokenInfo(e.target.value)} placeholder="e.g., 0xPKG::eth::ETH,0xPKG::sol::SOL" required className={inputClass} />
-        <p className={helpTextClass}>Comma-separated list of full token type strings for positions.</p>
-      </div>
-      <div>
-        <label htmlFor="positionPriceFeedIds" className={labelClass}>Position Price Feed IDs (Hex, comma-separated):</label>
-        <input type="text" id="positionPriceFeedIds" value={positionPriceFeedIds} onChange={(e) => setPositionPriceFeedIds(e.target.value)} placeholder="e.g., feedIdHex3,feedIdHex4" required className={inputClass} />
-         <p className={helpTextClass}>Comma-separated list of hex price feed IDs (no 0x prefix).</p>
-     </div>
-      <div>
-        <label htmlFor="positionOracleFeedIds" className={labelClass}>Position Oracle Feed IDs (u16, comma-separated):</label>
-        <input type="text" id="positionOracleFeedIds" value={positionOracleFeedIds} onChange={(e) => setPositionOracleFeedIds(e.target.value)} placeholder="e.g., 0,0" required className={inputClass} />
-        <p className={helpTextClass}>Comma-separated list of oracle feed numbers (0 for Pyth).</p>
-      </div>
-      <div>
-        <label htmlFor="maxLeverage" className={labelClass}>Max Leverage (u16, comma-separated):</label>
-        <input type="text" id="maxLeverage" value={maxLeverage} onChange={(e) => setMaxLeverage(e.target.value)} placeholder="e.g., 10,20" required className={inputClass} />
-        <p className={helpTextClass}>Comma-separated list of max leverage values (corresponding to position tokens).</p>
+        <label htmlFor="collateralOracleFeedId" className={labelClass}>Collateral Oracle Feed ID (u16):</label>
+        <input type="number" id="collateralOracleFeedId" value={collateralOracleFeedId} onChange={(e) => setCollateralOracleFeedId(e.target.value)} placeholder="e.g., 0" required min="0" max="65535" className={inputClass} />
+        <p className={helpTextClass}>Oracle feed number (e.g., 0 for Pyth).</p>
       </div>
 
       <h3 className="text-lg font-semibold mb-3 pt-4">Global Configuration</h3>
       <div>
         <label htmlFor="sharedPriceDecimals" className={labelClass}>Shared Price Decimals (u8):</label>
-        <input type="number" id="sharedPriceDecimals" value={sharedPriceDecimals} onChange={(e) => setSharedPriceDecimals(e.target.value)} placeholder="e.g., 10" required min="0" max="255" className={inputClass} />
+        <input type="number" id="sharedPriceDecimals" value={sharedPriceDecimals} onChange={(e) => setSharedPriceDecimals(e.target.value)} placeholder="e.g., 8" required min="0" max="255" className={inputClass} />
         <p className={helpTextClass}>The shared decimal precision for price evaluation (0-255).</p>
       </div>
 
@@ -243,7 +186,7 @@ const InitProgramForm: React.FC<InitProgramFormProps> = ({
         disabled={isLoading || !currentAccount}
         className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Processing...' : 'Initialize Program'}
+        {isLoading ? 'Processing...' : 'Initialize Program (Single Token)'}
       </button>
     </form>
   );

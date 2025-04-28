@@ -11,9 +11,8 @@ pub struct CollateralDepositEvent {
     pub collateral_id: String,
     pub collateral_marker_id: String,
     pub account_id: String,
-    pub token_account_address: String,
-    pub token_creation_num: i64, // Mapped from u64, assuming fits in i64 for diesel
-    pub amount: BigDecimal,      // Mapped from u64
+    pub token_address: String,
+    pub amount: BigDecimal,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -24,8 +23,7 @@ pub struct NewCollateralDepositEvent {
     pub collateral_id: String,
     pub collateral_marker_id: String,
     pub account_id: String,
-    pub token_account_address: String,
-    pub token_creation_num: i64,
-    pub amount: BigDecimal,      // Changed back to BigDecimal
+    pub token_address: String,
+    pub amount: BigDecimal,      
     pub timestamp: DateTime<Utc>,
 } 

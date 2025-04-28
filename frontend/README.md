@@ -77,6 +77,28 @@ npm run dev
 http://localhost:3000
 ```
 
+## Configuration
+
+The frontend application uses a `config.toml` file located in the `frontend` directory to manage environment-specific variables. On startup, the Next.js application reads this file and loads its contents into the environment variables. This allows for easy configuration of endpoints, API keys, and other parameters without hardcoding them into the source code.
+
+To access these variables in your client-side code, ensure they are prefixed with `NEXT_PUBLIC_`.
+
+### Example `config.toml`
+
+Create a `config.toml` file in the `frontend` directory with the following structure:
+
+```toml
+NEXT_PUBLIC_PRICE_FEED_AGGREGATOR_URL="wss://your-price-feed-url"
+NEXT_PUBLIC_BACKEND_API_URL="http://localhost:5080"
+NEXT_PUBLIC_SUI_PACKAGE_ID="0xyour_sui_package_id"
+NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID="0xyour_sui_global_object_id"
+NEXT_PUBLIC_SUI_PROGRAM_OBJECT_ID="0xyour_sui_program_object_id"
+NEXT_PUBLIC_SUI_EXPLORER_BASE_URL="https://your_sui_explorer_url/tx/"
+NEXT_PUBLIC_INDEXER_URL="http://localhost:3001"
+```
+
+**Note:** Remember to replace placeholder values with your actual configuration details.
+
 ## Pages Overview
 
 ### Home Page
