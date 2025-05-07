@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "initalize": "ts-node src/initalize.ts",
+    "initialize": "ts-node src/initialize.ts",
     "copydata": "ts-node src/copyConfig.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
