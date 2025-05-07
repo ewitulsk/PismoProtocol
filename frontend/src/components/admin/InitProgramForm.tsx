@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/bcs';
-import NotificationPopup from '../ui/NotificationPopup';
+import NotificationPopup from '../common/NotificationPopup';
 
 // Define NotificationState type (copied from AddSupportedLpForm.tsx)
 type NotificationState = {

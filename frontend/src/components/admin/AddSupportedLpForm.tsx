@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/bcs';
-import NotificationPopup from '../ui/NotificationPopup'; // Import the notification popup
+import NotificationPopup from '../common/NotificationPopup';
 
 // Define NotificationState type (can be moved to a shared types file later)
 type NotificationState = {

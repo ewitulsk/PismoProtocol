@@ -5,13 +5,13 @@ This service provides API endpoints to query various metrics related to the Pism
 ## Setup and Running
 
 1.  **Prerequisites:**
-    *   Python 3.7+
+    *   Python 3.11
     *   `pip` (Python package installer)
 
 2.  **Installation:**
     *   Navigate to the `backend` directory:
         ```bash
-        cd path/to/PismoSynthetics/backend
+        cd path/to/PismoProtocol/backend
         ```
     *   Create a virtual environment (recommended):
         ```bash

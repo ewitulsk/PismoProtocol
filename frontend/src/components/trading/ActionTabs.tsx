@@ -7,8 +7,8 @@ import {
 } from "@mysten/dapp-kit";
 import { PaginatedObjectsResponse, CoinBalance, SuiClient, DevInspectResults } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
-import NotificationPopup from '../ui/NotificationPopup';
-import { formatUnits, parseUnits } from 'viem'; // Using viem for robust bigint/decimal formatting and parsing
+import NotificationPopup from '../common/NotificationPopup';
+import { formatUnits, parseUnits } from 'viem'; 
 
 // Assuming Icons.tsx exists and exports necessary icons like TokenIcon
 // import { TokenIcon } from './Icons';

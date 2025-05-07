@@ -3,8 +3,7 @@
 import React, { useState } from 'react';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
-import NotificationPopup from '../ui/NotificationPopup';
-// import { bcs } from '@mysten/bcs'; // No longer needed for priceFeedBytes
+import NotificationPopup from '../common/NotificationPopup';
 
 // Define NotificationState type (copied from previous files)
 type NotificationState = {

@@ -19,7 +19,7 @@ echo "Publishing contracts..."
 
 # Navigate to the deployment-manager directory and run initialization
 echo "Initializing deployment manager..."
-(cd deployment-manager && npm run initalize)
+(cd deployment-manager && npm run initialize)
 
 # Run copydata in the deployment-manager directory
 echo "Copying data..."
