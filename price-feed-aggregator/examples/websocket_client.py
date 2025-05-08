@@ -33,11 +33,8 @@ logger = logging.getLogger("websocket_client")
 
 # Common Pyth Network price feed IDs for cryptocurrencies
 PRICE_FEEDS = {
-    "btc": "8dc863a70143ff4a1655a471a2b4a9d86697b07b4bd1e33e9ad66e851ba5e44b",  # BTC/USD
-    "eth": "440f0b95ef4a8a04c312ccc604a8c7438b3903a804c5d6e5aed31e40d9c907e1",  # ETH/USD
-    "sol": "72a929f5b0f2f4e775441d3d00e74fb5a66c78be46be322657c82418e3047395",  # SOL/USD
-    "avax": "3bbad82dff4f218b458bbb24f15f7b7d80a4e4db6dacb8c22322650aeabbbd27", # AVAX/USD
-    "bnb": "85520765cf1dbc6bb8ec15fe7a0a2a925d7a7c2dfa6a4aad5716567b8317e30a",  # BNB/USD 
+    "btc": "f9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b",  # BTC/USD
+    "eth": "ca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6",  # ETH/USD
 }
 
 

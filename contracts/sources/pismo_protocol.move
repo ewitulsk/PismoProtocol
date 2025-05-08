@@ -73,6 +73,10 @@ module pismo_protocol::main {
     public(package) fun get_supported_lp(global: &Global, supported_lp_i: u64): TokenIdentifier {
         global.supported_lp[supported_lp_i]
     } 
+
+    public(package) fun supported_positions(global: &Global): vector<TokenIdentifier> {
+        global.supported_positions
+    }
     
     #[test_only]
     public fun create_admin_cap_for_testing(ctx: &mut TxContext): AdminCap {

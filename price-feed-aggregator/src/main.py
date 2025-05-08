@@ -33,7 +33,7 @@ class PythPriceFeedService:
         port: int = 8765,
         api_host: str = "localhost",
         api_port: int = 8080,
-        pyth_sse_url: str = "https://hermes.pyth.network/v2/updates/price/stream",
+        pyth_sse_url: str = "https://hermes-beta.pyth.network/v2/updates/price/stream",
         log_level: int = logging.INFO,
         use_threaded_client: bool = True,
     ) -> None:
@@ -156,7 +156,7 @@ async def main() -> None:
     parser.add_argument("--api-port", type=int, default=8080, help="Port to bind the REST API to")
     parser.add_argument(
         "--pyth-sse-url", 
-        default="https://hermes.pyth.network/v2/updates/price/stream", 
+        default="https://hermes-beta.pyth.network/v2/updates/price/stream", 
         help="Pyth Hermes SSE stream URL"
     )
     parser.add_argument(

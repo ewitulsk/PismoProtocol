@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::handlers::positions::{get_account_positions, get_all_positions};
 use crate::handlers::vaults::{get_all_vaults, get_vault_by_address};
-use crate::handlers::collateral::{get_account_collateral, get_account_collateral_by_token_address}; // Import the new collateral handler
+use crate::handlers::collateral::{get_account_collateral, get_account_collateral_by_token_address, get_latest_collateral_assertion_by_account_id}; // Import the new collateral handler
 use crate::handlers::accounts::{get_account_by_id, get_all_accounts}; // Import the new accounts handlers
 use crate::db::repositories::DBPool; // Import DBPool from the repo mod
 
@@ -43,6 +43,8 @@ pub fn create_router(pool: Arc<DBPool>) -> Router {
         .route("/v0/:account_id/collateral", get(get_account_collateral))
         // New collateral route with token info
         .route("/v0/:account_id/collateral/:token_info", get(get_account_collateral_by_token_address))
+        // New collateral assertion route
+        .route("/v0/:account_id/collateral-assertion", get(get_latest_collateral_assertion_by_account_id))
         // New accounts route
         .route("/v0/accounts/:account_id", get(get_account_by_id))
         .route("/v0/accounts", get(get_all_accounts)) // Add route for getting all accounts

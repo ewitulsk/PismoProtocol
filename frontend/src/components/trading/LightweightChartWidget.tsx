@@ -7,7 +7,11 @@ import {
   CandlestickData,
   LineData,
   ISeriesApi,
-  SeriesType
+  SeriesType,
+  IChartApi,
+  UTCTimestamp,
+  LineStyle,
+  CrosshairMode
 } from 'lightweight-charts';
 import { 
   priceFeedAggregatorService, 
@@ -17,16 +21,22 @@ import {
 } from '../../utils/priceFeedAggregator';
 
 interface LightweightChartWidgetProps {
-  symbol?: string;
+  priceFeedId: string;
   interval?: string;
 }
 
 // Valid time intervals supported by the price feed service
 const VALID_INTERVALS = ["1s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"];
 
+// Example: Define a type for your price data points
+interface PriceDataPoint {
+  time: UTCTimestamp;
+  value: number;
+}
+
 const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
-  symbol = 'BTCUSD',
-  interval = '60' // Default to 1-minute interval (60 seconds)
+  priceFeedId,
+  interval = '60', // Default to 1-minute interval (60 seconds)
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
@@ -46,6 +56,9 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   // Use refs to store chart and series objects to prevent recreation
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
+
+  // Process priceFeedId to remove '0x' prefix if it exists
+  const processedPriceFeedId = priceFeedId.startsWith('0x') ? priceFeedId.substring(2) : priceFeedId;
 
   // Convert interval from TimeFrameSelector format to OHLC service interval format
   const convertToOhlcInterval = useCallback((timeframeValue: string): string => {
@@ -256,23 +269,23 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   }, [handleHistoricalBars, handleNewBar, handleBarUpdate]);
 
   // Subscribe to price feeds
-  const subscribeToFeeds = useCallback(async (symbol: string, ohlcInterval: string) => {
+  const subscribeToFeeds = useCallback(async (feedId: string, ohlcInterval: string) => {
     // Check if we're already subscribed to this exact symbol and interval
     const currentSub = activeSubscriptionRef.current;
-    if (currentSub && currentSub.symbol === symbol && currentSub.interval === ohlcInterval) {
+    if (currentSub && currentSub.symbol === feedId && currentSub.interval === ohlcInterval) {
       return true;
     }
     
     // Update the current subscription reference
-    activeSubscriptionRef.current = { symbol, interval: ohlcInterval };
+    activeSubscriptionRef.current = { symbol: feedId, interval: ohlcInterval };
     
     // Update the current interval in state
     setCurrentOhlcInterval(ohlcInterval);
     
     // Subscribe to OHLC bars (these come from Pyth network)
     try {
-      console.log(`[LightweightChartWidget] Subscribing to ${symbol} with interval ${ohlcInterval}`);
-      const success = await priceFeedAggregatorService.subscribeToOHLCBars(symbol, ohlcInterval, handleOHLCBarUpdate);
+      console.log(`[LightweightChartWidget] Subscribing to ${feedId} with interval ${ohlcInterval}`);
+      const success = await priceFeedAggregatorService.subscribeToOHLCBars(feedId, ohlcInterval, handleOHLCBarUpdate);
       return success;
     } catch (err) {
       console.error('[LightweightChartWidget] Error subscribing to OHLC bars:', err);
@@ -473,50 +486,51 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       return;
     }
     
-    // Convert the TimeFrameSelector interval to OHLC service interval format
     const ohlcInterval = convertToOhlcInterval(interval);
     
-    // Check if we're already subscribed to this exact symbol and interval
+    // Use priceFeedId for subscription
+    const subscriptionIdentifier = processedPriceFeedId;
+
     const currentSub = activeSubscriptionRef.current;
     const isSameSubscription = currentSub && 
-                              currentSub.symbol === symbol && 
+                              currentSub.symbol === subscriptionIdentifier && 
                               currentSub.interval === ohlcInterval;
     
-    // Only unsubscribe and resubscribe if the symbol or interval has changed
     if (!isSameSubscription) {
-      console.log(`[LightweightChartWidget] Subscription changed from ${currentSub?.symbol}/${currentSub?.interval} to ${symbol}/${ohlcInterval}`);
+      console.log(`[LightweightChartWidget] Subscription changed from ${currentSub?.symbol}/${currentSub?.interval} to ${subscriptionIdentifier}/${ohlcInterval}`);
       
-      // Unsubscribe from current feeds
       unsubscribeFromCurrentFeeds();
       
-      // Clear historical data when changing symbol or interval
       console.log('[LightweightChartWidget] Clearing historical data for new subscription');
       setHistoricalData([]);
       historicalDataRef.current = [];
       
-      // Clear the chart data
       if (candleSeriesRef.current) {
         console.log('[LightweightChartWidget] Clearing chart data for new subscription');
         candleSeriesRef.current.setData([]);
       }
       
-      // Subscribe to feeds with new symbol and interval
-      console.log(`[LightweightChartWidget] Subscribing to ${symbol} with interval ${ohlcInterval}`);
-      subscribeToFeeds(symbol, ohlcInterval)
+      // Subscribe using the determined identifier (preferably priceFeedId)
+      console.log(`[LightweightChartWidget] Subscribing to ${subscriptionIdentifier} with interval ${ohlcInterval}`);
+      subscribeToFeeds(subscriptionIdentifier, ohlcInterval)
         .then(success => {
           if (success) {
-            console.log(`[LightweightChartWidget] Successfully subscribed to ${symbol} with interval ${ohlcInterval}`);
+            console.log(`[LightweightChartWidget] Successfully subscribed to ${subscriptionIdentifier} with interval ${ohlcInterval}`);
+            // setIsLoading(false); // Aggregator might handle its own loading state
           } else {
-            console.error(`[LightweightChartWidget] Failed to subscribe to ${symbol} with interval ${ohlcInterval}`);
+            console.error(`[LightweightChartWidget] Failed to subscribe to ${subscriptionIdentifier} with interval ${ohlcInterval}`);
+            // setError(`Failed to subscribe to ${subscriptionIdentifier}`);
+            // setIsLoading(false);
           }
         })
         .catch(error => {
-          console.error(`[LightweightChartWidget] Error subscribing to ${symbol} with interval ${ohlcInterval}:`, error);
+          console.error(`[LightweightChartWidget] Error subscribing to ${subscriptionIdentifier} with interval ${ohlcInterval}:`, error);
+          // setError(`Error subscribing: ${error.message}`);
+          // setIsLoading(false);
         });
     }
     
-    // No cleanup here - we handle cleanup in a separate effect
-  }, [symbol, interval, subscribeToFeeds, unsubscribeFromCurrentFeeds, convertToOhlcInterval]);
+  }, [processedPriceFeedId, interval, subscribeToFeeds, unsubscribeFromCurrentFeeds, convertToOhlcInterval]); // Use priceFeedId in dependencies
   
   // Effect for component unmount cleanup
   useEffect(() => {

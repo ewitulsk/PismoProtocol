@@ -12,11 +12,13 @@ use crate::db::repositories::close_position_events::ClosePositionEventRepository
 use crate::db::repositories::vault_created_events::VaultCreatedEventRepository;
 use crate::db::repositories::new_account_event::NewAccountEventRepository;
 use crate::db::repositories::collateral_deposit_event::CollateralDepositEventRepository;
+use crate::db::repositories::start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository;
 use crate::events::position_created::PositionCreatedEvent as MovePositionCreatedEvent;
 use crate::events::position_closed::PositionClosedEvent as MovePositionClosedEvent;
 use crate::events::vault_created::VaultCreatedEvent as MoveVaultCreatedEvent;
 use crate::events::new_account_event::NewAccountEvent as MoveNewAccountEvent;
 use crate::events::collateral_deposit_event::CollateralDepositEvent as MoveCollateralDepositEvent;
+use crate::events::start_collateral_value_assertion_event::StartCollateralValueAssertionEvent as MoveStartCollateralValueAssertionEvent;
 
 pub struct PositionEventWorker {
     open_repo: Arc<OpenPositionEventRepository>,
@@ -24,11 +26,13 @@ pub struct PositionEventWorker {
     vault_repo: Arc<VaultCreatedEventRepository>,
     new_account_repo: Arc<NewAccountEventRepository>,
     collateral_deposit_repo: Arc<CollateralDepositEventRepository>,
+    start_collateral_value_assertion_repo: Arc<StartCollateralValueAssertionEventRepository>,
     position_created_event_type: String,
     position_closed_event_type: String,
     vault_created_event_type: String,
     new_account_event_type: String,
     collateral_deposit_event_type: String,
+    start_collateral_value_assertion_event_type: String,
 }
 
 impl PositionEventWorker {
@@ -38,6 +42,7 @@ impl PositionEventWorker {
         vault_repo: Arc<VaultCreatedEventRepository>,
         new_account_repo: Arc<NewAccountEventRepository>,
         collateral_deposit_repo: Arc<CollateralDepositEventRepository>,
+        start_collateral_value_assertion_repo: Arc<StartCollateralValueAssertionEventRepository>,
         package_id: String,
     ) -> Self {
         let vault_created_event_type = format!("{}::lp::VaultCreatedEvent", package_id);
@@ -45,6 +50,7 @@ impl PositionEventWorker {
         let position_closed_event_type = format!("{}::positions::PositionClosedEvent", package_id);
         let new_account_event_type = format!("{}::accounts::NewAccountEvent", package_id);
         let collateral_deposit_event_type = format!("{}::collateral::CollateralDepositEvent", package_id);
+        let start_collateral_value_assertion_event_type = format!("{}::collateral::StartCollateralValueAssertionEvent", package_id);
 
         info!("Worker configured for package ID: {}", package_id);
         info!("Listening for event type: {}", position_created_event_type);
@@ -52,6 +58,7 @@ impl PositionEventWorker {
         info!("Listening for event type: {}", vault_created_event_type);
         info!("Listening for event type: {}", new_account_event_type);
         info!("Listening for event type: {}", collateral_deposit_event_type);
+        info!("Listening for event type: {}", start_collateral_value_assertion_event_type);
 
         Self {
             open_repo,
@@ -59,11 +66,13 @@ impl PositionEventWorker {
             vault_repo,
             new_account_repo,
             collateral_deposit_repo,
+            start_collateral_value_assertion_repo,
             position_created_event_type,
             position_closed_event_type,
             vault_created_event_type,
             new_account_event_type,
             collateral_deposit_event_type,
+            start_collateral_value_assertion_event_type,
         }
     }
 
@@ -189,6 +198,25 @@ impl Worker for PositionEventWorker {
                             },
                             Err(e) => {
                                 error!("BCS Deserialization Error for CollateralDepositEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
+                            }
+                        }
+                     } else if event_type_str == self.start_collateral_value_assertion_event_type {
+                        match bcs::from_bytes::<MoveStartCollateralValueAssertionEvent>(&event.contents) {
+                            Ok(parsed_event) => {
+                                match parsed_event.try_map_to_db(tx_digest_str.clone(), checkpoint_time) {
+                                    Ok(db_event) => {
+                                        match self.start_collateral_value_assertion_repo.create(db_event) {
+                                            Ok(_) => info!("Successfully stored StartCollateralValueAssertionEvent for tx {}", tx_digest_str),
+                                            Err(e) => error!("DB Error storing StartCollateralValueAssertionEvent for tx {}: {}", tx_digest_str, e),
+                                        }
+                                    },
+                                    Err(map_err) => {
+                                        error!("Mapping Error for StartCollateralValueAssertionEvent tx {}: {}", tx_digest_str, map_err);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                error!("BCS Deserialization Error for StartCollateralValueAssertionEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
                             }
                         }
                      }

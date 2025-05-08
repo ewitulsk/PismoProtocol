@@ -24,6 +24,7 @@ use crate::db::repositories::{
     vault_created_events::VaultCreatedEventRepository,
     new_account_event::NewAccountEventRepository,
     collateral_deposit_event::CollateralDepositEventRepository,
+    start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository,
 };
 use crate::router::create_router;
 use crate::worker::PositionEventWorker;
@@ -61,6 +62,7 @@ async fn main() -> Result<()> {
     let vault_repo = Arc::new(VaultCreatedEventRepository::new(db_pool.clone()));
     let new_account_repo = Arc::new(NewAccountEventRepository::new(db_pool.clone()));
     let collateral_deposit_repo = Arc::new(CollateralDepositEventRepository::new(db_pool.clone()));
+    let start_collateral_value_assertion_repo = Arc::new(StartCollateralValueAssertionEventRepository::new(db_pool.clone()));
     info!("Repositories initialized.");
 
     // Worker
@@ -70,6 +72,7 @@ async fn main() -> Result<()> {
         vault_repo.clone(),
         new_account_repo.clone(),
         collateral_deposit_repo.clone(),
+        start_collateral_value_assertion_repo.clone(),
         config.package_id.clone(),
     );
     info!("PositionEventWorker initialized.");
