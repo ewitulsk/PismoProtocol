@@ -1,15 +1,28 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { tradingPairs, TradingPair } from "@/data/mocks/tradingPairs";
+// Removed: import { tradingPairs, TradingPair } from "@/data/mocks/tradingPairs";
+
+// Define the new interface for selectable market assets
+export interface SelectableMarketAsset {
+  id: string; // This will be the priceFeedId
+  displayName: string; // e.g., "BTC/USD"
+  baseAsset: string; // e.g., "BTC" for filtering
+  priceFeedId: string; // Hex string of price_feed_id_bytes
+  marketIndex: number; // Index in the `supported_positions` vector
+  change24h?: number; // Optional: for display consistency with existing UI
+  decimals?: number; // Optional: number of decimals for this asset
+}
 
 interface AssetSelectorProps {
-  selectedPair: TradingPair;
-  onPairSelect: (pair: TradingPair) => void;
+  selectedAsset: SelectableMarketAsset;
+  onAssetSelect: (asset: SelectableMarketAsset) => void;
+  availableAssets: SelectableMarketAsset[]; // New prop for dynamic assets
 }
 
 const AssetSelector: React.FC<AssetSelectorProps> = ({
-  selectedPair,
-  onPairSelect,
+  selectedAsset,
+  onAssetSelect,
+  availableAssets, // Use the new prop
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,18 +51,18 @@ const AssetSelector: React.FC<AssetSelectorProps> = ({
     }
   };
 
-  const handlePairSelect = (pair: TradingPair) => {
-    onPairSelect(pair);
+  const handleAssetSelectInternal = (asset: SelectableMarketAsset) => {
+    onAssetSelect(asset);
     setIsOpen(false);
   };
 
-  const filteredPairs = searchTerm
-    ? tradingPairs.filter(
-        (pair) =>
-          pair.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          pair.baseAsset.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAssets = searchTerm
+    ? availableAssets.filter(
+        (asset) =>
+          asset.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          asset.baseAsset.toLowerCase().includes(searchTerm.toLowerCase())
       )
-    : tradingPairs;
+    : availableAssets;
 
   return (
     <div className="relative ml-auto" ref={dropdownRef}>
@@ -57,7 +70,7 @@ const AssetSelector: React.FC<AssetSelectorProps> = ({
         onClick={toggleDropdown}
         className="btn-primary flex items-center justify-between min-w-[120px] max-sm:max-w-[150px] max-sm:text-sm"
       >
-        <span>{selectedPair.displayName}</span>
+        <span>{selectedAsset.displayName}</span>
         <svg
           className={`w-4 h-4 ml-2 transition-transform ${
             isOpen ? "rotate-180" : ""
@@ -87,26 +100,28 @@ const AssetSelector: React.FC<AssetSelectorProps> = ({
             />
           </div>
           <div className="max-h-60 overflow-y-auto py-1">
-            {filteredPairs.length > 0 ? (
-              filteredPairs.map((pair) => (
+            {filteredAssets.length > 0 ? (
+              filteredAssets.map((asset) => (
                 <button
-                  key={pair.id}
-                  onClick={() => handlePairSelect(pair)}
+                  key={asset.id} // Use asset.id (which is priceFeedId)
+                  onClick={() => handleAssetSelectInternal(asset)}
                   className={`w-full text-left px-4 py-2 text-sm flex items-center hover:bg-mainBackground ${
-                    selectedPair.id === pair.id ? "bg-mainBackground" : ""
+                    selectedAsset.id === asset.id ? "bg-mainBackground" : "" // Compare by id
                   }`}
                 >
-                  <span className="flex-1 text-white">{pair.displayName}</span>
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded ${
-                      pair.change24h >= 0
-                        ? "bg-opacity-20 bg-green-500 text-green-400"
-                        : "bg-opacity-20 bg-red-500 text-red-400"
-                    }`}
-                  >
-                    {pair.change24h >= 0 ? "+" : ""}
-                    {pair.change24h.toFixed(2)}%
-                  </span>
+                  <span className="flex-1 text-white">{asset.displayName}</span>
+                  {asset.change24h !== undefined && ( // Conditionally render if change24h is available
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded ${
+                        asset.change24h >= 0
+                          ? "bg-opacity-20 bg-green-500 text-green-400"
+                          : "bg-opacity-20 bg-red-500 text-red-400"
+                      }`}
+                    >
+                      {asset.change24h >= 0 ? "+" : ""}
+                      {asset.change24h.toFixed(2)}%
+                    </span>
+                  )}
                 </button>
               ))
             ) : (

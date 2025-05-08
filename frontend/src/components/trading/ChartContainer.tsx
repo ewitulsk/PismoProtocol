@@ -1,27 +1,27 @@
 "use client";
 import React, { useState } from "react";
-import AssetSelector from "./AssetSelector";
+import AssetSelector, { SelectableMarketAsset } from "./AssetSelector";
 import LightweightChartWidget from "./LightweightChartWidget";
 import TimeFrameSelector from "./TimeFrameSelector";
-import LivePriceOverlay from "./LivePriceOverlay";
-import { tradingPairs, TradingPair } from "@/data/mocks/tradingPairs";
 
-const ChartContainer: React.FC = () => {
-  // Default to 1H timeframe, also support second-based intervals "1S", "10S", "30S"
-  const [selectedInterval, setSelectedInterval] = useState<string>("60");
-  const [selectedPair, setSelectedPair] = useState<TradingPair>(tradingPairs[0]);
+// Define props for ChartContainer
+interface ChartContainerProps {
+  selectedAsset: SelectableMarketAsset | null; // Can be null initially
+  availableAssets: SelectableMarketAsset[];
+  onAssetSelect: (asset: SelectableMarketAsset) => void;
+  // TODO: Consider passing live price here if LivePriceOverlay is removed/reintegrated
+}
+
+const ChartContainer: React.FC<ChartContainerProps> = ({ 
+  selectedAsset, 
+  availableAssets, 
+  onAssetSelect 
+}) => {
+  // State for timeframe selector - restored
+  const [selectedInterval, setSelectedInterval] = useState<string>("60"); // Default to 1h (or your previous default)
 
   const handleTimeFrameChange = (interval: string) => {
     setSelectedInterval(interval);
-  };
-
-  const handlePairSelect = (pair: TradingPair) => {
-    setSelectedPair(pair);
-  };
-
-  // Format symbol for TradingView - remove hyphen
-  const formatSymbol = (pair: TradingPair) => {
-    return `${pair.baseAsset}${pair.quoteAsset}`;
   };
 
   return (
@@ -32,20 +32,30 @@ const ChartContainer: React.FC = () => {
             selectedTimeFrame={selectedInterval}
             onTimeFrameChange={handleTimeFrameChange}
           />
-          <AssetSelector 
-            selectedPair={selectedPair} 
-            onPairSelect={handlePairSelect}
-          />
+          {selectedAsset && availableAssets.length > 0 ? (
+          <AssetSelector
+            selectedAsset={selectedAsset}
+            availableAssets={availableAssets}
+            onAssetSelect={onAssetSelect}
+          /> ) : (
+              // Placeholder if no assets/selection, to maintain layout balance
+              <div className="min-w-[120px]">&nbsp;</div> 
+            )}
         </div>
       </div>
       <div className="relative bg-mainBackground rounded-lg w-full" style={{ height: 'calc(100% - 40px)' }}>
-        {/* Live price overlay component */}
-        <LivePriceOverlay pair={selectedPair} />
         
-        <LightweightChartWidget 
-          symbol={formatSymbol(selectedPair)} 
-          interval={selectedInterval} 
-        />
+        
+        {selectedAsset ? (
+          <LightweightChartWidget 
+            priceFeedId={selectedAsset.priceFeedId} 
+            interval={selectedInterval} // Pass the selected interval
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-primary">Please select an asset to view the chart.</p>
+          </div>
+        )}
       </div>
     </section>
   );

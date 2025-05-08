@@ -57,6 +57,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    start_collateral_value_assertion_events (cva_id) {
+        cva_id -> Text,
+        transaction_hash -> Text,
+        account_id -> Text,
+        program_id -> Text,
+        num_open_collateral_objects -> Int8,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
     vault_created_events (transaction_hash) {
         transaction_hash -> Text,
         vault_address -> Text,
@@ -72,5 +83,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     collateral_deposit_events,
     new_account_events,
     open_position_events,
+    start_collateral_value_assertion_events,
     vault_created_events,
 );

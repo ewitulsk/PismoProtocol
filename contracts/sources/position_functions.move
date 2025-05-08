@@ -22,9 +22,10 @@ use pismo_protocol::positions::{
 use pismo_protocol::positions as positions;
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth as token_get_price_feed_bytes_pyth, amount_for_target_value_pyth};
 use pismo_protocol::collateral::{
-    Collateral, CollateralValueAssertionObject, sum_collateral_values_assertion,
+    Collateral,
     CollateralMarker,
 };
+use pismo_protocol::value_assertion_objects::{CollateralValueAssertionObject, sum_collateral_values_assertion, PositionValueAssertionObject, sum_position_values_assertion};
 use pismo_protocol::signed::{new_signed_u128, new_sign};
 use pismo_protocol::main::Global;
 use pismo_protocol::lp::{Vault, find_vault_address, VaultMarker};
@@ -36,7 +37,6 @@ const E_COLLATERAL_MUST_HAVE_ASSOCIATED_VAULT: u64 = 100;
 const E_COLLATERAL_PRICE_DOES_NOT_MATCH: u64 = 1005;
 
 public fun open_position_pyth(
-    global: &Global,
     account: &Account,
     stats: &mut AccountStats,
     program: &Program,
@@ -46,6 +46,7 @@ public fun open_position_pyth(
     program_pos_i: u64,
     position_price_info: &PriceInfoObject,
     collateral_value_assertion: &CollateralValueAssertionObject,
+    position_value_assertion: &PositionValueAssertionObject,
     clock: &Clock,
     ctx: &mut TxContext
 ) {
@@ -60,13 +61,15 @@ public fun open_position_pyth(
 
     let total_collateral_value_u128 = sum_collateral_values_assertion(collateral_value_assertion, clock);
     let collateral_value = new_signed_u128(total_collateral_value_u128, new_sign(true));
+
+    let total_upnl = sum_position_values_assertion(position_value_assertion, clock);
     
-    assert_inital_margin(collateral_value, pos_amount, entry_price, leverage_multiplier as u64);
+    assert_inital_margin(collateral_value, total_upnl, pos_amount, token_id.token_decimals(), entry_price, entry_price_decimals, leverage_multiplier as u64);
 
     stats.increment_open_positions(); //We need to validate we're not double counting positions.
 
     new_position_internal(
-        global,
+        program,
         pos_type,
         pos_amount,
         leverage_multiplier,

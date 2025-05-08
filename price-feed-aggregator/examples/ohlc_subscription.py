@@ -39,14 +39,8 @@ logger = logging.getLogger('ohlc_subscription')
 
 # Common Pyth Network price feed IDs for cryptocurrencies
 PRICE_FEEDS = {
-    "btc": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",  # BTC/USD
-    "eth": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",  # ETH/USD
-    "sol": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",  # SOL/USD
-    "avax": "93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7",  # AVAX/USD
-    "matic": "5de33a9112c2b700b8d30b8a3402c103578ccfa2765696471cc672bd5cf6ac52",  # MATIC/USD
-    "link": "8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",  # LINK/USD
-    "doge": "dcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c",  # DOGE/USD
-    "uni": "78d185a741d7b3e43748f63e2ffbb10bd8d575e9cad8e6159daa2a60f5c68c17",   # UNI/USD
+    "btc": "f9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b",  # BTC/USD
+    "eth": "ca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6",  # ETH/USD
 }
 
 # Valid time intervals
