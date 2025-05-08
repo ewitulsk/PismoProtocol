@@ -69,7 +69,7 @@ python -m src.main --host 0.0.0.0 --port 8765 --api-host 0.0.0.0 --api-port 8080
 - `--port`: Port to bind the websocket server to (default: 8765)
 - `--api-host`: Host to bind the REST API to (default: 0.0.0.0)
 - `--api-port`: Port to bind the REST API to (default: 8080)
-- `--pyth-sse-url`: Pyth Hermes SSE stream URL (default: https://hermes.pyth.network/v2/updates/price/stream)
+- `--pyth-sse-url`: Pyth Hermes SSE stream URL (default: https://hermes-beta.pyth.network/v2/updates/price/stream)
 - `--log-level`: Logging level (default: INFO)
 
 ## API

@@ -4,8 +4,8 @@ Constants used throughout the price feed aggregator application.
 
 # Standard Pyth price feeds
 PRICE_FEEDS = {
-    'BTC/USD': 'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
-    'ETH/USD': 'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace'
+    'BTC/USD': 'f9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b',
+    'ETH/USD': 'ca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6'
 }
 
 # OHLC Time intervals for data aggregation

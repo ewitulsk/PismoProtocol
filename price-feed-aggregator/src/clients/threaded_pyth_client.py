@@ -16,8 +16,8 @@ class ThreadedPythClient:
 
     def __init__(
         self,
-        hermes_sse_url: str = "https://hermes.pyth.network/v2/updates/price/stream",
-        price_service_url: str = "https://hermes.pyth.network/v2",
+        hermes_sse_url: str = "https://hermes-beta.pyth.network/v2/updates/price/stream",
+        price_service_url: str = "https://hermes-beta.pyth.network/v2",
         reconnect_delay: int = 5,
         auto_subscribe_feeds: Dict[str, str] = None
     ) -> None:
