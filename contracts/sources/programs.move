@@ -100,9 +100,16 @@ public entry fun init_program_single_token_collateral_and_positions<InitCoinType
         init_collateral_oracle_feed_id
     );
 
+    let position_token_id = new_token_identifier(
+        type_str,
+        shared_price_decimals,
+        init_collateral_price_feed_id_bytes,
+        init_collateral_oracle_feed_id
+    );
+
     let collateral_identifiers = vector::singleton(collateral_token_id);
-    let position_identifiers = vector::empty<TokenIdentifier>();
-    let max_leverage = vector::empty<u16>(); // No positions, so no max leverage needed
+    let position_identifiers = vector::singleton(position_token_id);
+    let max_leverage = vector::singleton(150);
 
     transfer::share_object(
         init_program_internal(ctx, collateral_identifiers, position_identifiers, shared_price_decimals, max_leverage)

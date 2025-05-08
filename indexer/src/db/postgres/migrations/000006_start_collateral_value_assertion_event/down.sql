@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS start_collateral_value_assertion_events; 

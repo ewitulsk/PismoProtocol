@@ -70,6 +70,14 @@ public struct CollateralWithdrawEvent has copy, drop {
     // Placeholder - fields to be defined later.
 }
 
+/// Event emitted when a collateral value assertion is started.
+public struct StartCollateralValueAssertionEvent has copy, drop {
+    cva_id: address,
+    account_id: address,
+    program_id: address,
+    num_open_collateral_objects: u64
+}
+
 // Collateral struct needs key for sharing, and store for passing by value
 public struct Collateral<phantom CoinType> has key, store {
     id: UID,
@@ -402,9 +410,18 @@ public fun start_collateral_value_assertion(
     };
     ensure_collateral_vector_length(program, &mut collat_assertion.collateral_values, 0);
     ensure_collateral_vector_length(program, &mut collat_assertion.collateral_set_times, 0);
+
+    let cva_address = collat_assertion.id.to_address(); // Get address before moving
+
     transfer::share_object(
         collat_assertion
     );
+    event::emit(StartCollateralValueAssertionEvent {
+        cva_id: cva_address,
+        account_id: account_id(account),
+        program_id: program.id(),
+        num_open_collateral_objects: collateral_count(stats)
+    });
 }
 
 fun assert_price_obj_match_token_id(price_obj: &PriceInfoObject, token_id: &TokenIdentifier) {
@@ -444,7 +461,9 @@ public fun set_collateral_value_assertion<CoinType>(
     *current_val_ref = *current_val_ref + (collat_value as u128);
 
     vector::push_back(&mut cva.visited_collateral_object_ids, collat_obj_id);
-    vector::push_back(&mut cva.collateral_set_times, clock.timestamp_ms());
+
+    let time_ref = vector::borrow_mut(&mut cva.collateral_set_times, collat_idx);
+    *time_ref = clock.timestamp_ms();
 }
 
 public fun sum_collateral_values_assertion(

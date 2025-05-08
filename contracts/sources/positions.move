@@ -17,6 +17,7 @@ use std::vector;
 
 use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth, get_price_pyth};
 use pismo_protocol::main::{Self, AdminCap, Global};
+use pismo_protocol::programs::Program;
 
 const E_BAD_POSITION: u64 = 225;
 const E_INVALID_POSITION_TOKEN_INDEX: u64 = 226;
@@ -76,35 +77,35 @@ public fun u64_to_position_type(pos_id: u64): PositionType {
     }
 }
 
-public entry fun admin_force_new_positon (
-    _: &AdminCap,
-    global: &Global,
-    pos_type_u64: u64,
-    amount: u64,
-    leverage_multiplier: u16,
-    entry_price: u64,
-    entry_price_decimals: u8,
-    supported_positions_token_i: u64,
-    account_id: address,
-    to_address: address,
-    ctx: &mut TxContext
-) {
-    let pos_type = u64_to_position_type(pos_type_u64);
-    new_position_internal(
-        global,
-        pos_type,
-        amount,
-        leverage_multiplier,
-        entry_price,
-        entry_price_decimals,
-        supported_positions_token_i,
-        account_id,
-        ctx,
-    );
-}
+// public entry fun admin_force_new_positon (
+//     _: &AdminCap,
+//     global: &Global,
+//     pos_type_u64: u64,
+//     amount: u64,
+//     leverage_multiplier: u16,
+//     entry_price: u64,
+//     entry_price_decimals: u8,
+//     supported_positions_token_i: u64,
+//     account_id: address,
+//     to_address: address,
+//     ctx: &mut TxContext
+// ) {
+//     let pos_type = u64_to_position_type(pos_type_u64);
+//     new_position_internal(
+//         global,
+//         pos_type,
+//         amount,
+//         leverage_multiplier,
+//         entry_price,
+//         entry_price_decimals,
+//         supported_positions_token_i,
+//         account_id,
+//         ctx,
+//     );
+// }
 
 public(package) fun new_position_internal (
-    global: &Global,
+    program: &Program,
     pos_type: PositionType,
     amount: u64,
     leverage_multiplier: u16,
@@ -115,11 +116,11 @@ public(package) fun new_position_internal (
     ctx: &mut TxContext
 ) {
     // Validate that the position token index exists in global.supported_positions
-    let supported_positions = main::get_supported_positions(global);
-    assert!(supported_positions_token_i < vector::length(&supported_positions), E_INVALID_POSITION_TOKEN_INDEX);
+    let supported_positions = program.supported_positions();
+    assert!(supported_positions_token_i < vector::length(supported_positions), E_INVALID_POSITION_TOKEN_INDEX);
     
     // Get the price feed ID bytes for this token
-    let token_identifier = *vector::borrow(&supported_positions, supported_positions_token_i);
+    let token_identifier = *vector::borrow(supported_positions, supported_positions_token_i);
     let price_feed_id_bytes = pismo_protocol::tokens::price_feed_id_bytes(&token_identifier);
     
     let position = Position {

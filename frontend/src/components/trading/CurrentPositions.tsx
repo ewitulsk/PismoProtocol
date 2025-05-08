@@ -2,9 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PositionData } from '@/types';
 import { pythPriceFeedService } from '@/utils/pythPriceFeed'; // Import the service
 
-// Hardcoded Account ID for now
-const ACCOUNT_ID = "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865";
+// Hardcoded Account ID for now - THIS WILL BE REMOVED
+// const ACCOUNT_ID = "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"; // Remove this line
 const INDEXER_URL = process.env.INDEXER_URL || "http://localhost:3001"; // Fallback for safety
+
+// --- Define Props Interface ---
+interface CurrentPositionsProps {
+    accountId: string | null;
+}
 
 // --- Helper Functions ---
 const parseAmountString = (amountStr: string): number => {
@@ -70,7 +75,8 @@ const Slider: React.FC<{ value: number; onChange: (value: number) => void; min?:
     );
 };
 
-const CurrentPositions: React.FC = () => {
+// Update component to use props
+const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
     const [positions, setPositions] = useState<PositionData[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, number | undefined>>({}); // Allow undefined for loading state
     const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -87,10 +93,19 @@ const CurrentPositions: React.FC = () => {
 
     useEffect(() => {
         const fetchPositions = async () => {
+            // Guard against fetching if accountId is not available
+            if (!accountId) {
+                setPositions([]); // Clear positions
+                setIsLoading(false); // Not loading
+                setError(null); // Clear error
+                return;
+            }
+
             setIsLoading(true);
             setError(null);
             try {
-                const response = await fetch(`${INDEXER_URL}/v0/${ACCOUNT_ID}/positions`);
+                // Use the accountId prop in the fetch URL
+                const response = await fetch(`${INDEXER_URL}/v0/${accountId}/positions`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -99,13 +114,14 @@ const CurrentPositions: React.FC = () => {
             } catch (err) {
                 console.error("Failed to fetch positions:", err);
                 setError(err instanceof Error ? err.message : "An unknown error occurred");
+                setPositions([]); // Clear positions on error
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchPositions();
-    }, []);
+    }, [accountId]); // Add accountId to dependency array
 
     useEffect(() => {
         const requiredFeedIds = new Set(positions.map(p => {
@@ -113,12 +129,10 @@ const CurrentPositions: React.FC = () => {
             return feedId.startsWith('0x') ? feedId : `0x${feedId}`;
         }).filter(id => id && id !== '0x'));
 
-        console.log("[CurrentPositions] Required Feed IDs:", Array.from(requiredFeedIds));
         const currentSubscribedIds = subscribedFeedIdsRef.current;
 
         requiredFeedIds.forEach(feedId => {
             if (!currentSubscribedIds.has(feedId)) {
-                console.log(`[CurrentPositions] Subscribing to Pyth feed: ${feedId}`);
                 setLivePrices(prev => ({ ...prev, [feedId]: prev[feedId] ?? undefined }));
                 pythPriceFeedService.subscribe(feedId, (price) => {
                     if (requiredFeedIds.has(feedId)) {
@@ -159,7 +173,6 @@ const CurrentPositions: React.FC = () => {
 
         currentSubscribedIds.forEach(feedId => {
             if (!requiredFeedIds.has(feedId)) {
-                console.log(`[CurrentPositions] Unsubscribing from no longer required feed: ${feedId}`);
                 pythPriceFeedService.unsubscribe(feedId);
                 currentSubscribedIds.delete(feedId);
                 setLivePrices(prev => {
@@ -173,7 +186,6 @@ const CurrentPositions: React.FC = () => {
         subscribedFeedIdsRef.current = new Set(currentSubscribedIds);
 
         return () => {
-            console.log("[CurrentPositions] Component unmounting. Cleaning up subscriptions for IDs:", Array.from(subscribedFeedIdsRef.current));
             subscribedFeedIdsRef.current.forEach(feedId => {
                 pythPriceFeedService.unsubscribe(feedId);
             });
@@ -282,10 +294,21 @@ const CurrentPositions: React.FC = () => {
              return; // Prevent closing with invalid amount
         }
 
-        console.log(`Closing position ${closingPositionId} with amount ${modalCloseAmount} (${closePercentage.toFixed(0)}%) - Base Units: ${closeAmountBaseUnits}`);
         // TODO: Implement actual transaction submission using closeAmountBaseUnits
         closeModal();
     };
+
+    // Conditional rendering if accountId is not available
+    if (!accountId) {
+        return (
+            <section className="mt-8">
+                <h2 className="text-xl font-semibold text-primaryText mb-4 pl-4">Your Positions</h2>
+                <p className="text-secondaryText text-center py-4">
+                    Please connect your wallet and ensure your account is loaded to view positions.
+                </p>
+            </section>
+        );
+    }
 
     return (
         <section className="mt-8">

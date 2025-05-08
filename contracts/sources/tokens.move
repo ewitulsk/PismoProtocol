@@ -22,7 +22,7 @@ const E_PRICE_OBJS_DONT_MATCH_IDENTIFIERS: u64 = 0;
 
 const PYTH_ID: u64 = 0;
 
-const PYTH_MAX_PRICE_AGE_SECONDS: u64 = 5; //5 seconds
+const PYTH_MAX_PRICE_AGE_SECONDS: u64 = 30; //5 seconds
 
 public struct TokenIdentifier has copy, drop, store {
     token_info: String,

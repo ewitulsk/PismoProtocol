@@ -36,7 +36,6 @@ const E_COLLATERAL_MUST_HAVE_ASSOCIATED_VAULT: u64 = 100;
 const E_COLLATERAL_PRICE_DOES_NOT_MATCH: u64 = 1005;
 
 public fun open_position_pyth(
-    global: &Global,
     account: &Account,
     stats: &mut AccountStats,
     program: &Program,
@@ -66,7 +65,7 @@ public fun open_position_pyth(
     stats.increment_open_positions(); //We need to validate we're not double counting positions.
 
     new_position_internal(
-        global,
+        program,
         pos_type,
         pos_amount,
         leverage_multiplier,
