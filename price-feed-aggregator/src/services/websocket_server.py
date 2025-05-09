@@ -587,6 +587,7 @@ class PriceFeedWebsocketServer:
             intervals: List of time intervals to subscribe to
         """
         # Check if we have price data for this feed
+
         has_price_data = feed_id in self.latest_pyth_data
         if has_price_data:
             self.logger.info(f"Feed {feed_id} has price data in the cache")
@@ -594,6 +595,7 @@ class PriceFeedWebsocketServer:
             self.logger.warning(f"Feed {feed_id} does not have any price data in the cache yet")
         
         # Check if feed is in active feeds and subscribe if not
+
         is_active = feed_id in self.active_pyth_feeds
         self.logger.info(f"Feed {feed_id} is {'active' if is_active else 'not active'} in Pyth subscriptions")
         

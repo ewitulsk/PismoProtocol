@@ -13,6 +13,7 @@ import { depositCollateral, DepositCollateralParams, DepositCollateralCallbacks,
 import { withdrawCollateral, WithdrawCollateralParams, WithdrawCollateralCallbacks } from '../../lib/transactions/withdrawCollateral'; // Added import
 import { openPosition, OpenPositionParams, OpenPositionCallbacks, PositionType as ExtPositionType } from '../../lib/transactions/openPosition'; // Added import
 import { SuiPythClient } from '@pythnetwork/pyth-sui-js'; // New import for Pyth Client
+import { SelectableMarketAsset } from "./AssetSelector"; // Import if needed for types, or define locally
 
 // Assuming Icons.tsx exists and exports necessary icons like TokenIcon
 // import { TokenIcon } from './Icons';
@@ -44,10 +45,12 @@ type DepositedCollateralResponse = {
 };
 
 // Define Props for ActionTabs
-interface ActionTabsProps {
+export interface ActionTabsProps {
     account: MinimalAccountInfo | null; // Use MinimalAccountInfo as it's used by transaction functions
     accountObjectId: string | null;
     isLoadingAccount: boolean; 
+    selectedMarketIndex?: number; // Optional, as it might not be available initially
+    selectedMarketPriceFeedId?: string; // Optional
 }
 
 // --- Constants ---
@@ -108,7 +111,13 @@ const formatBalance = (balance: string | bigint, decimals: number): string => {
 };
 
 // --- Main Component ---
-const ActionTabs: React.FC<ActionTabsProps> = ({ account, accountObjectId, isLoadingAccount }) => {
+const ActionTabs: React.FC<ActionTabsProps> = ({ 
+  account, 
+  accountObjectId, 
+  isLoadingAccount,
+  selectedMarketIndex,
+  selectedMarketPriceFeedId
+}) => {
   const [activeTab, setActiveTab] = useState<TabType>("Positions");
   const [positionType, setPositionType] = useState<PositionType>("Long");
   const [amount, setAmount] = useState<string>("");
@@ -470,6 +479,26 @@ const ActionTabs: React.FC<ActionTabsProps> = ({ account, accountObjectId, isLoa
   const isWithdrawAmountValid = withdrawAmountNum > 0 && withdrawAmountNum <= selectedWithdrawTokenDepositedBalance;
   const depositAmountNum = parseFloat(depositAmount || '0');
   const isDepositAmountValid = depositAmountNum > 0; 
+
+  // Log received props for debugging
+  useEffect(() => {
+    console.log("[ActionTabs] Props updated:", {
+      account,
+      accountObjectId,
+      isLoadingAccount,
+      selectedMarketIndex,
+      selectedMarketPriceFeedId
+    });
+  }, [account, accountObjectId, isLoadingAccount, selectedMarketIndex, selectedMarketPriceFeedId]);
+
+  // Early return or disabled state if critical data is missing
+  if (isLoadingAccount || !accountObjectId) {
+    return (
+      <div className="p-4">
+        <p className="text-center text-secondaryText mt-2 text-sm">Connect your wallet to begin.</p>
+      </div>
+    );
+  }
 
   // --- Render Logic ---
   return (

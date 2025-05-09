@@ -92,36 +92,63 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
     const AMOUNT_DECIMALS = 6;
 
     useEffect(() => {
-        const fetchPositions = async () => {
-            // Guard against fetching if accountId is not available
+        let isInitialFetch = true; // Flag to distinguish initial load from interval refreshes
+
+        const fetchPositionsAndUpdateState = async () => {
             if (!accountId) {
-                setPositions([]); // Clear positions
-                setIsLoading(false); // Not loading
-                setError(null); // Clear error
+                setPositions([]);
+                setIsLoading(false); // Ensure loading is off
+                setError(null);
+                isInitialFetch = true; // Reset for next time accountId is available
                 return;
             }
 
-            setIsLoading(true);
-            setError(null);
+            if (isInitialFetch) {
+                setIsLoading(true);
+                setError(null);
+            }
+
             try {
-                // Use the accountId prop in the fetch URL
                 const response = await fetch(`${INDEXER_URL}/v0/${accountId}/positions`);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorMsg = `HTTP error! status: ${response.status}`;
+                    if (isInitialFetch) {
+                        // For initial load, throw to be caught and set main error state
+                        throw new Error(errorMsg);
+                    } else {
+                        // For background refresh errors, log and keep stale data
+                        console.warn(`Background position refresh failed: ${errorMsg}`);
+                        return; // Do not update positions or error state
+                    }
                 }
                 const data: PositionData[] = await response.json();
                 setPositions(data);
+                setError(null); // Clear any error on successful data fetch
             } catch (err) {
                 console.error("Failed to fetch positions:", err);
-                setError(err instanceof Error ? err.message : "An unknown error occurred");
-                setPositions([]); // Clear positions on error
+                if (isInitialFetch) {
+                    setError(err instanceof Error ? err.message : "An unknown error occurred");
+                    setPositions([]); // Clear positions on critical error during initial load
+                } else {
+                    // Log other types of errors during background refresh
+                    console.warn("Background position refresh error:", err);
+                    // Keep stale data, do not update main error state
+                }
             } finally {
-                setIsLoading(false);
+                if (isInitialFetch) {
+                    setIsLoading(false);
+                    isInitialFetch = false; // Subsequent calls are background refreshes
+                }
             }
         };
 
-        fetchPositions();
-    }, [accountId]); // Add accountId to dependency array
+        fetchPositionsAndUpdateState(); // Initial fetch
+        const intervalId = setInterval(fetchPositionsAndUpdateState, 2000); // Fetch every 2 seconds
+
+        return () => {
+            clearInterval(intervalId); // Clear interval on cleanup
+        };
+    }, [accountId]); // Re-run effect if accountId changes
 
     useEffect(() => {
         const requiredFeedIds = new Set(positions.map(p => {

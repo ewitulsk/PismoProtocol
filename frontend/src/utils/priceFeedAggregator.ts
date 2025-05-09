@@ -541,31 +541,10 @@ export class PriceFeedAggregatorService {
 
   // Subscribe to OHLC bars for a specific feed and interval
   public async subscribeToOHLCBars(
-    symbol: string,
+    feedId: string,
     interval: string,
     callback: OHLCBarCallback
-  ): Promise<boolean> {
-    // Try to get the feed ID for this symbol
-    let feedId = PRICE_FEED_IDS[symbol];
-    
-    // If not found directly, try some common transformations
-    if (!feedId) {
-      // Try uppercase
-      feedId = PRICE_FEED_IDS[symbol.toUpperCase()];
-      
-      if (!feedId) {
-        // Try with USD suffix if not already present
-        if (!symbol.toUpperCase().endsWith('USD')) {
-          feedId = PRICE_FEED_IDS[symbol.toUpperCase() + 'USD'];
-        }
-        
-        if (!feedId) {
-          console.error(`[PriceFeedAggregator] No feed ID found for symbol: ${symbol}`);
-          return false;
-        }
-      }
-    }
-    
+  ): Promise<boolean> {    
     // Remove 0x prefix if present
     const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
     
@@ -641,12 +620,13 @@ export class PriceFeedAggregatorService {
     
     try {
       // Send subscription message - historical bars will be included in the subscription confirmation
+      // Removed 'symbol' field from the payload
       this.socket.send(JSON.stringify({
         type: 'subscribe',
         feed_id: cleanFeedId,
         ohlc: true,
-        intervals: [interval],
-        symbol: symbol
+        intervals: [interval]
+        // Removed: symbol: symbol 
       }));
       
       return true;
@@ -658,28 +638,11 @@ export class PriceFeedAggregatorService {
   
   // Unsubscribe from OHLC bars
   public unsubscribeFromOHLCBars(
-    symbol: string,
+    feedId: string,
     interval: string,
     callback?: OHLCBarCallback
   ): boolean {
-    // Get the feed ID for this symbol
-    let feedId = PRICE_FEED_IDS[symbol];
-    if (!feedId) {
-      // Try uppercase
-      feedId = PRICE_FEED_IDS[symbol.toUpperCase()];
-      
-      if (!feedId) {
-        // Try with USD suffix if not already present
-        if (!symbol.toUpperCase().endsWith('USD')) {
-          feedId = PRICE_FEED_IDS[symbol.toUpperCase() + 'USD'];
-        }
-        
-        if (!feedId) {
-          console.error(`[PriceFeedAggregator] No feed ID found for symbol: ${symbol}`);
-          return false;
-        }
-      }
-    }
+    // feedId is now passed directly, no need for PRICE_FEED_IDS lookup.
     
     // Remove 0x prefix if present
     const cleanFeedId = feedId.startsWith('0x') ? feedId.substring(2) : feedId;
