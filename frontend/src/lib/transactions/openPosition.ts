@@ -77,41 +77,7 @@ function getTokenPriceFeedId(tokenInfo: string, supportedCollateral: SupportedCo
   return DEFAULT_BTC_PRICE_FEED_ID; // Fallback to BTC, replace with error or better logic
 }
 
-// Helper to poll the indexer for the CollateralValueAssertionObject ID
-async function getCollateralValueAssertionObjectId(
-    indexerUrl: string,
-    accountId: string, // This should be the account *object ID*
-    retryDelayMs = 2000,
-    maxRetries = 10
-): Promise<string> {
-    const accountIdHex = normalizeSuiObjectId(accountId);
-    const url = `${indexerUrl}/v0/${accountIdHex.substring(2)}/collateral-assertion`; // remove 0x prefix for URL
-
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            console.log(`Fetching CVA object ID, attempt ${i + 1}: ${url}`);
-            const response = await fetch(url);
-            if (response.ok) {
-                const data = await response.json();
-                if (data && data.cva_id) {
-                    // The cva_id from indexer is likely a hex string without 0x and needs to be an array of numbers.
-                    // Convert hex string to 0x prefixed ID
-                    const objectId = normalizeSuiObjectId(Array.isArray(data.cva_id) ? Buffer.from(data.cva_id).toString('hex') : data.cva_id);
-                    console.log("Found CVA Object ID:", objectId);
-                    return objectId;
-                }
-            } else {
-                const errorText = await response.text();
-                console.warn(`Failed to fetch CVA object ID (status ${response.status}): ${errorText}`);
-            }
-        } catch (error) {
-            console.warn(`Error fetching CVA object ID: ${error}`);
-        }
-        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-    }
-    throw new Error(`Max retries reached. Could not fetch CVA Object ID for account ${accountIdHex}.`);
-}
-
+// Helper to poll the indexer for the CollateralValueAssertionObjectId - REMOVED as CVA is now a hot potato struct
 
 export const openPosition = async (
   params: OpenPositionParams,
@@ -125,10 +91,10 @@ export const openPosition = async (
     accountObjectId,
     accountStatsId,
     packageId,
-    globalObjectId,
+    // globalObjectId, // Keep for other potential uses if any, but not directly for CVA object ID
     programId,
-    pythStateObjectId,
-    wormholeStateId,
+    // pythStateObjectId, // Keep for Pyth interactions
+    // wormholeStateId, // Keep for Pyth interactions
     hermesEndpoint,
     pythClient,
     positionMarketIndex,
@@ -137,14 +103,14 @@ export const openPosition = async (
     amount,
     leverage,
     supportedCollateral,
-    suiClient,
+    suiClient, // Keep for waitForTransaction if needed, though PTB might change this
     signAndExecuteTransaction,
   } = params;
 
-  const effectiveGlobalObjectId = globalObjectId || process.env.NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID;
+  const effectiveGlobalObjectId = params.globalObjectId || process.env.NEXT_PUBLIC_SUI_GLOBAL_OBJECT_ID;
   const effectiveProgramId = programId || process.env.NEXT_PUBLIC_SUI_PROGRAM_OBJECT_ID;
-  const effectivePythStateObjectId = pythStateObjectId || process.env.NEXT_PUBLIC_PYTH_STATE_OBJECT_ID;
-  const effectiveWormholeStateId = wormholeStateId || process.env.NEXT_PUBLIC_WORMHOLE_STATE_OBJECT_ID;
+  const effectivePythStateObjectId = params.pythStateObjectId || process.env.NEXT_PUBLIC_PYTH_STATE_OBJECT_ID;
+  const effectiveWormholeStateId = params.wormholeStateId || process.env.NEXT_PUBLIC_WORMHOLE_STATE_OBJECT_ID;
   const effectiveHermesEndpoint = hermesEndpoint || process.env.NEXT_PUBLIC_HERMES_ENDPOINT;
   const effectiveIndexerUrl = indexerUrl || process.env.NEXT_PUBLIC_INDEXER_URL;
 
@@ -205,45 +171,24 @@ export const openPosition = async (
   };
 
   try {
-    // --- Transaction 1: Start Collateral Value Assertion ---
-    callbacks.setNotification({ show: true, message: "Step 1: Starting collateral value assertion...", type: 'info' });
-    const txb1 = new Transaction();
-    txb1.moveCall({
+    callbacks.setNotification({ show: true, message: "Preparing to open position...", type: 'info' });
+
+    const txb = new Transaction();
+
+    // Step 1: Start Collateral Value Assertion (returns the CVA struct)
+    // This result (cvaHotPotato) is the actual CVA struct, not an ID.
+    let cvaHotPotato = txb.moveCall({
       target: `${packageId}::collateral::start_collateral_value_assertion`,
       arguments: [
-        txb1.object(accountObjectId),
-        txb1.object(accountStatsId),
-        txb1.object(effectiveProgramId),
+        txb.object(accountObjectId),
+        txb.object(accountStatsId),
+        txb.object(effectiveProgramId),
+        // ctx is automatically passed
       ],
     });
+    console.log("Transaction command added: start_collateral_value_assertion");
 
-    console.log("Preparing Transaction 1 (Start CVA)...");
-    const result1 = await executeTransaction(txb1);
-
-    if (!result1 || !result1.digest) {
-        callbacks.setNotification({ show: true, message: "Transaction 1 to start CVA was not completed or digest missing.", type: 'error' });
-        callbacks.setIsLoadingTx(false);
-        return;
-    }
-
-    const tx1Response = await suiClient.waitForTransaction({ digest: result1.digest, options: { showEvents: true, showObjectChanges: true } });
-    console.log("Transaction 1 (Start CVA) finalized:", tx1Response.digest);
-
-    // --- Add Delay ---
-    console.log("Waiting 2 seconds for indexer to potentially catch up...");
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    // -----------------
-
-    callbacks.setNotification({ show: true, message: "Step 1 completed. Fetching CVA object ID from indexer...", type: 'info' });
-    const cvaObjectId = await getCollateralValueAssertionObjectId(effectiveIndexerUrl, accountObjectId);
-    if (!cvaObjectId) {
-        throw new Error("Collateral Value Assertion Object ID not found after transaction 1.");
-    }
-    console.log("Collateral Value Assertion Object ID:", cvaObjectId);
-
-    // --- Transaction 2: Set Collateral Values and Open Position ---
-    callbacks.setNotification({ show: true, message: "Step 2: Setting collateral values and opening position...", type: 'info' });
-
+    // Fetch user's collateral from indexer
     const accountIdHexForCollateralUrl = normalizeSuiObjectId(accountObjectId).substring(2);
     const collateralUrl = `${effectiveIndexerUrl}/v0/${accountIdHexForCollateralUrl}/collateral`;
     console.log("Fetching user's collateral from:", collateralUrl);
@@ -261,9 +206,7 @@ export const openPosition = async (
         return;
     }
 
-    const txb2 = new Transaction();
     const priceFeedIdsForUpdate: string[] = [];
-
     for (const asset of depositedCollateralAssets) {
         const collateralTokenInfo = asset.token_id.token_address;
         const collateralPriceFeedId = getTokenPriceFeedId(collateralTokenInfo, supportedCollateral);
@@ -272,70 +215,52 @@ export const openPosition = async (
         }
     }
 
-    // TODO: Get the actual price feed ID for the `positionMarketIndex`.
     const positionMarketPriceFeedId = DEFAULT_BTC_PRICE_FEED_ID; // CRITICAL TODO: Replace with actual logic
     if (!priceFeedIdsForUpdate.includes(positionMarketPriceFeedId)) {
         priceFeedIdsForUpdate.push(positionMarketPriceFeedId);
     }
 
-    // Fetch VAA hex strings from Pyth network
     console.log("Fetching Pyth VAA data for feeds:", priceFeedIdsForUpdate);
     const priceServiceConnection = new SuiPriceServiceConnection(effectiveHermesEndpoint);
     const vaaHexStrings = await priceServiceConnection.getPriceFeedsUpdateData(priceFeedIdsForUpdate);
     if (vaaHexStrings.length !== priceFeedIdsForUpdate.length) throw new Error("Mismatch between requested price feeds and received VAA data.");
 
-    // Passing VAA hex strings (string[]) directly to updatePriceFeeds as per the user-provided example.
-    // The Buffer conversion has been removed.
     console.log("Submitting Pyth VAAs to updatePriceFeeds...");
-    const priceInfoObjectIds = await pythClient.updatePriceFeeds(
-        txb2,
+    // Assuming pythClient.updatePriceFeeds is compatible with being called this way and returns object IDs.
+    // The TransactionResult from this is an array of PriceInfoObject IDs.
+    const priceInfoObjectStringIds: string[] = await pythClient.updatePriceFeeds(
+        txb, // Pass the transaction block
         vaaHexStrings, 
-        priceFeedIdsForUpdate 
+        priceFeedIdsForUpdate,
+        // effectivePythStateObjectId // Assuming pythClient.updatePriceFeeds handles this internally or via its setup
     );
-    // --- Add Log ---
-    console.log("Raw priceInfoObjectIds from updatePriceFeeds:", JSON.stringify(priceInfoObjectIds, null, 2));
-    // ---------------
+    console.log("Raw priceInfoObjectStringIds from updatePriceFeeds:", JSON.stringify(priceInfoObjectStringIds, null, 2));
 
-    console.log("Got PriceInfoObjects: ", priceInfoObjectIds);
-
-    const feedIdToPriceInfoObjectId: Record<string, string> = {};
-    priceFeedIdsForUpdate.forEach((feedId, index) => { 
-         const objectIdResult = priceInfoObjectIds[index];
-         if (typeof objectIdResult !== 'string') {
-            console.warn(`Expected string object ID at index ${index} from updatePriceFeeds, but got:`, typeof objectIdResult, objectIdResult);
-            // Handle error or assign a default? For now, let's try assigning it anyway if it looks like an object ID string property might exist
-            // This is speculative, ideally the type should be string.
-            // If it's an object maybe it has an 'objectId' property? const potentialId = (objectIdResult as any)?.objectId;
-            // feedIdToPriceInfoObjectId[feedId] = typeof potentialId === 'string' ? potentialId : 'INVALID_ID_TYPE';
-            feedIdToPriceInfoObjectId[feedId] = 'INVALID_ID_TYPE'; // Assign placeholder to avoid downstream errors using non-strings
-         } else if (!objectIdResult.startsWith('0x')) {
-             console.warn(`Object ID at index ${index} from updatePriceFeeds does not start with 0x:`, objectIdResult);
-             feedIdToPriceInfoObjectId[feedId] = normalizeSuiObjectId(objectIdResult); // Try normalizing
-         } else {
-            feedIdToPriceInfoObjectId[feedId] = objectIdResult; // Assign the string ID
-         }
+    // Map feed IDs to their corresponding PriceInfoObject TransactionResult from the array
+    const feedIdToPriceInfoObjectId: Record<string, string> = {}; // Stores string object IDs
+    priceFeedIdsForUpdate.forEach((feedId, index) => {
+        // IMPORTANT: priceInfoObjectIdsResult is an array of TransactionResult, each representing a PriceInfoObject.
+        // We need to use these results directly as arguments if they are objects, or specific object IDs if that's what updatePriceFeeds makes available.
+        // For now, assuming it provides results that can be passed as object arguments.
+        feedIdToPriceInfoObjectId[feedId] = priceInfoObjectStringIds[index]; 
     });
+    console.log("feedIdToPriceInfoObjectId mapping (string IDs):", feedIdToPriceInfoObjectId);
 
-    console.log("feedIdToPriceInfoObjectId mapping:", feedIdToPriceInfoObjectId);
 
+    // Step 2: Set Collateral Values
     for (const asset of depositedCollateralAssets) {
-        
-        console.log("Asset: ", asset);
+        console.log("Processing asset for CVA: ", asset);
 
         let collateralTokenInfo = asset.token_id.token_address;
-        
-        // Ensure token info type string starts with 0x
         const normalizedCollateralTokenInfo = collateralTokenInfo.startsWith('0x') 
             ? collateralTokenInfo 
             : '0x' + collateralTokenInfo;
             
-        // Use the original (non-normalized for now) token info for fetching price feed ID, 
-        // assuming getTokenPriceFeedId handles potential missing 0x if needed, or uses a map.
-        const collateralPriceFeedId = getTokenPriceFeedId(collateralTokenInfo, supportedCollateral); //This is bad but should be working...
+        const collateralPriceFeedId = getTokenPriceFeedId(collateralTokenInfo, supportedCollateral);
         const priceInfoObjectIdForCollateral = feedIdToPriceInfoObjectId[collateralPriceFeedId];
         
-        if (!priceInfoObjectIdForCollateral || priceInfoObjectIdForCollateral === 'INVALID_ID_TYPE') { 
-            console.error(`Skipping collateral asset ${collateralTokenInfo} because its PriceInfoObject ID was not found or invalid after Pyth update.`);
+        if (!priceInfoObjectIdForCollateral) { 
+            console.error(`Skipping collateral asset ${collateralTokenInfo} because its PriceInfoObject ID was not found after Pyth update.`);
             continue; 
         }
 
@@ -344,64 +269,83 @@ export const openPosition = async (
 
         console.log("--- Adding set_collateral_value_assertion for asset ---");
         console.log("Token Info (Normalized for Type Arg):", normalizedCollateralTokenInfo);
-        console.log("CVAObject: ", cvaObjectId);
+        console.log("CVA Hot Potato (Input): ", cvaHotPotato); // This is a TransactionResult
         console.log("ProgramId: ", effectiveProgramId);
         console.log("CollateralId: ", normalizedCollateralId); 
-        console.log("CollateraMarkerlId: ", normalizedMarkerId); 
-        console.log("PriceInfoObject: ", priceInfoObjectIdForCollateral);
+        console.log("CollateralMarkerId: ", normalizedMarkerId); 
+        console.log("PriceInfoObject ID (string): ", priceInfoObjectIdForCollateral);
         console.log("Clock: ", SUI_CLOCK_OBJECT_ID);
         console.log("----------------------------------------------------");
         
-        txb2.moveCall({
+        // Each call to set_collateral_value_assertion takes the CVA struct (as TransactionResult)
+        // and returns the updated CVA struct (as a new TransactionResult).
+        cvaHotPotato = txb.moveCall({
             target: `${packageId}::collateral::set_collateral_value_assertion`,
-            typeArguments: [normalizedCollateralTokenInfo], // Use normalized string for Type Argument
+            typeArguments: [normalizedCollateralTokenInfo],
             arguments: [
-                txb2.object(cvaObjectId),
-                txb2.object(effectiveProgramId),
-                txb2.object(normalizedCollateralId), 
-                txb2.object(normalizedMarkerId),     
-                txb2.object(priceInfoObjectIdForCollateral),
-                txb2.object(SUI_CLOCK_OBJECT_ID)
+                cvaHotPotato, // Pass the TransactionResult from previous step
+                txb.object(effectiveProgramId),
+                txb.object(normalizedCollateralId), 
+                txb.object(normalizedMarkerId),     
+                txb.object(priceInfoObjectIdForCollateral), // Wrap the string ID with txb.object()
+                txb.object(SUI_CLOCK_OBJECT_ID)
             ],
         });
+        console.log("Transaction command added: set_collateral_value_assertion for", normalizedCollateralTokenInfo);
     }
 
-    const priceInfoObjectIdForPosition = feedIdToPriceInfoObjectId[positionMarketPriceFeedId];
-    if (!priceInfoObjectIdForPosition) throw new Error(`PriceInfoObject ID not found for position market feed ${positionMarketPriceFeedId} after Pyth update.`);
+    const priceInfoObjectIdForPositionMarket = feedIdToPriceInfoObjectId[positionMarketPriceFeedId];
+    if (!priceInfoObjectIdForPositionMarket) {
+      throw new Error(`PriceInfoObject ID not found for position market feed ${positionMarketPriceFeedId} after Pyth update.`);
+    }
 
-    txb2.moveCall({
+    // Step 3: Open Position
+    // The open_position_pyth function should also take the CVA struct (as TransactionResult)
+    // and potentially return it if it's modified, or it's consumed there.
+    // For now, assume it takes it and we then destroy the last known version of cvaHotPotato.
+    txb.moveCall({
       target: `${packageId}::position_functions::open_position_pyth`,
       arguments: [
-        txb2.object(accountObjectId),
-        txb2.object(accountStatsId),
-        txb2.object(effectiveProgramId),
-        txb2.pure(bcs.u64().serialize(BigInt(positionType === "Long" ? 0 : 1)).toBytes()), 
-        txb2.pure(bcs.u64().serialize(positionAmountBigInt).toBytes()), 
-        txb2.pure(bcs.u16().serialize(leverage).toBytes()), 
-        txb2.pure(bcs.u64().serialize(BigInt(positionMarketIndex)).toBytes()), 
-        txb2.object(priceInfoObjectIdForPosition),
-        txb2.object(cvaObjectId),
-        txb2.object(SUI_CLOCK_OBJECT_ID),
+        txb.object(accountObjectId),
+        txb.object(accountStatsId),
+        txb.object(effectiveProgramId),
+        txb.pure(bcs.u64().serialize(BigInt(positionType === "Long" ? 0 : 1)).toBytes()), 
+        txb.pure(bcs.u64().serialize(positionAmountBigInt).toBytes()), 
+        txb.pure(bcs.u16().serialize(leverage).toBytes()), 
+        txb.pure(bcs.u64().serialize(BigInt(positionMarketIndex)).toBytes()), 
+        txb.object(priceInfoObjectIdForPositionMarket), // Wrap the string ID with txb.object()
+        cvaHotPotato, // Pass the latest TransactionResult for CVA
+        txb.object(SUI_CLOCK_OBJECT_ID),
       ],
     });
+    console.log("Transaction command added: open_position_pyth");
 
-    console.log("Preparing Transaction 2 (Set CVA & Open Position)...");
-    const result2 = await executeTransaction(txb2);
+    // Step 4: Destroy Collateral Value Assertion Object
+    txb.moveCall({
+        target: `${packageId}::collateral::destroy_collateral_value_assertion`,
+        arguments: [cvaHotPotato], // Pass the final TransactionResult for CVA
+    });
+    console.log("Transaction command added: destroy_collateral_value_assertion");
+
+
+    console.log("Preparing single transaction for execution...");
+    const result = await executeTransaction(txb);
     
-    if (!result2 || !result2.digest) {
-        callbacks.setNotification({ show: true, message: "Transaction 2 to set CVA and open position was not completed or digest missing.", type: 'error' });
+    if (!result || !result.digest) {
+        callbacks.setNotification({ show: true, message: "Transaction to open position was not completed or digest missing.", type: 'error' });
         callbacks.setIsLoadingTx(false);
         return;
     }
 
-    const tx2Response = await suiClient.waitForTransaction({ digest: result2.digest, options: { showEvents: true } });
-    console.log("Transaction 2 (Set CVA & Open Position) finalized:", tx2Response.digest);
+    callbacks.setNotification({ show: true, message: "Processing transaction...", type: 'info' });
+    const txResponse = await suiClient.waitForTransaction({ digest: result.digest, options: { showEvents: true, showObjectChanges: true } }); // Added showObjectChanges for debugging
+    console.log("Full transaction finalized:", txResponse.digest);
     
     callbacks.setNotification({
         show: true,
-        message: `Successfully opened ${positionType} position. Digest: ${tx2Response.digest.slice(0,10)}...`,
+        message: `Successfully opened ${positionType} position. Digest: ${txResponse.digest.slice(0,10)}...`,
         type: 'success',
-        digest: tx2Response.digest
+        digest: txResponse.digest
     });
     if (callbacks.clearForm) callbacks.clearForm();
 

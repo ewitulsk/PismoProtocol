@@ -381,8 +381,7 @@ public(package) fun id_in_vector(vec: &vector<address>, id: address): bool {
     false
 }
 
-public struct CollateralValueAssertionObject has store, key {
-    id: UID,
+public struct CollateralValueAssertionObject has store {
     account_id: address,
     program_id: address,
     num_open_collateral_objects: u64,
@@ -396,11 +395,10 @@ public fun start_collateral_value_assertion(
     stats: &AccountStats,
     program: &Program,
     ctx: &mut TxContext
-) {
+): CollateralValueAssertionObject {
     assert_account_program_match(account, program);
     assert_account_stats_match(account, stats);
     let mut collat_assertion = CollateralValueAssertionObject {
-        id: object::new(ctx),
         account_id: account_id(account),
         program_id: program.id(),
         num_open_collateral_objects: collateral_count(stats),
@@ -411,17 +409,9 @@ public fun start_collateral_value_assertion(
     ensure_collateral_vector_length(program, &mut collat_assertion.collateral_values, 0);
     ensure_collateral_vector_length(program, &mut collat_assertion.collateral_set_times, 0);
 
-    let cva_address = collat_assertion.id.to_address(); // Get address before moving
 
-    transfer::share_object(
-        collat_assertion
-    );
-    event::emit(StartCollateralValueAssertionEvent {
-        cva_id: cva_address,
-        account_id: account_id(account),
-        program_id: program.id(),
-        num_open_collateral_objects: collateral_count(stats)
-    });
+    
+    collat_assertion
 }
 
 fun assert_price_obj_match_token_id(price_obj: &PriceInfoObject, token_id: &TokenIdentifier) {
@@ -431,22 +421,23 @@ fun assert_price_obj_match_token_id(price_obj: &PriceInfoObject, token_id: &Toke
 
 //This method truncates the decimals, so it is within +/- $1
 public fun set_collateral_value_assertion<CoinType>(
-    cva: &mut CollateralValueAssertionObject, 
+    cva: CollateralValueAssertionObject, 
     program: &Program,
     collateral: &Collateral<CoinType>,
     collateral_marker: &mut CollateralMarker,
     price_info_obj: &PriceInfoObject,
     clock: &Clock
-) {
+): CollateralValueAssertionObject {
+    let mut mut_cva = cva; // Make it mutable for modifications
     let collat_acc_id = get_collateral_account_id(collateral);
-    assert!(collat_acc_id == cva.account_id, E_COLLATERAL_ACCOUNT_MISMATCH); 
-    assert!(program.id() == cva.program_id, E_COLLATERAL_PROGRAM_MISMATCH);
+    assert!(collat_acc_id == mut_cva.account_id, E_COLLATERAL_ACCOUNT_MISMATCH); 
+    assert!(program.id() == mut_cva.program_id, E_COLLATERAL_PROGRAM_MISMATCH);
     assert!(collateral.id() == collateral_marker.collateral_id, E_COLLATERAL_MARKER_MISMATCH);
 
     let collat_obj_id = collateral.id.to_address();
-    assert!(!id_in_vector(&cva.visited_collateral_object_ids, collat_obj_id), E_COLLATERAL_ALREADY_VISITED); 
+    assert!(!id_in_vector(&mut_cva.visited_collateral_object_ids, collat_obj_id), E_COLLATERAL_ALREADY_VISITED); 
     
-    assert!(vector::length(&cva.visited_collateral_object_ids) < cva.num_open_collateral_objects, E_VISITED_TOO_MANY_COLLATERALS); 
+    assert!(vector::length(&mut_cva.visited_collateral_object_ids) < mut_cva.num_open_collateral_objects, E_VISITED_TOO_MANY_COLLATERALS); 
 
     let collat_idx = get_collateral_index(collateral);
     let collat_amount = collateral_marker.remaining_collateral();
@@ -461,13 +452,14 @@ public fun set_collateral_value_assertion<CoinType>(
 
     collateral_marker.set_remaining_collateral_value(collat_value, clock); //We might need to truncate decimals here too...
 
-    let current_val_ref = vector::borrow_mut(&mut cva.collateral_values, collat_idx);
+    let current_val_ref = vector::borrow_mut(&mut mut_cva.collateral_values, collat_idx);
     *current_val_ref = *current_val_ref + (collateral_value_no_decimals as u128);
 
-    vector::push_back(&mut cva.visited_collateral_object_ids, collat_obj_id);
+    vector::push_back(&mut mut_cva.visited_collateral_object_ids, collat_obj_id);
 
-    let time_ref = vector::borrow_mut(&mut cva.collateral_set_times, collat_idx);
+    let time_ref = vector::borrow_mut(&mut mut_cva.collateral_set_times, collat_idx);
     *time_ref = clock.timestamp_ms();
+    mut_cva 
 }
 
 public fun sum_collateral_values_assertion(
@@ -506,4 +498,15 @@ public(package) fun liquidate_all_markers(markers: &mut vector<CollateralMarker>
         marker.remaining_collateral = 0;
         i = i + 1;
     }
+}
+
+public fun destroy_collateral_value_assertion(cva: CollateralValueAssertionObject) {
+    let CollateralValueAssertionObject {
+        account_id: _,
+        program_id: _,
+        num_open_collateral_objects: _,
+        visited_collateral_object_ids: _,
+        collateral_values: _,
+        collateral_set_times: _
+    } = cva;
 }

@@ -1,7 +1,7 @@
 {
-  "packageId": "0xf4e3eaa6014da8b36147a19b3b3e3a495896149e8e553770fc5daebe20fc9744",
-  "globalObjectId": "0x41d243792a35d4761a176548512f783ba9929d7c9c536156b42fc772dfa082b0",
-  "programObjectId": "0xc2f36801bce38b4a98350eea96f5727f047c191a5df2c95ac21e97eea7e647cf",
-  "initializationCheckpoint": "194215423",
+  "packageId": "0x3c3c8f721eefd1c80371826d221d2bf3fa8d159080aeb781cb287645f48e6bad",
+  "globalObjectId": "0x2a79a555e0cd7c90c954b64b2c6fe7e7a0b2e80adf57d6cb3db2ee4831d1f5d2",
+  "programObjectId": "0xd955f6418a95ee875bee8bb5cd63737f979d585ad985e98d750648a1e5d32977",
+  "initializationCheckpoint": "194244748",
   "network": "testnet"
 }
