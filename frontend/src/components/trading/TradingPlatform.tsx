@@ -227,6 +227,7 @@ const TradingPlatform: React.FC = () => {
                 baseAsset: marketInfo.baseAsset,
                 priceFeedId: priceFeedIdHex,
                 marketIndex: index,
+                decimals: tokenDecimals,
               };
 
               if (marketInfoFromMap && typeof (marketInfoFromMap as any).change24h === 'number') {
@@ -340,7 +341,7 @@ const TradingPlatform: React.FC = () => {
               />
             </aside>
           </div>
-          <CurrentPositions accountId={accountObjectId} />
+          <CurrentPositions accountId={accountObjectId} availableAssets={availableAssets} />
         </section>
       </div>
     </Layout>

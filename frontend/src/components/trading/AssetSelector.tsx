@@ -10,6 +10,7 @@ export interface SelectableMarketAsset {
   priceFeedId: string; // Hex string of price_feed_id_bytes
   marketIndex: number; // Index in the `supported_positions` vector
   change24h?: number; // Optional: for display consistency with existing UI
+  decimals?: number; // Optional: number of decimals for this asset
 }
 
 interface AssetSelectorProps {

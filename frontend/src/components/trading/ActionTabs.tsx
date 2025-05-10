@@ -386,14 +386,36 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         setNotification({ show: true, message: "Client-side configuration error: Missing required environment variables.", type: 'error' });
         return;
     }
-    if (!account || !accountObjectId || !accountStatsId) { 
+    if (!account || !accountObjectId || !accountStatsId) {
         setNotification({ show: true, message: "Account data not ready for opening position.", type: 'error' });
         return;
     }
-    if (!amount) { 
+    if (!amount) {
         setNotification({ show: true, message: "Please enter an amount for the position.", type: 'error' });
         return;
     }
+
+    // --- Start: Added decimal parsing --- //
+    const amountNumber = parseFloat(amount);
+    if (isNaN(amountNumber) || amountNumber <= 0) {
+        setNotification({ show: true, message: "Please enter a valid positive amount.", type: 'error' });
+        return;
+    }
+
+    // TODO: Determine the correct decimals based on selectedMarketIndex or the asset being traded
+    // For now, using decimals from the first supported collateral as a placeholder. THIS NEEDS TO BE CORRECTED.
+    const assetDecimals = supportedCollateral.length > 0 ? supportedCollateral[0].fields.token_decimals : 9; // Default to 9 if no supported collateral loaded
+
+    let amountBigInt;
+    try {
+        amountBigInt = parseUnits(amount, assetDecimals);
+    } catch (e) {
+        console.error("Error parsing amount with decimals:", e);
+        setNotification({ show: true, message: "Failed to parse amount. Please check input.", type: 'error' });
+        return;
+    }
+    // --- End: Added decimal parsing --- //
+
     const suiPythClient = new SuiPythClient(client, PYTH_STATE_OBJECT_ID_CONST, WORMHOLE_STATE_ID_CONST);
     const params: OpenPositionParams = {
         account,
@@ -408,7 +430,7 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         pythClient: suiPythClient, 
         positionMarketIndex: 0, 
         indexerUrl: INDEXER_URL,
-        positionType, amount, leverage, supportedCollateral, suiClient: client, signAndExecuteTransaction,
+        positionType, amount: amountBigInt.toString(), leverage, supportedCollateral, suiClient: client, signAndExecuteTransaction,
     };
     const callbacks: OpenPositionCallbacks = { setNotification, setIsLoadingTx, clearForm: () => setAmount("") };
     await openPosition(params, callbacks);

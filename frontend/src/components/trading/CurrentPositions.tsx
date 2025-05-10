@@ -9,6 +9,7 @@ const INDEXER_URL = process.env.INDEXER_URL || "http://localhost:3001"; // Fallb
 // --- Define Props Interface ---
 interface CurrentPositionsProps {
     accountId: string | null;
+    availableAssets: import('./AssetSelector').SelectableMarketAsset[];
 }
 
 // --- Helper Functions ---
@@ -42,22 +43,41 @@ const formatAmount = (amountStr: string | undefined | null, decimals: number): s
     }
 };
 
-const calculatePositionValue = (position: PositionData, livePrice: number | undefined): number | null => {
-    // Assume amount_decimals is 6 as per user request
-    const amountDecimals = 6; // Use a constant for clarity
+// Helper to get decimals for a position
+const getPositionDecimals = (position: PositionData, availableAssets: import('./AssetSelector').SelectableMarketAsset[]): number => {
+    return availableAssets[position.supported_positions_token_i]?.decimals ?? 6;
+};
 
+// Update calculatePositionValue to accept decimals
+const calculatePositionValue = (position: PositionData, livePrice: number | undefined, decimals: number): number | null => {
     if (livePrice === undefined || !position.amount) {
         return null;
     }
     try {
-        // Use the correctly calculated decimal amount
-        const amount = parseFloat(position.amount) / (10 ** amountDecimals);
-        const value = amount * livePrice;
+        const amount = parseFloat(position.amount) / (10 ** decimals);
+        const leverage = position.leverage_multiplier ? parseFloat(position.leverage_multiplier) : 1;
+        const value = amount * livePrice * leverage;
         return value;
     } catch (e) {
         console.error("Error calculating position value:", e);
         return null;
     }
+};
+
+const calculatePercentChange = (
+    entryPriceStr: string,
+    entryDecimals: number,
+    currentPrice: number | undefined,
+    positionType: "Long" | "Short"
+): number | null => {
+    if (!entryPriceStr || currentPrice === undefined) return null;
+    const entryPrice = parseFloat(entryPriceStr) / (10 ** entryDecimals);
+    if (!entryPrice || isNaN(entryPrice) || entryPrice === 0) return null;
+    // For Long: (current - entry) / entry; For Short: (entry - current) / entry
+    const rawChange = positionType === "Long"
+        ? (currentPrice - entryPrice) / entryPrice
+        : (entryPrice - currentPrice) / entryPrice;
+    return rawChange * 100;
 };
 
 // --- Slider Component ---
@@ -76,7 +96,7 @@ const Slider: React.FC<{ value: number; onChange: (value: number) => void; min?:
 };
 
 // Update component to use props
-const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
+const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availableAssets }) => {
     const [positions, setPositions] = useState<PositionData[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, number | undefined>>({}); // Allow undefined for loading state
     const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -87,9 +107,6 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
     const [closePercentage, setClosePercentage] = useState<number>(100);
     const [modalAmountError, setModalAmountError] = useState<string | null>(null); // State for modal input error
     const subscribedFeedIdsRef = useRef<Set<string>>(new Set());
-
-    // Define decimals constant, assuming 6 based on previous context
-    const AMOUNT_DECIMALS = 6;
 
     useEffect(() => {
         let isInitialFetch = true; // Flag to distinguish initial load from interval refreshes
@@ -222,11 +239,12 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
 
     const positionToClose = closingPositionId ? positions.find(p => p.position_id === closingPositionId) : null;
     // Calculate total position amount considering decimals
-    const totalPositionAmount = positionToClose ? (parseFloat(positionToClose.amount) / (10 ** AMOUNT_DECIMALS)) : 0;
+    const modalDecimals = positionToClose ? getPositionDecimals(positionToClose, availableAssets) : 6;
+    const totalPositionAmount = positionToClose ? (parseFloat(positionToClose.amount) / (10 ** modalDecimals)) : 0;
 
     // Calculate the current total value of the position being closed
     const positionToCloseLivePrice = positionToClose ? livePrices[positionToClose.price_feed_id_bytes.startsWith('0x') ? positionToClose.price_feed_id_bytes : `0x${positionToClose.price_feed_id_bytes}`] : undefined;
-    const positionToCloseLiveValue = positionToClose ? calculatePositionValue(positionToClose, positionToCloseLivePrice) : null;
+    const positionToCloseLiveValue = positionToClose ? calculatePositionValue(positionToClose, positionToCloseLivePrice, modalDecimals) : null;
 
     // Calculate the value of the portion being closed
     const closingValue = positionToCloseLiveValue !== null ? positionToCloseLiveValue * (closePercentage / 100) : null;
@@ -234,15 +252,14 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
     const openModal = (positionId: string) => {
         const position = positions.find(p => p.position_id === positionId);
         if (!position) return;
-        // Calculate the full amount considering decimals for display
-        const fullAmountDecimal = parseFloat(position.amount) / (10 ** AMOUNT_DECIMALS);
+        const decimals = getPositionDecimals(position, availableAssets);
+        const fullAmountDecimal = parseFloat(position.amount) / (10 ** decimals);
 
         setClosingPositionId(positionId);
         setClosePercentage(100);
-        // Set the initial modal amount to the full decimal value, formatted
-        setModalCloseAmount(fullAmountDecimal.toFixed(AMOUNT_DECIMALS));
+        setModalCloseAmount(fullAmountDecimal.toFixed(decimals));
         setIsModalOpen(true);
-        setModalAmountError(null); // Reset error on open
+        setModalAmountError(null);
     };
 
     const closeModal = () => {
@@ -298,29 +315,23 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
 
     const handleSliderChange = (percentage: number) => {
         setClosePercentage(percentage);
-        setModalAmountError(null); // Clear error when slider is used
-
+        setModalAmountError(null);
         if (totalPositionAmount > 0) {
             const calculatedAmount = (totalPositionAmount * percentage) / 100;
-            // Format with the correct number of decimals
-            const formattedAmount = calculatedAmount.toFixed(AMOUNT_DECIMALS);
+            const formattedAmount = calculatedAmount.toFixed(modalDecimals);
             setModalCloseAmount(formattedAmount);
         } else {
-            setModalCloseAmount("0"); // Or "0.000000" if preferred
+            setModalCloseAmount("0");
         }
     };
 
     const handleConfirmClose = () => {
-        // Convert the decimal amount back to the base unit integer for the transaction
-        const closeAmountBaseUnits = Math.round(parseFloat(modalCloseAmount) * (10 ** AMOUNT_DECIMALS));
-
-        // Ensure the calculated base units are not negative and not zero if modalCloseAmount was > 0
+        const closeAmountBaseUnits = Math.round(parseFloat(modalCloseAmount) * (10 ** modalDecimals));
         if (isNaN(closeAmountBaseUnits) || closeAmountBaseUnits < 0 || (parseFloat(modalCloseAmount) > 0 && closeAmountBaseUnits === 0)) {
              console.error("Invalid amount calculated for closing:", modalCloseAmount, closeAmountBaseUnits);
              setModalAmountError("Invalid closing amount calculated.");
-             return; // Prevent closing with invalid amount
+             return;
         }
-
         // TODO: Implement actual transaction submission using closeAmountBaseUnits
         closeModal();
     };
@@ -353,19 +364,53 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
                             ? position.price_feed_id_bytes
                             : `0x${position.price_feed_id_bytes}`;
                         const livePrice = livePrices[formattedFeedId];
-                        const liveValue = calculatePositionValue(position, livePrice);
-                        const formattedAmount = formatAmount(position.amount, 6);
+                        const decimals = getPositionDecimals(position, availableAssets);
+                        const liveValue = calculatePositionValue(position, livePrice, decimals);
+                        const formattedAmount = formatAmount(position.amount, decimals);
+                        // Calculate percent change
+                        const percentChange = calculatePercentChange(
+                            position.entry_price,
+                            position.entry_price_decimals,
+                            livePrice,
+                            position.position_type
+                        );
+                        // Format entry and current price
+                        const entryPriceFormatted = position.entry_price
+                            ? (parseFloat(position.entry_price) / (10 ** position.entry_price_decimals)).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6 })
+                            : '$--';
+                        const currentPriceFormatted =
+                            livePrice !== undefined
+                                ? livePrice.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6 })
+                                : '$--';
+                        // Color for percent change
+                        const percentBoxColor = percentChange === null
+                            ? 'bg-gray-700 text-secondaryText'
+                            : percentChange >= 0
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-400'
+                                : 'bg-red-500/20 text-red-400 border border-red-400';
+
+                        // Find the asset name using supported_positions_token_i
+                        const asset = availableAssets[position.supported_positions_token_i];
+                        const assetName = asset ? asset.displayName : `Token Index ${position.supported_positions_token_i}`;
 
                         return (
                             <div key={position.position_id} className="card bg-backgroundOffset p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap">
                                 <div className="flex items-center gap-3 flex-shrink-0">
                                     <div className='w-6 h-6 bg-gray-600 rounded-full'></div>
                                     <span className="font-semibold text-primaryText text-lg">
-                                        Token Index {position.supported_positions_token_i}
+                                        {assetName}
                                     </span>
                                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${position.position_type === 'Long' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                                         {position.position_type}
                                     </span>
+                                </div>
+
+                                {/* Percent Change Box */}
+                                <div className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg text-sm font-semibold min-w-[110px] ${percentBoxColor}`}>
+                                    <span>
+                                        {percentChange === null ? '--' : `${percentChange > 0 ? '+' : ''}${percentChange.toFixed(2)}%`}
+                                    </span>
+                                    <span className="text-xs font-normal text-secondaryText mt-1">P/L</span>
                                 </div>
 
                                 <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
@@ -383,6 +428,11 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
                                     <div className="col-span-2 sm:col-span-1">
                                         <span className="text-secondaryText block">Amount</span>
                                         <span className="text-primaryText font-medium">{formattedAmount}</span>
+                                    </div>
+                                    {/* Entry and Current Price */}
+                                    <div className="col-span-2 sm:col-span-3 flex gap-4 mt-2">
+                                        <span className="text-xs text-secondaryText">Entry: <span className="text-primaryText font-medium">{entryPriceFormatted}</span></span>
+                                        <span className="text-xs text-secondaryText">Current: <span className="text-primaryText font-medium">{currentPriceFormatted}</span></span>
                                     </div>
                                 </div>
 
@@ -413,7 +463,7 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
                         <div className="mb-1">
                             <label className="input-label block text-secondaryText mb-2" htmlFor="modal-close-amount">
                                 {/* Display max amount with correct decimals */}
-                                Amount to Close (Max: {totalPositionAmount.toFixed(AMOUNT_DECIMALS)})
+                                Amount to Close (Max: {totalPositionAmount.toFixed(modalDecimals)})
                             </label>
                             <div className="flex gap-5 justify-between px-4 py-3 mt-2 bg-mainBackground rounded-lg">
                                 <input
@@ -423,7 +473,7 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId }) => {
                                     className="input-field bg-transparent p-0 my-auto w-full text-primaryText focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:placeholder-transparent"
                                     value={modalCloseAmount}
                                     onChange={handleModalAmountChange}
-                                    placeholder={`0.${'0'.repeat(AMOUNT_DECIMALS)}`} // Dynamic placeholder based on decimals
+                                    placeholder={`0.${'0'.repeat(modalDecimals)}`} // Dynamic placeholder based on decimals
                                 />
                             </div>
                             {modalAmountError && (
