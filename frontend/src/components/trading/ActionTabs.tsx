@@ -491,12 +491,40 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
     });
   }, [account, accountObjectId, isLoadingAccount, selectedMarketIndex, selectedMarketPriceFeedId]);
 
-  // Early return or disabled state if critical data is missing
-  if (isLoadingAccount || !accountObjectId) {
+  // 1. Wallet not connected
+  if (!account) {
     return (
-      <div className="p-4">
-        <p className="text-center text-secondaryText mt-2 text-sm">Connect your wallet to begin.</p>
-      </div>
+      <section className="card bg-backgroundOffset mt-4 border border-secondary relative">
+        <div className="p-4">
+          <p className="text-center text-secondaryText mt-2 text-sm">Connect your wallet to begin.</p>
+        </div>
+      </section>
+    );
+  }
+
+  // 2. Wallet connected, account is loading
+  if (isLoadingAccount) {
+    return (
+      <section className="card bg-backgroundOffset mt-4 border border-secondary relative">
+        <div className="p-4">
+          <p className="text-center text-secondaryText mt-2 text-sm">Loading account data...</p>
+        </div>
+      </section>
+    );
+  }
+
+  // 3. Wallet connected, account not found (user needs to create one)
+  if (!accountObjectId) {
+    return (
+      <section className="card bg-backgroundOffset mt-4 border border-secondary relative">
+        <div className="p-4">
+          {isLoadingTx && <p className="text-center text-secondaryText mt-2 text-sm">Processing...</p>}
+          <button className="btn-action w-full" onClick={handleCreateAccount} disabled={isLoadingTx}>
+            {isLoadingTx ? "Creating..." : "Create Account"}
+          </button>
+          {!isLoadingTx && <p className="text-center text-secondaryText mt-2 text-sm">Create a Pismo Protocol account to start trading.</p>}
+        </div>
+      </section>
     );
   }
 

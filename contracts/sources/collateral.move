@@ -429,6 +429,7 @@ fun assert_price_obj_match_token_id(price_obj: &PriceInfoObject, token_id: &Toke
     assert!(p_id == token_id.price_feed_id_bytes(), E_PRICE_OBJS_DONT_MATCH_COLLATS);
 }
 
+//This method truncates the decimals, so it is within +/- $1
 public fun set_collateral_value_assertion<CoinType>(
     cva: &mut CollateralValueAssertionObject, 
     program: &Program,
@@ -455,10 +456,13 @@ public fun set_collateral_value_assertion<CoinType>(
 
     let collat_value = token_id.token_get_value_pyth(price_info_obj, clock, collat_amount, program.shared_price_decimals());
 
-    collateral_marker.set_remaining_collateral_value(collat_value, clock);
+    let collateral_value_no_decimals = collat_value / pow(10, token_id.token_decimals());
+
+
+    collateral_marker.set_remaining_collateral_value(collat_value, clock); //We might need to truncate decimals here too...
 
     let current_val_ref = vector::borrow_mut(&mut cva.collateral_values, collat_idx);
-    *current_val_ref = *current_val_ref + (collat_value as u128);
+    *current_val_ref = *current_val_ref + (collateral_value_no_decimals as u128);
 
     vector::push_back(&mut cva.visited_collateral_object_ids, collat_obj_id);
 

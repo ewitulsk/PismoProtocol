@@ -28,6 +28,8 @@ use pismo_protocol::signed::{SignedU128, sub_signed_u128, is_positive, Sign, new
 use pismo_protocol::collateral::{Collateral};
 use pismo_protocol::main::Global;
 use pismo_protocol::lp::Vault;
+use std::u128;
+use std::u64;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_INVALID_INITAL_MARGIN: u64 = 3;
@@ -211,21 +213,29 @@ public fun account_positions_upnl(
 
 public fun calc_inital_margin(
     position_size: u64,
+    position_decimals: u8,
     mark_price: u64,
+    mark_price_decimals: u8,
     leverage: u64
 ): u128 {
     let position_size_u128 = position_size as u128;
     let mark_price_u128 = mark_price as u128;
     let leverage_u128 = leverage as u128;
-    position_size_u128 * mark_price_u128 / leverage_u128
+
+    let normalized_decimals = position_decimals + mark_price_decimals;
+
+    let size_without_decimals = position_size_u128 * mark_price_u128 / leverage_u128;
+    size_without_decimals / pow(10, normalized_decimals) //This effectively truncates the decimal, which is fine, inital margin can be within +/- $1
 }
 
-public fun assert_inital_margin(
-    collateral_value: SignedU128,
+public fun assert_inital_margin( //Inital margin needs to take into account position values too...
+    collateral_value_truncated_decimals: SignedU128, //The expectation is that the collateral decimals have been truncated by this point
     position_size: u64,
+    position_decimals: u8,
     mark_price: u64,
+    mark_price_decimals: u8,
     leverage: u64
 ) { 
-    assert!(is_positive(&collateral_value), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
-    assert!(signed_amount(&collateral_value) > calc_inital_margin(position_size, mark_price, leverage), E_INVALID_INITAL_MARGIN);
+    assert!(is_positive(&collateral_value_truncated_decimals), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
+    assert!(signed_amount(&collateral_value_truncated_decimals) >= calc_inital_margin(position_size, position_decimals, mark_price, mark_price_decimals, leverage), E_INVALID_INITAL_MARGIN);
 }

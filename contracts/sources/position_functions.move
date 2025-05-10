@@ -60,7 +60,7 @@ public fun open_position_pyth(
     let total_collateral_value_u128 = sum_collateral_values_assertion(collateral_value_assertion, clock);
     let collateral_value = new_signed_u128(total_collateral_value_u128, new_sign(true));
     
-    assert_inital_margin(collateral_value, pos_amount, entry_price, leverage_multiplier as u64);
+    assert_inital_margin(collateral_value, pos_amount, token_id.token_decimals(), entry_price, entry_price_decimals, leverage_multiplier as u64);
 
     stats.increment_open_positions(); //We need to validate we're not double counting positions.
 
