@@ -66,6 +66,14 @@ public struct Position has key, store {
     account_id: address
 }
 
+public fun id(position: &Position): address {
+    object::uid_to_address(&position.id)
+}
+
+public fun get_type(position: &Position): PositionType {
+    position._type
+}
+
 public fun u64_to_position_type(pos_id: u64): PositionType {
     match (pos_id) {
         0 => PositionType::Long,
@@ -283,27 +291,27 @@ public(package) fun close_position_internal(
     transfer_data
 }
 
-public(package) fun amount(position: &Position): u64 {
+public fun amount(position: &Position): u64 {
     position.amount
 }
 
-public(package) fun leverage_multiplier(position: &Position): u16 {
+public fun leverage_multiplier(position: &Position): u16 {
     position.leverage_multiplier
 }
 
-public(package) fun entry_price(position: &Position): u64 {
+public fun entry_price(position: &Position): u64 {
     position.entry_price
 }
 
-public(package) fun entry_price_decimals(position: &Position): u8 {
+public fun entry_price_decimals(position: &Position): u8 {
     position.entry_price_decimals
 }
 
-public(package) fun supported_positions_token_i(position: &Position): u64 {
+public fun supported_positions_token_i(position: &Position): u64 {
     position.supported_positions_token_i
 }
 
-public(package) fun account_id(position: &Position): address {
+public fun account_id(position: &Position): address {
     position.account_id
 }
 

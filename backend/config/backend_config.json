@@ -1,7 +1,7 @@
 {
-  "contract_address": "0x3c3c8f721eefd1c80371826d221d2bf3fa8d159080aeb781cb287645f48e6bad",
-  "contract_global": "0x2a79a555e0cd7c90c954b64b2c6fe7e7a0b2e80adf57d6cb3db2ee4831d1f5d2",
-  "program_id": "0xd955f6418a95ee875bee8bb5cd63737f979d585ad985e98d750648a1e5d32977",
+  "contract_address": "0xace6690296dde504ef96b7c7ab31461a13e959de2c440425c5454dab3e687a83",
+  "contract_global": "0x9022c013dd2f11609c464e4307cdae5d52db7b30bf7cfa006e3bdbce67596a6b",
+  "program_id": "0xbad0d6275868cb6ed8f38c014b708a34378c61e406d3cafc14ce5198752ed058",
   "pyth_price_feed_url": "https://hermes-beta.pyth.network/v2/updates/price/latest?",
   "sui_api_url": "https://fullnode.testnet.sui.io:443",
   "indexer_url": "http://0.0.0.0:3001",

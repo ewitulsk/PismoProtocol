@@ -33,7 +33,7 @@ use std::u64;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_INVALID_INITAL_MARGIN: u64 = 3;
-const E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE: u64 = 4;
+const E_BRO_SHOULD_BE_LIQUIDATED: u64 = 4;
 const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9;
 const E_INPUT_LENGTH_MISMATCH: u64 = 12;
 const E_ACCOUNT_STATS_MISMATCH: u64 = 13;
@@ -153,62 +153,39 @@ public(package) fun assert_account_stats_program_positions_match(
     };
 }
 
+// public fun single_position_upnl(
+//     position_size: u64,
+//     leverage: u64,
+//     entry_asset_price: u64,
+//     cur_asset_price: u64,
+//     token_decimals: u8,
+//     shared_decimals: u8
+// ): SignedU128 {
+//     let position_size_u128 = position_size as u128;
+//     let leverage_u128 = leverage as u128;
+//     let entry_asset_price_u128 = entry_asset_price as u128;
+//     let cur_asset_price_u128 = cur_asset_price as u128;
+
+//     let entry_value = normalize_value(position_size_u128 * leverage_u128 * entry_asset_price_u128, token_decimals, shared_decimals);
+//     let cur_value = normalize_value(position_size_u128 * leverage_u128 * cur_asset_price_u128, token_decimals, shared_decimals);
+    
+//     sub_signed_u128(cur_value, entry_value)
+// }
+
 public fun single_position_upnl(
-    position_size: u64,
     leverage: u64,
-    entry_asset_price: u64,
-    cur_asset_price: u64,
-    token_decimals: u8,
-    shared_decimals: u8
+    entry_value_no_decimals: u128,
+    cur_value_no_decimals: u128
 ): SignedU128 {
-    let position_size_u128 = position_size as u128;
     let leverage_u128 = leverage as u128;
-    let entry_asset_price_u128 = entry_asset_price as u128;
-    let cur_asset_price_u128 = cur_asset_price as u128;
 
-    let entry_value = normalize_value(position_size_u128 * leverage_u128 * entry_asset_price_u128, token_decimals, shared_decimals);
-    let cur_value = normalize_value(position_size_u128 * leverage_u128 * cur_asset_price_u128, token_decimals, shared_decimals);
-    
-    sub_signed_u128(cur_value, entry_value)
-}
-
-public fun account_positions_upnl(
-    account: &Account, 
-    stats: &AccountStats,
-    program: &Program,
-    positions: &vector<Position>,
-    price_infos: &vector<PriceInfoObject>,
-    clock: &Clock,
-    shared_decimals: u8
-): SignedU128 {
-    assert_account_stats_program_positions_match(account, stats, program, positions);
-    assert!(vector::length(positions) == stats.num_open_positions, E_ACCOUNT_STATS_MISMATCH);
-    assert!(vector::length(price_infos) == vector::length(positions), E_INPUT_LENGTH_MISMATCH);
-
-    let mut total_upnl = new_signed_u128(0, new_sign(true));
-    let mut i = 0;
-    
-    while (i < vector::length(positions)) {
-        let position = vector::borrow(positions, i);
-        let price_info = vector::borrow(price_infos, i);
-                
-        let (cur_price, pyth_decimals) = get_price_pyth(price_info, clock);
-        
-        let position_upnl = single_position_upnl(
-            position_amount(position),
-            leverage_multiplier(position) as u64,
-            entry_price(position),
-            cur_price,
-            pyth_decimals,
-            shared_decimals
-        );
-        
-        total_upnl = add_signed_u128(&total_upnl, &position_upnl);
-        
-        i = i + 1;
+    let (price_delta, sign) = if(cur_value_no_decimals > entry_value_no_decimals) {
+        ((cur_value_no_decimals - entry_value_no_decimals), new_sign(true))
+    } else {
+        ((entry_value_no_decimals - cur_value_no_decimals), new_sign(false))
     };
-    
-    total_upnl
+
+    new_signed_u128((price_delta * leverage_u128), sign)
 }
 
 public fun calc_inital_margin(
@@ -230,12 +207,16 @@ public fun calc_inital_margin(
 
 public fun assert_inital_margin( //Inital margin needs to take into account position values too...
     collateral_value_truncated_decimals: SignedU128, //The expectation is that the collateral decimals have been truncated by this point
+    position_value_truncated_decimals: SignedU128,
     position_size: u64,
     position_decimals: u8,
     mark_price: u64,
     mark_price_decimals: u8,
     leverage: u64
 ) { 
-    assert!(is_positive(&collateral_value_truncated_decimals), E_HOW_TF_DID_YOU_GET_A_NEGATIVE_COLLATERAL_VALUE);
-    assert!(signed_amount(&collateral_value_truncated_decimals) >= calc_inital_margin(position_size, position_decimals, mark_price, mark_price_decimals, leverage), E_INVALID_INITAL_MARGIN);
+
+    let account_value = add_signed_u128(&collateral_value_truncated_decimals, &position_value_truncated_decimals);
+
+    assert!(is_positive(&account_value), E_BRO_SHOULD_BE_LIQUIDATED);
+    assert!(signed_amount(&account_value) >= calc_inital_margin(position_size, position_decimals, mark_price, mark_price_decimals, leverage), E_INVALID_INITAL_MARGIN);
 }

@@ -28,6 +28,15 @@ export interface DepositedCollateralAsset {
   amount: string; // as string from indexer, represents u64
 }
 
+// Type for existing position assets fetched from the indexer
+// Based on PositionData from CurrentPositions.tsx, simplified for openPosition needs
+export interface ExistingPositionAsset {
+  position_id: string; // object ID (hex string)
+  price_feed_id_bytes: string; // Hex string of the price feed ID for this position's market
+  // Add other fields if absolutely necessary for set_position_value_assertion logic if it evolves.
+  // For now, only position_id (for the Position object) and its market's price_feed_id_bytes are critical.
+}
+
 
 export interface OpenPositionParams {
   account: MinimalAccountInfo;
@@ -46,6 +55,7 @@ export interface OpenPositionParams {
   amount: string;
   leverage: number;
   supportedCollateral: SupportedCollateralToken[];
+  selectedMarketPriceFeedId?: string; // Added for new position's market price feed
   suiClient: SuiClient;
   signAndExecuteTransaction: (
     variables: SignAndExecuteTransactionArgs,
@@ -98,6 +108,7 @@ export const openPosition = async (
     hermesEndpoint,
     pythClient,
     positionMarketIndex,
+    selectedMarketPriceFeedId, // Destructure new param
     indexerUrl,
     positionType,
     amount,
@@ -178,7 +189,7 @@ export const openPosition = async (
     // Step 1: Start Collateral Value Assertion (returns the CVA struct)
     // This result (cvaHotPotato) is the actual CVA struct, not an ID.
     let cvaHotPotato = txb.moveCall({
-      target: `${packageId}::collateral::start_collateral_value_assertion`,
+      target: `${packageId}::value_assertion_objects::start_collateral_value_assertion`,
       arguments: [
         txb.object(accountObjectId),
         txb.object(accountStatsId),
@@ -201,23 +212,60 @@ export const openPosition = async (
     console.log("User's deposited collateral assets:", depositedCollateralAssets);
 
     if (!depositedCollateralAssets || depositedCollateralAssets.length === 0) {
-        callbacks.setNotification({ show: true, message: "No collateral found for the account. Cannot open position.", type: 'error' });
+        // Note: This behavior might change. Opening a position might be possible without existing collateral
+        // if the new position itself meets margin requirements against $0 collateral (e.g. if it's a cash-backed future).
+        // For now, keeping the check as it was.
+        callbacks.setNotification({ show: true, message: "No collateral found for the account. Cannot open position without collateral.", type: 'error' });
         callbacks.setIsLoadingTx(false);
         return;
     }
+    
+    // Step 1.5: Start Position Value Assertion (returns the PVA struct)
+    let pvaHotPotato = txb.moveCall({
+      target: `${packageId}::value_assertion_objects::start_position_value_assertion`,
+      arguments: [
+        txb.object(accountObjectId),
+        txb.object(accountStatsId),
+        txb.object(effectiveProgramId),
+        // ctx is automatically passed
+      ],
+    });
+    console.log("Transaction command added: start_position_value_assertion");
+
+    // Fetch user's existing positions from indexer
+    const positionsUrl = `${effectiveIndexerUrl}/v0/${normalizeSuiObjectId(accountIdHexForCollateralUrl)}/positions`;
+    console.log("Fetching user's existing positions from:", positionsUrl);
+    const positionsResponse = await fetch(positionsUrl);
+    if (!positionsResponse.ok) {
+        const errorText = await positionsResponse.text();
+        throw new Error(`Failed to fetch user existing positions from indexer: ${positionsResponse.status} - ${errorText}`);
+    }
+    const existingPositionAssets: ExistingPositionAsset[] = await positionsResponse.json();
+    console.log("User's existing position assets:", existingPositionAssets);
+
 
     const priceFeedIdsForUpdate: string[] = [];
     for (const asset of depositedCollateralAssets) {
         const collateralTokenInfo = asset.token_id.token_address;
         const collateralPriceFeedId = getTokenPriceFeedId(collateralTokenInfo, supportedCollateral);
-        if (!priceFeedIdsForUpdate.includes(collateralPriceFeedId)) {
+        if (collateralPriceFeedId && !priceFeedIdsForUpdate.includes(collateralPriceFeedId)) {
             priceFeedIdsForUpdate.push(collateralPriceFeedId);
         }
     }
 
-    const positionMarketPriceFeedId = DEFAULT_BTC_PRICE_FEED_ID; // CRITICAL TODO: Replace with actual logic
-    if (!priceFeedIdsForUpdate.includes(positionMarketPriceFeedId)) {
-        priceFeedIdsForUpdate.push(positionMarketPriceFeedId);
+    // Add price feed IDs for existing positions
+    for (const position of existingPositionAssets) {
+        const positionHexPriceFeedId = position.price_feed_id_bytes.startsWith('0x')
+            ? position.price_feed_id_bytes
+            : '0x' + position.price_feed_id_bytes;
+        if (positionHexPriceFeedId && positionHexPriceFeedId !== '0x' && !priceFeedIdsForUpdate.includes(positionHexPriceFeedId)) {
+            priceFeedIdsForUpdate.push(positionHexPriceFeedId);
+        }
+    }
+
+    const newPositionMarketFeedId = selectedMarketPriceFeedId || DEFAULT_BTC_PRICE_FEED_ID; // Use prop or fallback
+    if (newPositionMarketFeedId && !priceFeedIdsForUpdate.includes(newPositionMarketFeedId)) {
+        priceFeedIdsForUpdate.push(newPositionMarketFeedId);
     }
 
     console.log("Fetching Pyth VAA data for feeds:", priceFeedIdsForUpdate);
@@ -280,7 +328,7 @@ export const openPosition = async (
         // Each call to set_collateral_value_assertion takes the CVA struct (as TransactionResult)
         // and returns the updated CVA struct (as a new TransactionResult).
         cvaHotPotato = txb.moveCall({
-            target: `${packageId}::collateral::set_collateral_value_assertion`,
+            target: `${packageId}::value_assertion_objects::set_collateral_value_assertion`,
             typeArguments: [normalizedCollateralTokenInfo],
             arguments: [
                 cvaHotPotato, // Pass the TransactionResult from previous step
@@ -294,38 +342,89 @@ export const openPosition = async (
         console.log("Transaction command added: set_collateral_value_assertion for", normalizedCollateralTokenInfo);
     }
 
-    const priceInfoObjectIdForPositionMarket = feedIdToPriceInfoObjectId[positionMarketPriceFeedId];
+    // Step 2.5: Set Position Values for existing positions
+    for (const position of existingPositionAssets) {
+        console.log("Processing existing position for PVA: ", position);
+
+        const positionMarketHexFeedId = position.price_feed_id_bytes.startsWith('0x')
+            ? position.price_feed_id_bytes
+            : '0x' + position.price_feed_id_bytes;
+        
+        const priceInfoObjectIdForExistingPosition = feedIdToPriceInfoObjectId[positionMarketHexFeedId];
+
+        if (!priceInfoObjectIdForExistingPosition) {
+            throw new Error(`Critical error: PriceInfoObject ID not found for existing position ${position.position_id} (market feed ${positionMarketHexFeedId}) after Pyth update. Cannot proceed with PVA.`);
+        }
+        
+        // Assuming position.position_id from indexer is already a hex string like "0x..."
+        // If it's a byte array string, it would need Buffer.from(...).toString('hex') first.
+        // For consistency with how collateral_id was handled (assuming it could be byte array):
+        // Let's ensure it's a hex string and then normalize.
+        // However, if indexer guarantees hex string for position_id, Buffer.from is not needed.
+        // Assuming `position.position_id` is a hex string from indexer.
+        const normalizedPositionId = normalizeSuiObjectId(position.position_id);
+
+
+        console.log("--- Adding set_position_value_assertion for existing position ---");
+        console.log("PVA Hot Potato (Input): ", pvaHotPotato);
+        console.log("ProgramId: ", effectiveProgramId);
+        console.log("PositionId (Normalized): ", normalizedPositionId);
+        console.log("PriceInfoObject ID (string): ", priceInfoObjectIdForExistingPosition);
+        console.log("Clock: ", SUI_CLOCK_OBJECT_ID);
+        console.log("----------------------------------------------------");
+
+        pvaHotPotato = txb.moveCall({
+            target: `${packageId}::value_assertion_objects::set_position_value_assertion`,
+            // typeArguments: [], // set_position_value_assertion does not have type arguments
+            arguments: [
+                pvaHotPotato,
+                txb.object(effectiveProgramId),
+                txb.object(normalizedPositionId), 
+                txb.object(priceInfoObjectIdForExistingPosition), 
+                txb.object(SUI_CLOCK_OBJECT_ID)
+            ],
+        });
+        console.log("Transaction command added: set_position_value_assertion for existing position", position.position_id);
+    }
+
+    const priceInfoObjectIdForPositionMarket = feedIdToPriceInfoObjectId[newPositionMarketFeedId];
     if (!priceInfoObjectIdForPositionMarket) {
-      throw new Error(`PriceInfoObject ID not found for position market feed ${positionMarketPriceFeedId} after Pyth update.`);
+      throw new Error(`PriceInfoObject ID not found for position market feed ${newPositionMarketFeedId} after Pyth update.`);
     }
 
     // Step 3: Open Position
-    // The open_position_pyth function should also take the CVA struct (as TransactionResult)
-    // and potentially return it if it's modified, or it's consumed there.
-    // For now, assume it takes it and we then destroy the last known version of cvaHotPotato.
+    // open_position_pyth takes CVA as 8th arg, PVA as 9th arg.
     txb.moveCall({
       target: `${packageId}::position_functions::open_position_pyth`,
       arguments: [
-        txb.object(accountObjectId),
-        txb.object(accountStatsId),
-        txb.object(effectiveProgramId),
-        txb.pure(bcs.u64().serialize(BigInt(positionType === "Long" ? 0 : 1)).toBytes()), 
-        txb.pure(bcs.u64().serialize(positionAmountBigInt).toBytes()), 
-        txb.pure(bcs.u16().serialize(leverage).toBytes()), 
-        txb.pure(bcs.u64().serialize(BigInt(positionMarketIndex)).toBytes()), 
-        txb.object(priceInfoObjectIdForPositionMarket), // Wrap the string ID with txb.object()
-        cvaHotPotato, // Pass the latest TransactionResult for CVA
-        txb.object(SUI_CLOCK_OBJECT_ID),
+        txb.object(accountObjectId),                        // Arg 0
+        txb.object(accountStatsId),                         // Arg 1
+        txb.object(effectiveProgramId),                     // Arg 2
+        txb.pure(bcs.u64().serialize(BigInt(positionType === "Long" ? 0 : 1)).toBytes()), // Arg 3
+        txb.pure(bcs.u64().serialize(positionAmountBigInt).toBytes()), // Arg 4
+        txb.pure(bcs.u16().serialize(leverage).toBytes()),    // Arg 5
+        txb.pure(bcs.u64().serialize(BigInt(positionMarketIndex)).toBytes()), // Arg 6
+        txb.object(priceInfoObjectIdForPositionMarket),     // Arg 7: position_price_info
+        cvaHotPotato,                                       // Arg 8: collateral_value_assertion
+        pvaHotPotato,                                       // Arg 9: position_value_assertion
+        txb.object(SUI_CLOCK_OBJECT_ID),                    // Arg 10: clock
       ],
     });
     console.log("Transaction command added: open_position_pyth");
 
     // Step 4: Destroy Collateral Value Assertion Object
     txb.moveCall({
-        target: `${packageId}::collateral::destroy_collateral_value_assertion`,
+        target: `${packageId}::value_assertion_objects::destroy_collateral_value_assertion`,
         arguments: [cvaHotPotato], // Pass the final TransactionResult for CVA
     });
     console.log("Transaction command added: destroy_collateral_value_assertion");
+
+    // Step 5: Destroy Position Value Assertion Object
+    txb.moveCall({
+        target: `${packageId}::value_assertion_objects::destroy_position_value_assertion`,
+        arguments: [pvaHotPotato], // Pass the final TransactionResult for PVA
+    });
+    console.log("Transaction command added: destroy_position_value_assertion");
 
 
     console.log("Preparing single transaction for execution...");
