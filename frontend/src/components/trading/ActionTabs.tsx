@@ -23,7 +23,7 @@ type NotificationState = ExtNotificationState; // Use imported type
 type SupportedCollateralToken = ExtSupportedCollateralToken; // Use imported type
 
 // Type to store fetched collateral data along with a user-friendly name
-type CollateralInfo = SupportedCollateralToken & {
+export type CollateralInfo = SupportedCollateralToken & {
     name: string; // User-friendly name like 'SUI', 'USDC'
 };
 
@@ -41,11 +41,13 @@ type DepositedCollateralResponse = {
 
 // Define Props for ActionTabs
 export interface ActionTabsProps {
-    account: MinimalAccountInfo | null; // Use MinimalAccountInfo as it's used by transaction functions
+    account: MinimalAccountInfo | null; 
     accountObjectId: string | null;
-    isLoadingAccount: boolean; 
-    selectedMarketIndex?: number; // Optional, as it might not be available initially
-    selectedMarketPriceFeedId?: string; // Optional
+    accountStatsId: string | null; // Added: To be passed from parent
+    isLoadingAccount: boolean; // This prop now reflects loading of account, accountObjectId, AND accountStatsId from parent
+    supportedCollateral: CollateralInfo[]; // Added: To be passed from parent
+    selectedMarketIndex?: number; 
+    selectedMarketPriceFeedId?: string; 
 }
 
 // --- Constants ---
@@ -109,7 +111,9 @@ const formatBalance = (balance: string | bigint, decimals: number): string => {
 const ActionTabs: React.FC<ActionTabsProps> = ({ 
   account, 
   accountObjectId, 
-  isLoadingAccount,
+  accountStatsId, // Destructure new prop
+  isLoadingAccount, // Use this for overall loading state of necessary account details
+  supportedCollateral, // Destructure new prop
   selectedMarketIndex,
   selectedMarketPriceFeedId
 }) => {
@@ -118,9 +122,6 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   const [amount, setAmount] = useState<string>("");
   const [leverage, setLeverage] = useState<number>(5); 
   const [collateralAction, setCollateralAction] = useState<CollateralActionType>("Deposit");
-  const [supportedCollateral, setSupportedCollateral] = useState<CollateralInfo[]>([]);
-  const [isLoadingCollateral, setIsLoadingCollateral] = useState(false);
-  const [collateralError, setCollateralError] = useState<string | null>(null);
   const [selectedDepositTokenInfo, setSelectedDepositTokenInfo] = useState<string>("");
   const [depositAmount, setDepositAmount] = useState<string>("");
   const [selectedWithdrawTokenInfo, setSelectedWithdrawTokenInfo] = useState<string>(""); 
@@ -133,67 +134,21 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   const [isLoadingTx, setIsLoadingTx] = useState(false);
   const [notification, setNotification] = useState<NotificationState>(null);
   const [optimisticHasAccount, setOptimisticHasAccount] = useState<boolean>(false);
-  const [accountStatsId, setAccountStatsId] = useState<string | null>(null); 
-  const [isFetchingStatsId, setIsFetchingStatsId] = useState(false); 
   const [hasWalletBalancesLoadedOnce, setHasWalletBalancesLoadedOnce] = useState(false);
   const [hasDepositedCollateralLoadedOnce, setHasDepositedCollateralLoadedOnce] = useState(false);
 
   const client = useSuiClient(); 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
-  // Effect to clear states when accountObjectId (from props) changes
-  useEffect(() => {
-    setAccountStatsId(null); 
-    setUserDepositedCollateral({}); 
-    setDepositedCollateralError(null); 
-    setHasWalletBalancesLoadedOnce(false); 
-    setHasDepositedCollateralLoadedOnce(false);
-  }, [accountObjectId]); 
+  // Use isLoadingAccount prop directly for core data loading indication
+  const isLoadingCoreData = isLoadingAccount; 
 
-  // Effect to fetch AccountStats ID when Account Object ID is known
+  // Initialize selectedDepositTokenInfo based on the passed `supportedCollateral` prop
   useEffect(() => {
-    if (!accountObjectId || !account) {
-        setAccountStatsId(null); 
-        return;
+    if (supportedCollateral.length > 0 && !selectedDepositTokenInfo) {
+        setSelectedDepositTokenInfo(supportedCollateral[0].fields.token_info);
     }
-    if (accountStatsId) { // Only fetch if not already set
-        return;
-    }
-    const fetchAccountStatsId = async () => {
-        console.log(`Fetching account stats for account object ID: ${accountObjectId}`);
-        setIsFetchingStatsId(true);
-        try {
-            const accountIdForUrl = accountObjectId.startsWith('0x')
-                ? accountObjectId.substring(2)
-                : accountObjectId;
-            const response = await fetch(`${INDEXER_URL}/v0/accounts/${accountIdForUrl}`);
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
-                 throw new Error(errorData.error || `Failed to fetch account stats: ${response.status}`);
-            }
-            const data = await response.json();
-            if (data && typeof data.stats_id === 'string' && data.stats_id) {
-                const statsIdWithPrefix = data.stats_id.startsWith('0x') ? data.stats_id : '0x' + data.stats_id;
-                setAccountStatsId(statsIdWithPrefix);
-            } else {
-                 console.error("Account stats ID not found or invalid in response:", data);
-                 setNotification({ show: true, message: "Account stats ID not found or invalid in response.", type: 'error' });
-                 throw new Error("Account stats ID not found or invalid in response.");
-            }
-        } catch (error) {
-            console.error('Error fetching account stats ID:', error);
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            setNotification({ show: true, message: `Error loading account details: ${errorMsg}`, type: 'error' });
-            setAccountStatsId(null);
-        } finally {
-            setIsFetchingStatsId(false);
-        }
-    };
-    fetchAccountStatsId();
-  }, [accountObjectId, account, INDEXER_URL, accountStatsId]); 
-
-  const canDisplayTradingUI = account && accountObjectId && accountStatsId;
-  const isLoadingCoreData = isLoadingAccount || (!!accountObjectId && isFetchingStatsId);
+  }, [supportedCollateral, selectedDepositTokenInfo]);
 
   // Query for all *Wallet* Coin Balances
   const { data: walletBalancesData, isLoading: isLoadingWalletBalancesQuery } = useSuiClientQuery(
@@ -226,43 +181,6 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         setHasWalletBalancesLoadedOnce(true);
     }
   }, [walletBalancesData, isLoadingWalletBalancesQuery, hasWalletBalancesLoadedOnce]);
-
-  useEffect(() => {
-    const fetchCollateral = async () => {
-      setIsLoadingCollateral(true);
-      setCollateralError(null);
-      setNotification(null);
-      try {
-        const response = await fetch(`${BACKEND_API_URL}/api/supportedCollateral`);
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data && Array.isArray(data.supportedCollateral)) {
-          const processedCollateral = data.supportedCollateral
-            .filter((token: SupportedCollateralToken) => !token.fields.deprecated)
-            .map((token: SupportedCollateralToken) => ({
-              ...token,
-              name: getTokenNameFromType(token.fields.token_info),
-            }));
-          setSupportedCollateral(processedCollateral);
-          if (processedCollateral.length > 0 && !selectedDepositTokenInfo) {
-            setSelectedDepositTokenInfo(processedCollateral[0].fields.token_info);
-          }
-        } else {
-          throw new Error("Invalid data format received from collateral endpoint.");
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        setCollateralError(`Failed to load supported collateral: ${errorMsg}`);
-        setNotification({ show: true, message: `Failed to load supported collateral: ${errorMsg}`, type: 'error' });
-      } finally {
-        setIsLoadingCollateral(false);
-      }
-    };
-    fetchCollateral();
-  }, [BACKEND_API_URL, selectedDepositTokenInfo]);
 
   useEffect(() => {
     if (!accountObjectId || supportedCollateral.length === 0 || !INDEXER_URL) {
@@ -508,6 +426,9 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
     });
   }, [account, accountObjectId, isLoadingAccount, selectedMarketIndex, selectedMarketPriceFeedId]);
 
+  // Re-declare canDisplayTradingUI using props
+  const canDisplayTradingUI = account && accountObjectId && accountStatsId;
+
   // 1. Wallet not connected
   if (!account) {
     return (
@@ -607,12 +528,9 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                     <button className={`position-button flex-1 ${collateralAction === "Deposit" ? "position-button-active" : "position-button-inactive"} py-2 px-4`} onClick={() => setCollateralAction("Deposit")}>Deposit</button>
                     <button className={`position-button flex-1 ${collateralAction === "Withdraw" ? "position-button-active" : "position-button-inactive"} py-2 px-4`} onClick={() => setCollateralAction("Withdraw")}>Withdraw</button>
                 </div>
-                 {isLoadingCollateral && <p className="text-center text-secondaryText mb-4">Loading collateral types...</p>}
-                 {collateralError && <p className="text-center text-red-500 mb-4">{collateralError}</p>}
-                 {collateralAction === "Deposit" && !isLoadingCollateral && !collateralError && !hasWalletBalancesLoadedOnce && isLoadingWalletBalances && <p className="text-center text-secondaryText mb-4">Loading wallet balances...</p>}
-                 {collateralAction === "Withdraw" && !isLoadingCollateral && !collateralError && !hasDepositedCollateralLoadedOnce && isLoadingDepositedCollateral && <p className="text-center text-secondaryText mb-4">Loading deposited balances...</p>}
-                 {collateralAction === "Withdraw" && !isLoadingCollateral && !collateralError && depositedCollateralError && <p className="text-center text-red-500 mb-4">{depositedCollateralError}</p>}
-                {collateralAction === "Deposit" && !isLoadingCollateral && !collateralError && (
+                 {isLoadingDepositedCollateral && <p className="text-center text-secondaryText mb-4">Loading deposited balances...</p>}
+                 {depositedCollateralError && <p className="text-center text-red-500 mb-4">{depositedCollateralError}</p>}
+                {collateralAction === "Deposit" && !isLoadingDepositedCollateral && !depositedCollateralError && (
                     <div className="space-y-4">
                         {supportedCollateral.length === 0 ? <p className="text-secondaryText text-center">No supported collateral types found.</p> : (
                          <>
@@ -628,14 +546,14 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                                     <input id="deposit-amount-input" type="text" className="input-field bg-transparent p-0 my-auto w-full text-primaryText focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:placeholder-transparent" value={depositAmount} onChange={handleDepositAmountChange} placeholder="0.00"/>
                                 </div>
                             </div>
-                            <button className="btn-action w-full mt-6" onClick={handleDeposit} disabled={!selectedDepositTokenInfo || !isDepositAmountValid || isLoadingTx || isFetchingStatsId || isLoadingWalletBalances} >
+                            <button className="btn-action w-full mt-6" onClick={handleDeposit} disabled={!selectedDepositTokenInfo || !isDepositAmountValid || isLoadingTx || isLoadingDepositedCollateral}>
                                 {isLoadingTx ? (ENABLE_DEV_INSPECT_DEPOSIT ? "Inspecting..." : "Depositing...") : (ENABLE_DEV_INSPECT_DEPOSIT ? `Inspect Deposit ${getSelectedTokenName(selectedDepositTokenInfo)}` : `Deposit ${getSelectedTokenName(selectedDepositTokenInfo)}`)}
                             </button>
                         </>
                         )}
                     </div>
                 )}
-                {collateralAction === "Withdraw" && !isLoadingCollateral && !collateralError && !depositedCollateralError && (
+                {collateralAction === "Withdraw" && !isLoadingDepositedCollateral && !depositedCollateralError && (
                     <div className="space-y-4">
                         <h3 className="input-label text-lg font-semibold text-secondaryText mb-3">Your Deposited Collateral</h3>
                         {withdrawTokenOptions.length === 0 ? <p className="text-secondaryText">No collateral deposited.</p> : (
@@ -663,7 +581,7 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                                         {selectedWithdrawTokenDepositedBalance > 0 && <button onClick={() => setWithdrawAmount(String(selectedWithdrawTokenDepositedBalanceStr))} className="text-accent hover:text-accentHover text-sm font-medium" type="button">Max</button>}
                                     </div>
                                 </div>
-                                <button className="btn-action w-full mt-6" onClick={handleWithdraw} disabled={!selectedWithdrawTokenInfo || !isWithdrawAmountValid || isLoadingTx || isFetchingStatsId || isLoadingDepositedCollateral}>
+                                <button className="btn-action w-full mt-6" onClick={handleWithdraw} disabled={!selectedWithdrawTokenInfo || !isWithdrawAmountValid || isLoadingTx || isLoadingDepositedCollateral}>
                                     {isLoadingTx ? "Withdrawing..." : `Withdraw ${getSelectedTokenName(selectedWithdrawTokenInfo)}`}
                                 </button>
                             </>
