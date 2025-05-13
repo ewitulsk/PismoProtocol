@@ -13,12 +13,20 @@ use crate::db::repositories::vault_created_events::VaultCreatedEventRepository;
 use crate::db::repositories::new_account_event::NewAccountEventRepository;
 use crate::db::repositories::collateral_deposit_event::CollateralDepositEventRepository;
 use crate::db::repositories::start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository;
+use crate::db::repositories::collateral_transfer::CollateralTransferRepository;
+use crate::db::repositories::vault_transfer::VaultTransferRepository;
+
 use crate::events::position_created::PositionCreatedEvent as MovePositionCreatedEvent;
 use crate::events::position_closed::PositionClosedEvent as MovePositionClosedEvent;
 use crate::events::vault_created::VaultCreatedEvent as MoveVaultCreatedEvent;
 use crate::events::new_account_event::NewAccountEvent as MoveNewAccountEvent;
 use crate::events::collateral_deposit_event::CollateralDepositEvent as MoveCollateralDepositEvent;
 use crate::events::start_collateral_value_assertion_event::StartCollateralValueAssertionEvent as MoveStartCollateralValueAssertionEvent;
+use crate::events::collateral_transfer_created::CollateralTransferCreatedEvent as MoveCollateralTransferCreatedEvent;
+use crate::events::vault_transfer_created::VaultTransferCreatedEvent as MoveVaultTransferCreatedEvent;
+
+use crate::callbacks::transfers_callbacks;
+use crate::config::Config;
 
 pub struct PositionEventWorker {
     open_repo: Arc<OpenPositionEventRepository>,
@@ -27,12 +35,17 @@ pub struct PositionEventWorker {
     new_account_repo: Arc<NewAccountEventRepository>,
     collateral_deposit_repo: Arc<CollateralDepositEventRepository>,
     start_collateral_value_assertion_repo: Arc<StartCollateralValueAssertionEventRepository>,
+    collateral_transfer_repo: Arc<CollateralTransferRepository>,
+    vault_transfer_repo: Arc<VaultTransferRepository>,
     position_created_event_type: String,
     position_closed_event_type: String,
     vault_created_event_type: String,
     new_account_event_type: String,
     collateral_deposit_event_type: String,
     start_collateral_value_assertion_event_type: String,
+    collateral_transfer_created_event_type: String,
+    vault_transfer_created_event_type: String,
+    liquidation_transfer_service_url: String,
 }
 
 impl PositionEventWorker {
@@ -43,14 +56,19 @@ impl PositionEventWorker {
         new_account_repo: Arc<NewAccountEventRepository>,
         collateral_deposit_repo: Arc<CollateralDepositEventRepository>,
         start_collateral_value_assertion_repo: Arc<StartCollateralValueAssertionEventRepository>,
-        package_id: String,
+        collateral_transfer_repo: Arc<CollateralTransferRepository>,
+        vault_transfer_repo: Arc<VaultTransferRepository>,
+        app_config: &Config,
     ) -> Self {
+        let package_id = &app_config.package_id;
         let vault_created_event_type = format!("{}::lp::VaultCreatedEvent", package_id);
         let position_created_event_type = format!("{}::positions::PositionCreatedEvent", package_id);
         let position_closed_event_type = format!("{}::positions::PositionClosedEvent", package_id);
         let new_account_event_type = format!("{}::accounts::NewAccountEvent", package_id);
         let collateral_deposit_event_type = format!("{}::collateral::CollateralDepositEvent", package_id);
         let start_collateral_value_assertion_event_type = format!("{}::collateral::StartCollateralValueAssertionEvent", package_id);
+        let collateral_transfer_created_event_type = format!("{}::collateral::CollateralTransferCreated", package_id);
+        let vault_transfer_created_event_type = format!("{}::lp::VaultTransferCreated", package_id);
 
         info!("Worker configured for package ID: {}", package_id);
         info!("Listening for event type: {}", position_created_event_type);
@@ -59,6 +77,9 @@ impl PositionEventWorker {
         info!("Listening for event type: {}", new_account_event_type);
         info!("Listening for event type: {}", collateral_deposit_event_type);
         info!("Listening for event type: {}", start_collateral_value_assertion_event_type);
+        info!("Listening for event type: {}", collateral_transfer_created_event_type);
+        info!("Listening for event type: {}", vault_transfer_created_event_type);
+        info!("Liquidation transfer service URL: {}", app_config.liquidation_transfer_service_url);
 
         Self {
             open_repo,
@@ -67,12 +88,17 @@ impl PositionEventWorker {
             new_account_repo,
             collateral_deposit_repo,
             start_collateral_value_assertion_repo,
+            collateral_transfer_repo,
+            vault_transfer_repo,
             position_created_event_type,
             position_closed_event_type,
             vault_created_event_type,
             new_account_event_type,
             collateral_deposit_event_type,
             start_collateral_value_assertion_event_type,
+            collateral_transfer_created_event_type,
+            vault_transfer_created_event_type,
+            liquidation_transfer_service_url: app_config.liquidation_transfer_service_url.clone(),
         }
     }
 
@@ -217,6 +243,46 @@ impl Worker for PositionEventWorker {
                             },
                             Err(e) => {
                                 error!("BCS Deserialization Error for StartCollateralValueAssertionEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
+                            }
+                        }
+                     } else if event_type_str == self.collateral_transfer_created_event_type {
+                        match bcs::from_bytes::<MoveCollateralTransferCreatedEvent>(&event.contents) {
+                            Ok(parsed_event) => {
+                                transfers_callbacks::on_collateral_transfer_created(&parsed_event, &self.liquidation_transfer_service_url, self.vault_repo.clone()).await;
+                                match parsed_event.try_map_to_db(tx_digest_str.clone(), checkpoint_time) {
+                                    Ok(db_event) => {
+                                        match self.collateral_transfer_repo.create(db_event) {
+                                            Ok(_) => info!("Successfully stored CollateralTransferCreatedEvent for tx {}", tx_digest_str),
+                                            Err(e) => error!("DB Error storing CollateralTransferCreatedEvent for tx {}: {}", tx_digest_str, e),
+                                        }
+                                    },
+                                    Err(map_err) => {
+                                        error!("Mapping Error for CollateralTransferCreatedEvent tx {}: {}", tx_digest_str, map_err);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                error!("BCS Deserialization Error for CollateralTransferCreatedEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
+                            }
+                        }
+                     } else if event_type_str == self.vault_transfer_created_event_type {
+                        match bcs::from_bytes::<MoveVaultTransferCreatedEvent>(&event.contents) {
+                            Ok(parsed_event) => {
+                                transfers_callbacks::on_vault_transfer_created(&parsed_event, &self.liquidation_transfer_service_url).await;
+                                match parsed_event.try_map_to_db(tx_digest_str.clone(), checkpoint_time) {
+                                    Ok(db_event) => {
+                                        match self.vault_transfer_repo.create(db_event) {
+                                            Ok(_) => info!("Successfully stored VaultTransferCreatedEvent for tx {}", tx_digest_str),
+                                            Err(e) => error!("DB Error storing VaultTransferCreatedEvent for tx {}: {}", tx_digest_str, e),
+                                        }
+                                    },
+                                    Err(map_err) => {
+                                        error!("Mapping Error for VaultTransferCreatedEvent tx {}: {}", tx_digest_str, map_err);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                error!("BCS Deserialization Error for VaultTransferCreatedEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
                             }
                         }
                      }

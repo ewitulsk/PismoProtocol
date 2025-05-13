@@ -46,8 +46,17 @@ const E_COLLATERAL_PRICE_FEED_MISMATCH: u64 = 11; // New error code from account
 const E_INPUT_LENGTH_MISMATCH: u64 = 12; // New error code from accounts.move
 const E_CANNOT_WITHDRAW_ZERO: u64 = 13;
 const E_MARKER_DOES_NOT_HAVE_AMOUNT: u64 = 18;
+const E_COLLATERAL_TRANSFER_ALREADY_FILLED: u64 = 19;
 
 // --- Events ---
+
+public struct CollateralTransferCreated has copy, drop {
+    transfer_id: address,
+    collateral_marker_id: address,
+    collateral_address: address,
+    amount: u64,
+    to_vault_address: address
+}
 
 /// Event emitted when collateral is deposited.
 public struct CollateralDepositEvent has copy, drop {
@@ -98,7 +107,7 @@ public struct CollateralMarker has key, store {
     remaining_collateral: u64, //We need to ensure that any time we refernce a collaterals amount, we reference this.  //decremented every time collateral is transfered out. 
     remaining_collateral_value: u128,
     remaining_collateral_value_set_timestamp_ms: u64, //We need to validate this everytime we use the remaining_collateral_value
-    transfers: vector<CollateralTransfer>, //Can be infinitely long. Never iterate through.=
+    // transfers: vector<CollateralTransfer>, //Can be infinitely long. Never iterate through.=
     token_id: TokenIdentifier
 }
 
@@ -134,7 +143,7 @@ public entry fun post_collateral<CoinType>(account: &Account, stats: &mut Accoun
                 remaining_collateral: coin.value(),
                 remaining_collateral_value: 0,
                 remaining_collateral_value_set_timestamp_ms: 0,
-                transfers: vector::empty(),
+                // transfers: vector::empty(),
                 token_id
             });
 
@@ -194,7 +203,7 @@ public(package) fun post_collateral_to_arbitrary_account_internal<CoinType>(acco
                 remaining_collateral: coin.value(),
                 remaining_collateral_value: 0,
                 remaining_collateral_value_set_timestamp_ms: 0,
-                transfers: vector::empty(),
+                // transfers: vector::empty(),
                 token_id
             });
 
@@ -279,15 +288,25 @@ public(package) fun remaining_collateral(marker: &CollateralMarker): u64 {
 }
 
 public(package) fun create_collateral_transfer(marker: &mut CollateralMarker, amount: u64, vault_address: address, ctx: &mut TxContext){
+    let transfer_id_object = object::new(ctx);
+    let transfer_id_address = object::uid_to_address(&transfer_id_object);
     let transfer = CollateralTransfer {
-        id: object::new(ctx),
+        id: transfer_id_object,
         amount,
         fufilled: false,
         to_vault_address: vault_address,
     };
 
-    vector::push_back(&mut marker.transfers, transfer);
+    transfer::share_object(transfer);
     marker.remaining_collateral = marker.remaining_collateral - amount;
+
+    event::emit(CollateralTransferCreated {
+        transfer_id: transfer_id_address,
+        collateral_marker_id: object::uid_to_address(&marker.id),
+        collateral_address: marker.collateral_id,
+        amount,
+        to_vault_address: vault_address
+    });
 }
 
 public(package) fun get_token_id(marker: &mut CollateralMarker): TokenIdentifier {
@@ -343,6 +362,7 @@ public fun execute_collateral_transfer<CoinType, LPType>(
     vault_marker: &mut VaultMarker,
     ctx: &mut TxContext
 ){
+    assert!(!transfer.fufilled, E_COLLATERAL_TRANSFER_ALREADY_FILLED);
     let amount = transfer.amount;
     assert!(collateral.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = collateral.coin.split(amount);

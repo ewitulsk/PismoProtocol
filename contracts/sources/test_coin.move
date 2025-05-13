@@ -7,7 +7,7 @@ public struct TEST_COIN has drop {}
 fun init(witness: TEST_COIN, ctx: &mut TxContext) {
 		let (treasury, metadata) = coin::create_currency(
 				witness,
-				6,
+				8,
 				b"TEST_COIN",
 				b"",
 				b"",
@@ -27,7 +27,7 @@ public(package) fun test_init(ctx: &mut TxContext){
 public(package) fun init_token(ctx: &mut TxContext): TreasuryCap<TEST_COIN> {
 	let (treasury, metadata) = coin::create_currency(
 			TEST_COIN {},
-			6,
+			8,
 			b"TEST_COIN",
 			b"",
 			b"",

@@ -15,8 +15,7 @@ public fun test_same_decimals() {
         token_decimals,
         price,
         price_decimals,
-        target_value,
-        shared_decimals
+        target_value
     );
 
     // Validate minimality: value >= target, value(amount-1) < target
@@ -41,8 +40,7 @@ public fun test_local_smaller_than_shared() {
         token_decimals,
         price,
         price_decimals,
-        target_value,
-        shared_decimals
+        target_value
     );
 
     let value = normalize_value((price as u128) * (amt as u128), token_decimals + price_decimals, shared_decimals);
@@ -66,8 +64,7 @@ public fun test_local_greater_than_shared() {
         token_decimals,
         price,
         price_decimals,
-        target_value,
-        shared_decimals
+        target_value
     );
 
     let local_decimals: u8 = token_decimals + price_decimals;

@@ -93,6 +93,11 @@ const ManageLP: React.FC<ManageLPProps> = ({ vault }) => {
     const network = process.env.SUI_NETWORK || 'testnet';
     const chainIdentifier: `${string}:${string}` = `sui:${network}`;
 
+    const prefixedVaultCoinType = useMemo(() => {
+        if (!vault?.coin_type) return "";
+        return vault.coin_type.startsWith('0x') ? vault.coin_type : `0x${vault.coin_type}`;
+    }, [vault?.coin_type]);
+
     const lpTokenType = useMemo(() => {
         if (vaultStaticDetails?.lpTokenAddress && SUI_PACKAGE_ID) {
             const prefixedLpTokenAddress = vaultStaticDetails.lpTokenAddress.startsWith('0x') 
@@ -154,13 +159,13 @@ const ManageLP: React.FC<ManageLPProps> = ({ vault }) => {
 
         // Fetch base coin balance and metadata
         try {
-            console.log("Fetching base coin balance and metadata for:", vault.coin_type);
+            console.log("Fetching base coin balance and metadata for:", prefixedVaultCoinType);
             const [coinBalanceResult, coinMetadataResult] = await Promise.all([
                 suiClient.getBalance({
                     owner: currentAccount.address,
-                    coinType: vault.coin_type,
+                    coinType: prefixedVaultCoinType,
                 }),
-                suiClient.getCoinMetadata({ coinType: vault.coin_type })
+                suiClient.getCoinMetadata({ coinType: prefixedVaultCoinType })
             ]);
 
             console.log("Base coin balance raw result:", coinBalanceResult);
@@ -289,7 +294,7 @@ const ManageLP: React.FC<ManageLPProps> = ({ vault }) => {
 
             const coins = await suiClient.getCoins({
                 owner: currentAccount.address,
-                coinType: vault.coin_type,
+                coinType: prefixedVaultCoinType,
             });
 
             if (coins.data.length === 0) {
@@ -306,7 +311,7 @@ const ManageLP: React.FC<ManageLPProps> = ({ vault }) => {
             console.log("Coin: ", actualCoinToDeposit);
             txb.moveCall({
                 target: `${SUI_PACKAGE_ID}::lp::deposit_lp`,
-                typeArguments: [vault.coin_type, retrievedLpTokenAddress],
+                typeArguments: [prefixedVaultCoinType, retrievedLpTokenAddress],
                 arguments: [
                     txb.object(vault.object_id), // vault object
                     txb.object(vaultMarkerAddress), 
@@ -368,7 +373,7 @@ const ManageLP: React.FC<ManageLPProps> = ({ vault }) => {
             const [lpTokenToWithdraw] = txb.splitCoins(inputLpObjects[0], [txb.pure.u64(amountInSmallestUnit.toString())]);
             txb.moveCall({
                 target: `${SUI_PACKAGE_ID}::lp::withdraw_lp`,
-                typeArguments: [vault.coin_type, retrievedLpTokenAddress],
+                typeArguments: [prefixedVaultCoinType, retrievedLpTokenAddress],
                 arguments: [
                     txb.object(vault.object_id), // vault object
                     txb.object(vaultMarkerAddress), 

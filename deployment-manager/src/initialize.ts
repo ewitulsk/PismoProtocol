@@ -18,13 +18,13 @@ dotenv.config();
 const DEPLOYMENT_JSON_PATH = path.resolve(__dirname, '../../contracts/deployment.json');
 const OUTPUT_JSON_PATH = path.resolve(__dirname, '../initialized_deployment.json');
 const SUI_NETWORK: 'mainnet' | 'testnet' | 'devnet' | 'localnet' = 'testnet'; // Or dynamically set via ENV
-const MINT_AMOUNT = 10000000000n; // 10,000 (assuming 6 decimals, adjust if needed)
+const MINT_AMOUNT = 100000000000000000n; // 10,000 (assuming 6 decimals, adjust if needed)
 const RECIPIENT_ADDRESS = () => getSigner().toSuiAddress(); // Mint to self initially
 
 // Placeholders - Adjust these based on your actual setup or configuration source
 const PLACEHOLDER_PRICE_FEED_ID_HEX = 'f9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b'; // 32 bytes = 64 hex chars
 const PLACEHOLDER_ORACLE_FEED_ID = 0; // 0 for Pyth
-const PLACEHOLDER_SHARED_PRICE_DECIMALS = 6; // Example shared decimals
+const PLACEHOLDER_SHARED_PRICE_DECIMALS = 8; // Example shared decimals
 const PLACEHOLDER_MAX_LEVERAGE = 100; // Example leverage
 
 // --- Helper Functions ---
@@ -235,7 +235,7 @@ async function main() {
         arguments: [
             txb.object(adminCapId),
             txb.object(globalObjectId),
-            txb.pure.string(testCoinType),
+            txb.pure.string(testCoinType.startsWith('0x') ? testCoinType.slice(2) : testCoinType),
             txb.pure.u8(testCoinDecimals),
             txb.pure(bcs.vector(bcs.u8()).serialize(priceFeedBytes).toBytes()),
             txb.pure.u16(PLACEHOLDER_ORACLE_FEED_ID),

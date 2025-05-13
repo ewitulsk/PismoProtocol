@@ -1,0 +1,3 @@
+PACKAGE_ID = "0xc5580db421c4c0d337c8ecdceee828c66f24f6bb7c7d7ebfddb80ea2d1a33a2e"
+SUI_RPC_URL = "https://fullnode.testnet.sui.io:443"
+LIQUIDATION_SERVICE_PORT = "3002"

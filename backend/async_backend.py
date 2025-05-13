@@ -363,7 +363,6 @@ async def calc_total_vault_values() -> Dict:
         
         # Extract supported LP tokens and price feed bytes from global object
         global_data = global_object[0]['data']['content']['fields']
-        #print(f"\n\nGLOBAL DATA:\n {global_data}\n")
         supported_lp = global_data.get('supported_lp', [])
         # price_feed_bytes = global_data.get('price_feed_bytes', []) # Removed: This field is now inside TokenIdentifier
 
@@ -389,8 +388,6 @@ async def calc_total_vault_values() -> Dict:
             else:
                 logger.warning(f"Skipping invalid TokenIdentifier in supported_lp: {token_id_obj}")
 
-        #print(f"\nCoin type to token data mapping: {coin_type_to_token_data}\n")
-
         cumulative_vault_total = 0.0
         vault_details = []
         error_occurred = False # Flag to track errors
@@ -403,11 +400,9 @@ async def calc_total_vault_values() -> Dict:
         for vault in vault_objects:
             try:
                 vault_data = vault.get('data', {})
-                #print(vault_data)
                 vault_type = vault_data.get('type', '') # needs changing
                 content = vault_data.get('content', {})
                 fields = content.get('fields', {})
-                #print(f"\n\nFIELDS:\n {fields}\n")
 
                 # Get the vault's balance/amount
                 coin = float(fields.get('coin', 0))
@@ -415,7 +410,9 @@ async def calc_total_vault_values() -> Dict:
 
                 # Parse token type to extract underlying asset information
                 coin_type = await parse_vault_token_type(vault_type)
-                #print(f"\nCOIN_TYPE: {coin_type}\n")
+                
+
+                coin_type = coin_type[2:]
 
                 # Find the token data for this coin type in the mapping
                 if coin_type in coin_type_to_token_data:
@@ -454,7 +451,6 @@ async def calc_total_vault_values() -> Dict:
         # Execute all price feed requests concurrently
         if price_feed_tasks:
             price_feed_results = await asyncio.gather(*price_feed_tasks, return_exceptions=True)
-            #print(f"\n\nPrice feed results:\n {price_feed_results}\n")
 
             # Calculate values using price feed results
             for i, (vault_info, price_result) in enumerate(zip(vault_coin_types, price_feed_results)):
