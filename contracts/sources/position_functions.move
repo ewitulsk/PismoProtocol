@@ -82,7 +82,6 @@ public fun open_position_pyth(
 } 
 
 public fun close_position_pyth(
-    global: &mut Global,
     program: &Program,
     account: &Account,
     stats: &mut AccountStats,

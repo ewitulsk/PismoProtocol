@@ -1,15 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PositionData } from '@/types';
 import { pythPriceFeedService } from '@/utils/pythPriceFeed'; // Import the service
+import { useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit"; // Added
+import { SuiClient } from '@mysten/sui/client'; // Added
+import { SuiPythClient } from '@pythnetwork/pyth-sui-js'; // Added
+import NotificationPopup from '../common/NotificationPopup'; // Added
+import { 
+    closePosition, 
+    PositionDataForClose, 
+    ClosePositionParams, 
+    ClosePositionCallbacks 
+} from '@/lib/transactions/closePosition'; // Added
+import type { MinimalAccountInfo, NotificationState, SupportedCollateralToken } from '@/lib/transactions/depositCollateral'; // Added
 
 // Hardcoded Account ID for now - THIS WILL BE REMOVED
 // const ACCOUNT_ID = "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"; // Remove this line
-const INDEXER_URL = process.env.INDEXER_URL || "http://localhost:3001"; // Fallback for safety
+const INDEXER_URL_CONST = process.env.NEXT_PUBLIC_INDEXER_URL || "http://localhost:3001"; // Fallback for safety, renamed
+const PACKAGE_ID_CONST = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID; // Added
+const PROGRAM_ID_CONST = process.env.NEXT_PUBLIC_SUI_PROGRAM_OBJECT_ID; // Added
+const PYTH_STATE_OBJECT_ID_CONST = process.env.NEXT_PUBLIC_PYTH_STATE_OBJECT_ID; // Added
+const WORMHOLE_STATE_ID_CONST = process.env.NEXT_PUBLIC_WORMHOLE_STATE_OBJECT_ID; // Added
+const HERMES_ENDPOINT_CONST = process.env.NEXT_PUBLIC_HERMES_ENDPOINT; // Added
 
 // --- Define Props Interface ---
 interface CurrentPositionsProps {
-    accountId: string | null;
+    // account: MinimalAccountInfo | null; // Removed, as CurrentPositions will use accountObjectId and accountStatsId directly for transactions
+    accountId: string | null; // Kept for fetching positions (user's wallet address, which might be what /v0/:account_id/positions expects if not protocol ID)
+    accountObjectId: string | null; // Added: Protocol-specific Account object ID
+    accountStatsId: string | null; // Added: Protocol-specific AccountStats object ID
     availableAssets: import('./AssetSelector').SelectableMarketAsset[];
+    supportedCollateral: SupportedCollateralToken[]; 
 }
 
 // --- Helper Functions ---
@@ -96,10 +116,10 @@ const Slider: React.FC<{ value: number; onChange: (value: number) => void; min?:
 };
 
 // Update component to use props
-const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availableAssets }) => {
+const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accountId, accountObjectId, accountStatsId, availableAssets, supportedCollateral }) => {
     const [positions, setPositions] = useState<PositionData[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, number | undefined>>({}); // Allow undefined for loading state
-    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isLoadingData, setIsLoadingData] = useState<boolean>(true); // Renamed from isLoading
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [closingPositionId, setClosingPositionId] = useState<string | null>(null);
@@ -108,25 +128,42 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
     const [modalAmountError, setModalAmountError] = useState<string | null>(null); // State for modal input error
     const subscribedFeedIdsRef = useRef<Set<string>>(new Set());
 
+    // Added state for transactions and notifications
+    const [isLoadingTx, setIsLoadingTx] = useState<boolean>(false);
+    const [notification, setNotification] = useState<NotificationState>(null);
+
+    const suiClient = useSuiClient();
+    const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+    
+    // Initialize Pyth client - ensure PYTH_STATE_OBJECT_ID_CONST and WORMHOLE_STATE_ID_CONST are defined
+    // This initialization might be better if pythClient is passed as a prop if already initialized in a parent.
+    const pythClient = PYTH_STATE_OBJECT_ID_CONST && WORMHOLE_STATE_ID_CONST 
+        ? new SuiPythClient(suiClient, PYTH_STATE_OBJECT_ID_CONST, WORMHOLE_STATE_ID_CONST)
+        : null;
+
     useEffect(() => {
         let isInitialFetch = true; // Flag to distinguish initial load from interval refreshes
 
         const fetchPositionsAndUpdateState = async () => {
-            if (!accountId) {
+            if (!accountObjectId) { 
                 setPositions([]);
-                setIsLoading(false); // Ensure loading is off
+                setIsLoadingData(false); // Ensure loading is off
                 setError(null);
-                isInitialFetch = true; // Reset for next time accountId is available
+                isInitialFetch = true; // Reset for next time accountObjectId is available
                 return;
             }
 
             if (isInitialFetch) {
-                setIsLoading(true);
+                setIsLoadingData(true);
                 setError(null);
             }
 
             try {
-                const response = await fetch(`${INDEXER_URL}/v0/${accountId}/positions`);
+                const accountIdForUrl = accountObjectId.startsWith('0x') 
+                    ? accountObjectId 
+                    : '0x' + accountObjectId;
+                
+                const response = await fetch(`${INDEXER_URL_CONST}/v0/${accountIdForUrl}/positions`); 
                 if (!response.ok) {
                     const errorMsg = `HTTP error! status: ${response.status}`;
                     if (isInitialFetch) {
@@ -153,7 +190,7 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                 }
             } finally {
                 if (isInitialFetch) {
-                    setIsLoading(false);
+                    setIsLoadingData(false);
                     isInitialFetch = false; // Subsequent calls are background refreshes
                 }
             }
@@ -165,7 +202,7 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
         return () => {
             clearInterval(intervalId); // Clear interval on cleanup
         };
-    }, [accountId]); // Re-run effect if accountId changes
+    }, [accountObjectId]); // Update dependency array to use accountObjectId
 
     useEffect(() => {
         const requiredFeedIds = new Set(positions.map(p => {
@@ -325,19 +362,69 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
         }
     };
 
-    const handleConfirmClose = () => {
-        const closeAmountBaseUnits = Math.round(parseFloat(modalCloseAmount) * (10 ** modalDecimals));
-        if (isNaN(closeAmountBaseUnits) || closeAmountBaseUnits < 0 || (parseFloat(modalCloseAmount) > 0 && closeAmountBaseUnits === 0)) {
-             console.error("Invalid amount calculated for closing:", modalCloseAmount, closeAmountBaseUnits);
-             setModalAmountError("Invalid closing amount calculated.");
-             return;
+    const handleConfirmClose = async () => { // Made async
+        if (!positionToClose) {
+            setNotification({ show: true, message: "No position selected for closing.", type: 'error' });
+            return;
         }
-        // TODO: Implement actual transaction submission using closeAmountBaseUnits
-        closeModal();
+
+        // Log the values being checked
+        console.log("Checking required data for closePosition:", {
+            // account, // Removed from log
+            accountObjectId,
+            accountStatsId,
+            PACKAGE_ID_CONST,
+            PROGRAM_ID_CONST,
+            PYTH_STATE_OBJECT_ID_CONST,
+            WORMHOLE_STATE_ID_CONST,
+            HERMES_ENDPOINT_CONST,
+            pythClient: !!pythClient, // Log boolean to see if it exists
+        });
+
+        if (/*!account ||*/ !accountObjectId || !accountStatsId || !PACKAGE_ID_CONST || !PROGRAM_ID_CONST || !PYTH_STATE_OBJECT_ID_CONST || !WORMHOLE_STATE_ID_CONST || !HERMES_ENDPOINT_CONST || !pythClient) {
+            setNotification({ show: true, message: "Required configuration or account details are missing.", type: 'error' });
+            return;
+        }
+
+        const positionDataForClose: PositionDataForClose = {
+            position_id: positionToClose.position_id,
+            price_feed_id_bytes: positionToClose.price_feed_id_bytes.startsWith('0x') 
+                ? positionToClose.price_feed_id_bytes 
+                : '0x' + positionToClose.price_feed_id_bytes,
+        };
+
+        const params: ClosePositionParams = {
+            accountObjectId: accountObjectId!, // Assert non-null as it's checked above
+            accountStatsId: accountStatsId!,   // Assert non-null
+            packageId: PACKAGE_ID_CONST!,
+            programId: PROGRAM_ID_CONST!,
+            pythStateObjectId: PYTH_STATE_OBJECT_ID_CONST!,
+            wormholeStateId: WORMHOLE_STATE_ID_CONST!,
+            hermesEndpoint: HERMES_ENDPOINT_CONST!,
+            pythClient,
+            indexerUrl: INDEXER_URL_CONST,
+            positionToClose: positionDataForClose,
+            supportedCollateral, // Passed from props
+            suiClient,
+            signAndExecuteTransaction,
+        };
+
+        const callbacks: ClosePositionCallbacks = {
+            setNotification,
+            setIsLoadingTx,
+            onSuccess: (digest) => {
+                console.log(`Position closed successfully with digest: ${digest}`);
+                // Optionally, trigger a refresh of positions here
+                // fetchPositionsAndUpdateState(); // This function is defined in useEffect, might need to lift it or pass a refresh callback
+                closeModal(); // Close modal on success
+            }
+        };
+
+        await closePosition(params, callbacks);
     };
 
-    // Conditional rendering if accountId is not available
-    if (!accountId) {
+    // Conditional rendering if accountObjectId is not available
+    if (!accountObjectId) {
         return (
             <section className="mt-8">
                 <h2 className="text-xl font-semibold text-primaryText mb-4 pl-4">Your Positions</h2>
@@ -350,9 +437,17 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
 
     return (
         <section className="mt-8">
+            {notification?.show && (
+                <NotificationPopup
+                    message={notification.message}
+                    type={notification.type}
+                    digest={notification.digest}
+                    onClose={() => setNotification(null)}
+                />
+            )}
             <h2 className="text-xl font-semibold text-primaryText mb-4 pl-4">Your Positions</h2>
             <div className="space-y-4">
-                {isLoading ? (
+                {isLoadingData ? (
                     <p className="text-secondaryText text-center py-4">Loading positions...</p>
                 ) : error ? (
                     <p className="text-red-500 text-center py-4">Error loading positions: {error}</p>
@@ -507,9 +602,9 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                                 className="btn-action flex-1 py-2 px-4"
                                 onClick={handleConfirmClose}
                                 // Disable confirm if there's an error, amount is empty, zero, negative, or exceeds max (redundant check, but safe)
-                                disabled={!!modalAmountError || !modalCloseAmount || parseFloat(modalCloseAmount) <= 0 || parseFloat(modalCloseAmount) > totalPositionAmount || isLoading}
+                                disabled={isLoadingTx || !positionToClose } // Simplified: only disable if tx in progress or no position
                             >
-                                Confirm Close
+                                {isLoadingTx ? "Processing..." : "Confirm Full Close"} {/* Button text updated for clarity */}
                             </button>
                         </div>
                     </div>
