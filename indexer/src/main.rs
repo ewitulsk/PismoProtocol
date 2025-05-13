@@ -14,6 +14,7 @@ mod db;
 mod events;
 mod handlers;
 mod router;
+mod callbacks;
 mod worker; // Uncomment worker module
 
 // Use the modules
@@ -25,6 +26,8 @@ use crate::db::repositories::{
     new_account_event::NewAccountEventRepository,
     collateral_deposit_event::CollateralDepositEventRepository,
     start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository,
+    collateral_transfer::CollateralTransferRepository,
+    vault_transfer::VaultTransferRepository,
 };
 use crate::router::create_router;
 use crate::worker::PositionEventWorker;
@@ -63,6 +66,8 @@ async fn main() -> Result<()> {
     let new_account_repo = Arc::new(NewAccountEventRepository::new(db_pool.clone()));
     let collateral_deposit_repo = Arc::new(CollateralDepositEventRepository::new(db_pool.clone()));
     let start_collateral_value_assertion_repo = Arc::new(StartCollateralValueAssertionEventRepository::new(db_pool.clone()));
+    let collateral_transfer_repo = Arc::new(CollateralTransferRepository::new(db_pool.clone()));
+    let vault_transfer_repo = Arc::new(VaultTransferRepository::new(db_pool.clone()));
     info!("Repositories initialized.");
 
     // Worker
@@ -73,7 +78,9 @@ async fn main() -> Result<()> {
         new_account_repo.clone(),
         collateral_deposit_repo.clone(),
         start_collateral_value_assertion_repo.clone(),
-        config.package_id.clone(),
+        collateral_transfer_repo.clone(),
+        vault_transfer_repo.clone(),
+        &config
     );
     info!("PositionEventWorker initialized.");
 

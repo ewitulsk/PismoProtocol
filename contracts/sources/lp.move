@@ -21,6 +21,8 @@ use pismo_protocol::tokens::{get_value_pyth, TokenIdentifier};
 
 /// Error code for when a vault is not found for a given token info
 const E_VAULT_NOT_FOUND: u64 = 1;
+const E_INSUFFICIENT_VAULT_MARKER_BALANCE: u64 = 2;
+const E_VAULT_TRANSFER_ALREADY_FILLED: u64 = 3;
 
 public struct LPToken<phantom CoinType> has drop, store {}
 
@@ -29,6 +31,14 @@ public struct VaultCreatedEvent has copy, drop, store {
     vault_marker_address: address,
     coin_token_info: String,
     lp_token_info: String,
+}
+
+public struct VaultTransferCreated has copy, drop, store {
+    transfer_id: address,
+    vault_marker_id: address,
+    vault_address: address,
+    amount: u64,
+    to_user_address: address
 }
 
 // When a vault transfer is created, it becomes a shared object. But it is referenced in a Vault Marker.
@@ -45,7 +55,7 @@ public struct VaultMarker has key, store {
     vault_amount: u64, //We need to ensure that any time we reference a vaults value, we use this instead of the vault.
     vault_value: u128,
     vault_value_set_timestamp_ms: u64,
-    transfers: vector<VaultTransfer>,
+    // transfers: vector<VaultTransfer>,
     token_id: TokenIdentifier
 }
 
@@ -79,7 +89,7 @@ public entry fun init_lp_vault<CoinType, LPType>(_: &AdminCap, global: &mut Glob
         vault_amount: 0,
         vault_value: 0,
         vault_value_set_timestamp_ms: 0,
-        transfers: vector::empty(),
+        // transfers: vector::empty(),
         token_id
     };
 
@@ -182,11 +192,12 @@ public(package) fun deposit_coin<CoinType, LPType>(
 
 //We don't need to substract from the vault marker, it has already been subtracted from.
 //We need to make a execute_vault_transfer_to_collateral. We just need to put it into a seperate file.
-public(package) fun execute_vault_transfer<CoinType, LPType>(
+public fun execute_vault_transfer<CoinType, LPType>(
     vault: &mut Vault<CoinType, LPType>,
     transfer: &mut VaultTransfer,
     ctx: &mut TxContext
 ){
+    assert!(!transfer.fufilled, E_VAULT_TRANSFER_ALREADY_FILLED);
     let amount = transfer.amount;
     assert!(vault.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = vault.coin.split(amount);
@@ -249,15 +260,26 @@ public(package) fun remove_amount(marker: &mut VaultMarker, amount: u64) {
 }
 
 public(package) fun create_vault_transfer(marker: &mut VaultMarker, amount: u64, to_user_address: address, ctx: &mut TxContext){
+    let transfer_id_object = object::new(ctx);
+    let transfer_id_address = object::uid_to_address(&transfer_id_object);
     let transfer = VaultTransfer {
-        id: object::new(ctx),
+        id: transfer_id_object,
         amount,
         fufilled: false,
         to_user_address,
     };
 
-    vector::push_back(&mut marker.transfers, transfer);
+    assert!(marker.vault_amount >= amount, E_INSUFFICIENT_VAULT_MARKER_BALANCE);
+    transfer::share_object(transfer);
     marker.vault_amount = marker.vault_amount - amount;
+
+    event::emit(VaultTransferCreated {
+        transfer_id: transfer_id_address,
+        vault_marker_id: object::uid_to_address(&marker.id),
+        vault_address: marker.vault_id,
+        amount,
+        to_user_address
+    });
 }
 
 

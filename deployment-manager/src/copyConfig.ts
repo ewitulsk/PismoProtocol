@@ -16,6 +16,7 @@ const frontendConfigPath = path.resolve(__dirname, '../../frontend/config.toml')
 // Assuming indexer config filename might change based on network, but for now updates testnet.toml
 // TODO: Potentially adjust logic if indexer needs dynamic filename (e.g., mainnet.toml)
 const indexerConfigPath = path.resolve(__dirname, '../../indexer/config/testnet.toml');
+const liquidationServiceConfigPath = path.resolve(__dirname, '../../liquidation_transfer_service/config/config.toml');
 
 // URL templates - add more networks if needed
 const urlTemplates = {
@@ -101,6 +102,44 @@ async function updateIndexerConfig(info: DeploymentInfo) {
   }
 }
 
+async function updateLiquidationServiceConfig(info: DeploymentInfo) {
+  try {
+    const suiApiUrl = formatUrl(urlTemplates.suiApi, info.network);
+    let configContent: TOML.JsonMap = {};
+
+    try {
+      const configFile = await fs.readFile(liquidationServiceConfigPath, 'utf-8');
+      configContent = TOML.parse(configFile) as TOML.JsonMap;
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not read or parse existing ${path.basename(liquidationServiceConfigPath)}. A new one will be created. Error: ${error.message}`);
+      }
+      // Initialize with a default structure or let it be created by new values.
+      // For safety, ensure necessary keys are present if creating new or overwriting significantly.
+      configContent = {
+        PACKAGE_ID: '', // Placeholder, will be overwritten
+        SUI_RPC_URL: '', // Placeholder, will be overwritten
+        LIQUIDATION_SERVICE_PORT: '3000', // Default, can be preserved or updated if needed
+        // Add other expected keys with defaults if the file might be missing them
+      };
+    }
+
+    const updatedConfig = {
+      ...configContent, // Preserve existing values not explicitly updated
+      PACKAGE_ID: info.packageId,
+      SUI_RPC_URL: suiApiUrl,
+      // LIQUIDATION_SERVICE_PORT is managed by the service itself or can be set here if desired.
+      // If it has a default in the toml, we can choose to preserve it or override.
+      // For now, we only update PACKAGE_ID and SUI_RPC_URL.
+    };
+
+    await fs.writeFile(liquidationServiceConfigPath, TOML.stringify(updatedConfig));
+    console.log(`Successfully updated ${path.basename(liquidationServiceConfigPath)}`);
+  } catch (error) {
+    console.error(`Error updating ${path.basename(liquidationServiceConfigPath)}:`, error);
+  }
+}
+
 async function main() {
   console.log('Starting configuration copy process...');
   try {
@@ -114,6 +153,7 @@ async function main() {
       updateBackendConfig(deploymentInfo),
       updateFrontendConfig(deploymentInfo),
       updateIndexerConfig(deploymentInfo),
+      updateLiquidationServiceConfig(deploymentInfo),
     ]);
 
     console.log('Configuration copy process finished.');

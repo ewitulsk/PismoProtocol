@@ -1,4 +1,7 @@
 use serde::Deserialize;
+use anyhow::Result;
+use sui_types::base_types::SuiAddress;
+use hex;
 
 /// Mirrors the pismo_protocol::positions::PositionType enum
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -27,4 +30,8 @@ pub(super) fn transfer_to_string(tt: TransferTo) -> String {
         TransferTo::Vault => "Vault".to_string(),
         TransferTo::User => "User".to_string(),
     }
+}
+
+pub fn convert_sui_address_to_hex_string(address: SuiAddress) -> Result<String> {
+    Ok(format!("0x{}", hex::encode(address)))
 } 

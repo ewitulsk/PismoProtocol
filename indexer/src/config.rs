@@ -10,6 +10,7 @@ pub struct Config {
     pub start_checkpoint: u64,
     pub concurrency: usize,
     pub listen_addr: String,
+    pub liquidation_transfer_service_url: String,
 }
 
 impl Config {

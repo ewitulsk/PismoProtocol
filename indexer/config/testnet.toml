@@ -1,6 +1,7 @@
 database_url = "postgresql://postgres:postgres@localhost:7654/indexer"
-package_id = "0x384dbd91edba98aabcf1e9a089decc2c3972fa2cf90f836456f5000b72fc3fff"
+package_id = "0xc5580db421c4c0d337c8ecdceee828c66f24f6bb7c7d7ebfddb80ea2d1a33a2e"
 remote_store_url = "https://checkpoints.testnet.sui.io"
-start_checkpoint = 195_730_637
+start_checkpoint = 197_559_033
 concurrency = 5
 listen_addr = "0.0.0.0:3001"
+liquidation_transfer_service_url = "http://localhost:3002"

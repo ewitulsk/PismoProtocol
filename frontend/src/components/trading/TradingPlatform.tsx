@@ -17,12 +17,16 @@ import {
 } from "@mysten/dapp-kit";
 import { PaginatedObjectsResponse, SuiObjectData, SuiClient, getFullnodeUrl, SuiObjectResponse } from '@mysten/sui/client';
 import { bytesToHex } from '@noble/hashes/utils'; // For converting price_feed_id_bytes
+import type { MinimalAccountInfo, SupportedCollateralToken as ExtSupportedCollateralToken, NotificationState as ExtNotificationState } from '../../lib/transactions/depositCollateral'; // Added for supportedCollateral type
 
 const PACKAGE_ID = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID;
 const PROGRAM_OBJECT_ID = process.env.NEXT_PUBLIC_SUI_PROGRAM_OBJECT_ID;
 const ACCOUNT_TYPE = PACKAGE_ID ? `${PACKAGE_ID}::accounts::Account` : undefined;
 const PROGRAM_TYPE = PACKAGE_ID ? `${PACKAGE_ID}::programs::Program` : undefined;
 const PUBLIC_NETWORK_NAME = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'devnet' | 'mainnet' | 'localnet'; 
+const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL; // Added for fetching accountStatsId
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL; // Added for fetching supportedCollateral
+
 interface TokenIdentifier {
     token_info: string;
     token_decimals: number;
@@ -55,9 +59,33 @@ try {
     // Fallback or handle error appropriately - maybe use a default client if DAppKit provides one without wallet
 }
 
+// Type matching the backend /api/supportedCollateral response structure (from ActionTabs)
+// Renaming to avoid conflict if ActionTabs also defines it, though it should be the same.
+type FetchedSupportedCollateralToken = ExtSupportedCollateralToken;
+
+// Type to store fetched collateral data along with a user-friendly name (from ActionTabs)
+type CollateralInfo = FetchedSupportedCollateralToken & {
+    name: string; // User-friendly name like 'SUI', 'USDC'
+};
+
+// Function to extract a readable name from the token_info type string (from ActionTabs)
+const getTokenNameFromType = (typeString: string): string => {
+  const parts = typeString.split('::');
+  return parts[parts.length - 1] || typeString; 
+};
+
 const TradingPlatform: React.FC = () => {
   const [accountObjectId, setAccountObjectId] = useState<string | null>(null);
-  const [isLoadingAccountObject, setIsLoadingAccountObject] = useState<boolean>(true);
+  const [isLoadingAccountObject, setIsLoadingAccountObject] = useState<boolean>(true); // Covers fetching accountObjectId
+  
+  // Added state for accountStatsId
+  const [accountStatsId, setAccountStatsId] = useState<string | null>(null);
+  const [isFetchingStatsId, setIsFetchingStatsId] = useState<boolean>(false); // Loading state for statsId
+
+  // Added state for supportedCollateral
+  const [supportedCollateral, setSupportedCollateral] = useState<CollateralInfo[]>([]);
+  const [isLoadingCollateral, setIsLoadingCollateral] = useState(true);
+  const [collateralError, setCollateralError] = useState<string | null>(null);
 
   // State for market assets
   const [availableAssets, setAvailableAssets] = useState<SelectableMarketAsset[]>([]);
@@ -66,11 +94,15 @@ const TradingPlatform: React.FC = () => {
   const [programError, setProgramError] = useState<string | null>(null);
 
   // Hooks for account object fetching (moved from ActionTabs)
-  const account = useCurrentAccount();
+  const currentWalletAccount = useCurrentAccount(); // Renamed from account to avoid conflict with MinimalAccountInfo state
+  const [account, setAccount] = useState<MinimalAccountInfo | null>(null); // State for MinimalAccountInfo
   const { 
     connectionStatus, 
     currentWallet 
   } = useCurrentWallet();
+
+  // Combined loading state for all critical user and protocol account details
+  const isLoadingAccountDetails = !account || isLoadingAccountObject || isFetchingStatsId;
 
   // Log environment variables and network status
   useEffect(() => {
@@ -88,7 +120,23 @@ const TradingPlatform: React.FC = () => {
     console.log("  PROGRAM_OBJECT_ID (from env):", process.env.NEXT_PUBLIC_SUI_PROGRAM_OBJECT_ID);
     console.log("  Effective PROGRAM_OBJECT_ID used in query:", PROGRAM_OBJECT_ID);
     console.log("  Effective PROGRAM_TYPE used in query:", PROGRAM_TYPE);
-  }, [connectionStatus, currentWallet]);
+    // Log loading states
+    console.log("[TradingPlatform] Loading states:", { isLoadingAccountObject, isFetchingStatsId, isLoadingProgram, isLoadingAccountDetails });
+    console.log("[TradingPlatform] Account details:", { account, accountObjectId, accountStatsId });
+  }, [connectionStatus, currentWallet, isLoadingAccountObject, isFetchingStatsId, isLoadingProgram, isLoadingAccountDetails, account, accountObjectId, accountStatsId]); // Add all relevant states to see changes
+
+  useEffect(() => {
+    if (currentWalletAccount) {
+        setAccount({ 
+            address: currentWalletAccount.address, 
+            // Optional: chains, features, icon, label, publicKey if needed and available
+            // If MinimalAccountInfo only needs address, this is simpler:
+            // { address: currentWalletAccount.address }
+         });
+    } else {
+        setAccount(null);
+    }
+  }, [currentWalletAccount]);
 
   // Fetch Account object (wallet-dependent)
   const { data: ownedAccountObject, isLoading: isLoadingOwnedAccountObjectQuery } = useSuiClientQuery(
@@ -127,17 +175,62 @@ const TradingPlatform: React.FC = () => {
     }
   }, [account, connectionStatus, ownedAccountObject, isLoadingOwnedAccountObjectQuery, accountObjectId]);
 
+  // Fetch AccountStats ID when Account Object ID is known (logic from ActionTabs)
+  useEffect(() => {
+    if (!accountObjectId || !account) { // Ensure account (MinimalAccountInfo) is also available
+        setAccountStatsId(null); 
+        return;
+    }
+    // Avoid re-fetching if already present or in progress
+    if (accountStatsId && !isFetchingStatsId) return; 
+
+    const fetchAccountStatsId = async () => {
+        console.log(`[TradingPlatform] Fetching account stats for account object ID: ${accountObjectId}`);
+        setIsFetchingStatsId(true);
+        try {
+            const accountIdForUrl = accountObjectId.startsWith('0x')
+                ? accountObjectId.substring(2)
+                : accountObjectId;
+            const response = await fetch(`${INDEXER_URL}/v0/accounts/${accountIdForUrl}`);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
+                 throw new Error(errorData.error || `Failed to fetch account stats: ${response.status}`);
+            }
+            const data = await response.json();
+            if (data && typeof data.stats_id === 'string' && data.stats_id) {
+                const statsIdWithPrefix = data.stats_id.startsWith('0x') ? data.stats_id : '0x' + data.stats_id;
+                setAccountStatsId(statsIdWithPrefix);
+                console.log("[TradingPlatform] AccountStatsId set to:", statsIdWithPrefix);
+            } else {
+                 console.error("[TradingPlatform] Account stats ID not found or invalid in response:", data);
+                 setAccountStatsId(null); // Explicitly set to null
+                 // throw new Error("Account stats ID not found or invalid in response."); // Optional: throw to show error to user
+            }
+        } catch (error) {
+            console.error('[TradingPlatform] Error fetching account stats ID:', error);
+            setAccountStatsId(null);
+        } finally {
+            setIsFetchingStatsId(false);
+        }
+    };
+    fetchAccountStatsId();
+  }, [accountObjectId, account, accountStatsId, isFetchingStatsId]); // Added dependencies
+
   // Fetch the Program object using the read-only client
   useEffect(() => {
     if (!PROGRAM_OBJECT_ID || !PROGRAM_TYPE || !readOnlySuiClient) {
       setProgramError("Program configuration or read-only client not available.");
       setIsLoadingProgram(false);
+      setSupportedCollateral([]); // Clear on error
       return;
     }
 
     let isMounted = true;
     setIsLoadingProgram(true);
     setProgramError(null);
+    setAvailableAssets([]); // Clear previous assets
+    setSelectedAsset(null); // Clear selected asset
+    setSupportedCollateral([]); // Clear previous supported collateral
 
     readOnlySuiClient.getObject({
       id: PROGRAM_OBJECT_ID,
@@ -160,6 +253,7 @@ const TradingPlatform: React.FC = () => {
         setProgramError(`Failed to load market configurations: ${errorMessage}`);
         setAvailableAssets([]);
         setSelectedAsset(null);
+        setSupportedCollateral([]); // Clear on error
         return; 
       }
 
@@ -175,6 +269,7 @@ const TradingPlatform: React.FC = () => {
             setProgramError("Market configuration has invalid supported_positions.");
             setAvailableAssets([]);
             setSelectedAsset(null);
+            setSupportedCollateral([]); // Clear on error
           } else {
             const assets: SelectableMarketAsset[] = fields.supported_positions.map((tokenWrapper: TokenIdentifierWrapper, index) => {
               console.log(`[TradingPlatform] Processing tokenWrapper at index ${index}:`, JSON.stringify(tokenWrapper)); 
@@ -237,8 +332,70 @@ const TradingPlatform: React.FC = () => {
             if (assets.length > 0 && !selectedAsset) {
               setSelectedAsset(assets[0]);
             }
-            setProgramError(null);
           }
+
+          // Process supported_collateral (NEW LOGIC)
+          if (!fields.supported_collateral || !Array.isArray(fields.supported_collateral)) {
+            console.error("[TradingPlatform] fields.supported_collateral is not an array or is undefined.");
+            // Optionally set a specific error or warning if collateral is critical and missing
+            // setProgramError("Market configuration has invalid supported_collateral."); 
+            setSupportedCollateral([]); // Ensure it's an empty array if invalid
+          } else {
+            const processedCollateral: CollateralInfo[] = fields.supported_collateral.map((tokenWrapper: TokenIdentifierWrapper, index) => {
+              console.log(`[TradingPlatform] Processing supported_collateral tokenWrapper at index ${index}:`, JSON.stringify(tokenWrapper));
+              if (!tokenWrapper || typeof tokenWrapper.fields !== 'object' || tokenWrapper.fields === null) {
+                console.warn(`[TradingPlatform] supported_collateral tokenWrapper at index ${index} is invalid or missing .fields:`, tokenWrapper);
+                // Return a shape that can be filtered out or handled, or skip
+                return null;
+              }
+              const tokenIdentifierFields = tokenWrapper.fields;
+              if (!Array.isArray(tokenIdentifierFields.price_feed_id_bytes)) {
+                console.warn(`[TradingPlatform] supported_collateral Token at index ${index} has invalid price_feed_id_bytes:`, tokenIdentifierFields.price_feed_id_bytes);
+                return null;
+              }
+              let priceFeedIdHex;
+              try {
+                if (!tokenIdentifierFields.price_feed_id_bytes.every(item => typeof item === 'number')) {
+                    throw new Error('price_feed_id_bytes contains non-numeric elements for collateral');
+                }
+                priceFeedIdHex = "0x" + bytesToHex(Uint8Array.from(tokenIdentifierFields.price_feed_id_bytes));
+              } catch (e: any) {
+                console.error(`[TradingPlatform] Error converting price_feed_id_bytes for supported_collateral at index ${index}:`, e.message);
+                return null;
+              }
+              
+              // Normalize token_info to ensure 0x prefix for addresses
+              let normalizedTokenInfo = tokenIdentifierFields.token_info;
+              const parts = normalizedTokenInfo.split('::');
+              if (parts.length > 1 && /^[0-9a-fA-F]+$/.test(parts[0]) && !parts[0].startsWith('0x')) {
+                  parts[0] = '0x' + parts[0];
+                  normalizedTokenInfo = parts.join('::');
+                  console.log(`[TradingPlatform] Normalized token_info for collateral from "${tokenIdentifierFields.token_info}" to "${normalizedTokenInfo}"`);
+              }
+
+              // Construct the CollateralInfo object
+              // Note: ExtSupportedCollateralToken has 'fields.token_info', 'fields.token_decimals', etc.
+              // The CollateralInfo adds a 'name'.
+              const collateralEntry: CollateralInfo = {
+                type: tokenWrapper.type, // Store the full type if needed, e.g., for matching with ActionTabs
+                fields: {
+                    token_info: normalizedTokenInfo, // Use normalized string
+                    token_decimals: typeof tokenIdentifierFields.token_decimals === 'number' ? tokenIdentifierFields.token_decimals : 0,
+                    price_feed_id_bytes: tokenIdentifierFields.price_feed_id_bytes, // Keep original bytes if needed by other parts
+                    price_feed_id_bytes_hex: priceFeedIdHex, // Add the hex version
+                    oracle_feed: tokenIdentifierFields.oracle_feed,
+                    deprecated: tokenIdentifierFields.deprecated,
+                },
+                name: getTokenNameFromType(normalizedTokenInfo) // Use normalized string for name generation too
+              };
+              return collateralEntry;
+            }).filter(Boolean) as CollateralInfo[]; // Filter out any nulls from mapping invalid entries
+            
+            console.log("[TradingPlatform] Processed supported_collateral:", JSON.stringify(processedCollateral));
+            setSupportedCollateral(processedCollateral);
+          }
+          setProgramError(null); // Clear general program error if both positions and collateral are processed (even if one is empty due to specific issues)
+
         } else {
           // Object is a Move object, but not the type we expected
           const msg = `Program object (${PROGRAM_OBJECT_ID}) on ${PUBLIC_NETWORK_NAME} has unexpected type. Expected: ${PROGRAM_TYPE}, Got: ${moveObject.type}`;
@@ -246,6 +403,7 @@ const TradingPlatform: React.FC = () => {
           setProgramError(msg);
           setAvailableAssets([]);
           setSelectedAsset(null);
+          setSupportedCollateral([]); // Clear on error
         }
       } else {
         // Object not found, or content is not a Move object (e.g., it's a package or raw data)
@@ -255,12 +413,14 @@ const TradingPlatform: React.FC = () => {
         setProgramError(msg);
         setAvailableAssets([]);
         setSelectedAsset(null);
+        setSupportedCollateral([]); // Clear on error
       }
     }).catch(error => {
       if (!isMounted) return;
       console.error("[TradingPlatform] Exception fetching Program object (readOnlyClient):", error);
       const message = error instanceof Error ? error.message : String(error);
       setProgramError(`Exception loading market configurations: ${message}`);
+      setSupportedCollateral([]); // Clear on error
     }).finally(() => {
       if (isMounted) {
         setIsLoadingProgram(false);
@@ -268,7 +428,7 @@ const TradingPlatform: React.FC = () => {
     });
 
     return () => { isMounted = false; };
-  }, [selectedAsset]); // PUBLIC_NETWORK_NAME, PROGRAM_OBJECT_ID, PROGRAM_TYPE are stable after init
+  }, []); // Changed dependency array to [] to fetch once on mount
 
   const handleAssetSelect = (asset: SelectableMarketAsset) => {
     setSelectedAsset(asset);
@@ -330,13 +490,21 @@ const TradingPlatform: React.FC = () => {
               <ActionTabs
                 account={account}
                 accountObjectId={accountObjectId}
-                isLoadingAccount={isLoadingAccountObject}
+                accountStatsId={accountStatsId}
+                isLoadingAccount={isLoadingAccountDetails}
+                supportedCollateral={supportedCollateral}
                 selectedMarketIndex={selectedAsset?.marketIndex}
                 selectedMarketPriceFeedId={selectedAsset?.priceFeedId}
               />
             </aside>
           </div>
-          <CurrentPositions accountId={accountObjectId} availableAssets={availableAssets} />
+          <CurrentPositions 
+            accountId={account?.address || null}
+            accountObjectId={accountObjectId}
+            accountStatsId={accountStatsId}
+            availableAssets={availableAssets} 
+            supportedCollateral={supportedCollateral}
+          />
         </section>
       </div>
     </Layout>

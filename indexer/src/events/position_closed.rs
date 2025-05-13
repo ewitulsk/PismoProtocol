@@ -18,8 +18,8 @@ pub struct PositionClosedEvent {
     pub entry_price_decimals: u8,
     pub close_price: u64,
     pub close_price_decimals: u8,
-    pub price_delta: u64,
-    pub transfer_amount: u64,
+    pub price_delta: u128,
+    pub transfer_amount: u128,
     pub transfer_to: TransferTo,
     pub account_id: [u8; 32],
 }
@@ -46,9 +46,9 @@ impl PositionClosedEvent {
             close_price: BigDecimal::from_u64(self.close_price)
                 .context("Failed to convert close_price to BigDecimal")?,
             close_price_decimals: self.close_price_decimals as i32,
-            price_delta: BigDecimal::from_u64(self.price_delta)
+            price_delta: BigDecimal::from_u128(self.price_delta)
                 .context("Failed to convert price_delta to BigDecimal")?,
-            transfer_amount: BigDecimal::from_u64(self.transfer_amount)
+            transfer_amount: BigDecimal::from_u128(self.transfer_amount)
                 .context("Failed to convert transfer_amount to BigDecimal")?,
             transfer_to: super::common::transfer_to_string(self.transfer_to),
             account_id: format!("0x{}", hex::encode(self.account_id)),

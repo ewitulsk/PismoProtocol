@@ -14,10 +14,12 @@ use sui::tx_context::TxContext;
 use sui::event;
 
 use std::vector;
+use std::u128::pow;
 
 use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth, get_price_pyth};
 use pismo_protocol::main::{Self, AdminCap, Global};
 use pismo_protocol::programs::Program;
+use std::u128;
 
 const E_BAD_POSITION: u64 = 225;
 const E_INVALID_POSITION_TOKEN_INDEX: u64 = 226;
@@ -43,7 +45,7 @@ public struct PositionClosedEvent has copy, drop {
     entry_price_decimals: u8,
     close_price: u64,
     close_price_decimals: u8,
-    price_delta: u64,
+    price_delta: u128,
     transfer_amount: u128,
     transfer_to: TransferTo,
     account_id: address
@@ -203,7 +205,7 @@ public(package) fun close_position_internal(
     position: Position,
     close_price: u64,
     close_price_decimals: u8,
-    supported_positions_token_i: u64,
+    supported_positions_token_i: u64
 ): TransferData {    
     let Position {
         id,
@@ -220,16 +222,19 @@ public(package) fun close_position_internal(
 
     assert!(pos_token_i == supported_positions_token_i, 0);
 
+    let close_price_u128 = (close_price as u128);
+    let entry_price_u128 = (entry_price as u128);
+
     let sign: Sign;
-    let price_delta = if (entry_price > close_price) {
-        sign = Sign::Positive;
-        entry_price - close_price
-    } else {
+    let price_delta_pre_decimals = if (entry_price > close_price) {
         sign = Sign::Negative;
-        close_price - entry_price
+        (entry_price_u128 * pow(10, close_price_decimals)) - (close_price_u128 * (pow(10, entry_price_decimals)))
+    } else {
+        sign = Sign::Positive;
+        ((close_price_u128 * pow(10, entry_price_decimals)) - (entry_price_u128 * pow(10, close_price_decimals)))
     };
 
-    let transfer_amount = (price_delta as u128) * (amount as u128) * (leverage_multiplier as u128);
+    let transfer_amount = ((price_delta_pre_decimals as u128) * (amount as u128) * (leverage_multiplier as u128) * pow(10, entry_price_decimals)) / (entry_price_u128 * (pow(10, entry_price_decimals) * pow(10, close_price_decimals)));
 
     let transfer_data = match (position_type) {
         PositionType::Long => {
@@ -282,7 +287,7 @@ public(package) fun close_position_internal(
         entry_price_decimals,
         close_price,
         close_price_decimals,
-        price_delta,
+        price_delta: price_delta_pre_decimals,
         transfer_amount: transfer_data.amount,
         transfer_to: transfer_data.transfer_to,
         account_id
