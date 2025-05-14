@@ -188,9 +188,15 @@ export const closePosition = async (
         const markerId = normalizeSuiObjectId(Buffer.from(asset.collateral_marker_id).toString('hex'));
         
         // Access token_address, which is now type-correct due to FetchedCollateralAsset interface
-        const tokenInfo = asset && asset.token_id && typeof asset.token_id.token_address === 'string' 
+        let tokenInfo = asset && asset.token_id && typeof asset.token_id.token_address === 'string' 
             ? asset.token_id.token_address 
             : ''; 
+        
+        // Ensure tokenInfo starts with 0x
+        if (tokenInfo && !tokenInfo.startsWith('0x')) {
+            tokenInfo = '0x' + tokenInfo;
+            console.log(`[closePosition] Collateral: Prepended '0x' to tokenInfo, now: '${tokenInfo}'`);
+        }
         
         // console.log(`[closePosition] Collateral: Attempting to find feed for tokenInfo (using account_address for linter): '${tokenInfo}' (Marker: ${markerId})`);
         // Revert to original log now that type is fixed:

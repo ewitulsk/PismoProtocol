@@ -1,6 +1,6 @@
 database_url = "postgresql://postgres:postgres@localhost:7654/indexer"
-package_id = "0x6a542a609c2bcf17add8f9ae2aa58015811b1b259e7d0ed1cdf7723f16a0e0f8"
+package_id = "0xb30cbea87357343b279887389af76ed1f0a9656cef7a9840ca6cdc5f3ec16d05"
 remote_store_url = "https://checkpoints.testnet.sui.io"
-start_checkpoint = 195_395_611
+start_checkpoint = 195_745_778
 concurrency = 5
 listen_addr = "0.0.0.0:3001"

@@ -364,20 +364,29 @@ const TradingPlatform: React.FC = () => {
                 return null;
               }
               
+              // Normalize token_info to ensure 0x prefix for addresses
+              let normalizedTokenInfo = tokenIdentifierFields.token_info;
+              const parts = normalizedTokenInfo.split('::');
+              if (parts.length > 1 && /^[0-9a-fA-F]+$/.test(parts[0]) && !parts[0].startsWith('0x')) {
+                  parts[0] = '0x' + parts[0];
+                  normalizedTokenInfo = parts.join('::');
+                  console.log(`[TradingPlatform] Normalized token_info for collateral from "${tokenIdentifierFields.token_info}" to "${normalizedTokenInfo}"`);
+              }
+
               // Construct the CollateralInfo object
               // Note: ExtSupportedCollateralToken has 'fields.token_info', 'fields.token_decimals', etc.
               // The CollateralInfo adds a 'name'.
               const collateralEntry: CollateralInfo = {
                 type: tokenWrapper.type, // Store the full type if needed, e.g., for matching with ActionTabs
                 fields: {
-                    token_info: tokenIdentifierFields.token_info, // This should be the full type string like "0x2::sui::SUI"
+                    token_info: normalizedTokenInfo, // Use normalized string
                     token_decimals: typeof tokenIdentifierFields.token_decimals === 'number' ? tokenIdentifierFields.token_decimals : 0,
                     price_feed_id_bytes: tokenIdentifierFields.price_feed_id_bytes, // Keep original bytes if needed by other parts
                     price_feed_id_bytes_hex: priceFeedIdHex, // Add the hex version
                     oracle_feed: tokenIdentifierFields.oracle_feed,
                     deprecated: tokenIdentifierFields.deprecated,
                 },
-                name: getTokenNameFromType(tokenIdentifierFields.token_info)
+                name: getTokenNameFromType(normalizedTokenInfo) // Use normalized string for name generation too
               };
               return collateralEntry;
             }).filter(Boolean) as CollateralInfo[]; // Filter out any nulls from mapping invalid entries
