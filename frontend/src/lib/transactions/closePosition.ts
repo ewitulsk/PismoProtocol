@@ -128,6 +128,7 @@ export const closePosition = async (
     signAndExecuteTransaction,
   } = params;
 
+  console.log("[closePosition] PYTH_STATE_OBJECT_ID being used by pythClient (passed as pythStateObjectId prop):", pythStateObjectId);
   // Log the received supportedCollateral prop
   console.log("[closePosition] Received supportedCollateral prop:", JSON.stringify(supportedCollateral, null, 2));
 
@@ -288,6 +289,7 @@ export const closePosition = async (
     // Step 4: Fetch Pyth VAA data and update price feeds in the transaction
     let priceInfoObjectStringIds: string[] = [];
     if (uniquePriceFeedIds.length > 0) {
+        console.log(`[closePosition] Number of unique price feeds to update (U): ${uniquePriceFeedIds.length}`); // Log U
         const priceServiceConnection = new SuiPriceServiceConnection(hermesEndpoint);
         const vaaHexStrings = await priceServiceConnection.getPriceFeedsUpdateData(uniquePriceFeedIds);
         if (vaaHexStrings.length !== uniquePriceFeedIds.length) {
@@ -347,7 +349,8 @@ export const closePosition = async (
     // Step 6: Add the close_position_pyth move call
     // Detailed logging of all object IDs before the moveCall
     console.log("--- Preparing for close_position_pyth moveCall ---");
-    console.log("programId:", programId);
+    console.log("Package ID used for target:", packageId); // Log packageId
+    console.log("Program ID for arg0 (txb.object(programId)):", programId); // Log programId again here for clarity
     console.log("accountObjectId:", accountObjectId);
     console.log("accountStatsId:", accountStatsId);
     console.log("positionToClose.position_id:", positionToClose.position_id);
