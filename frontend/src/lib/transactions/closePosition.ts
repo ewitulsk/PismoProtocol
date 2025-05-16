@@ -295,103 +295,113 @@ export const closePosition = async (
     // Step 4: Fetch Pyth VAA data and update price feeds in the transaction
     let priceInfoObjectStringIds: string[] = [];
     if (uniquePriceFeedIds.length > 0) {
-        console.log(`[closePosition] Number of unique price feeds to update (U): ${uniquePriceFeedIds.length}`); // Log U
+        console.log(`[closePosition] Number of unique price feeds to update (U): ${uniquePriceFeedIds.length}`);
         const priceServiceConnection = new SuiPriceServiceConnection(hermesEndpoint);
         const vaaHexStrings = await priceServiceConnection.getPriceFeedsUpdateData(uniquePriceFeedIds);
         if (vaaHexStrings.length !== uniquePriceFeedIds.length) {
             throw new Error("Mismatch between requested Pyth price feeds and received VAA data.");
         }
         
-        // pythClient.updatePriceFeeds adds calls to txb and returns string object IDs of PriceInfoObjects
         priceInfoObjectStringIds = await pythClient.updatePriceFeeds(
             txb,
             vaaHexStrings,
             uniquePriceFeedIds,
-            // pythStateObjectId // Assuming pythClient is configured with this or handles it
         );
         console.log("Pyth updatePriceFeeds submitted. PriceInfoObject IDs:", priceInfoObjectStringIds);
     } else {
-        // This should not happen if positionMarketFeedId is valid.
          throw new Error("No price feed IDs to update, cannot get position market price.");
     }
     
-    // Create a map from feed ID to its PriceInfoObject ID string
-    const feedIdToPriceInfoObjectStrId: Record<string, string> = {};
-    uniquePriceFeedIds.forEach((feedId, index) => {
-        feedIdToPriceInfoObjectStrId[feedId] = priceInfoObjectStringIds[index];
-    });
-
     // Step 5: Prepare arguments for the close_position_pyth contract call
 
-    // 5.1 Position's PriceInfoObject
-    const positionMarketPriceInfoObjectId = feedIdToPriceInfoObjectStrId[positionMarketFeedId];
-    if (!positionMarketPriceInfoObjectId) {
-        throw new Error(`PriceInfoObject not found for position's market feed ID: ${positionMarketFeedId}`);
-    }
-    const positionPriceInfoArg = txb.object(positionMarketPriceInfoObjectId);
+    // 5.1 Master vector of all PriceInfoObjects
+    const allPriceInfoObjectsArg = txb.makeMoveVec({ 
+        elements: priceInfoObjectStringIds.map(id => txb.object(id)) 
+    });
 
-    // 5.2 All Collateral Markers and their PriceInfoObjects
+    // 5.2 Position's PriceInfoObject index
+    const positionPriceInfoIndex = uniquePriceFeedIds.indexOf(positionMarketFeedId);
+    if (positionPriceInfoIndex === -1) {
+        throw new Error(`PriceInfoObject index not found for position's market feed ID: ${positionMarketFeedId}`);
+    }
+    const positionPriceInfoIArg = txb.pure(bcs.u64().serialize(BigInt(positionPriceInfoIndex)));
+
+    // 5.3 All Collateral Markers and their PriceInfoObject indices
     const collateralMarkerObjectArgs = activeCollateralMarkers.map(cm => txb.object(cm.markerId));
-    const collateralPriceInfoObjectArgs = activeCollateralMarkers.map(cm => {
-        const pioId = feedIdToPriceInfoObjectStrId[cm.feedId];
-        if (!pioId) throw new Error(`PriceInfoObject not found for collateral feed ID: ${cm.feedId}`);
-        return txb.object(pioId);
+    const allCollateralPriceInfoIndices = activeCollateralMarkers.map(cm => {
+        const index = uniquePriceFeedIds.indexOf(cm.feedId);
+        if (index === -1) {
+            throw new Error(`PriceInfoObject index not found for collateral feed ID: ${cm.feedId}`);
+        }
+        return index;
     });
 
     const allCollateralMarkersArg = txb.makeMoveVec({ elements: collateralMarkerObjectArgs });
-    const allCollateralPriceInfoArg = txb.makeMoveVec({ elements: collateralPriceInfoObjectArgs });
+    const allCollateralPriceInfoIsArg = txb.makeMoveVec({ 
+        elements: allCollateralPriceInfoIndices.map(idx => txb.pure(bcs.u64().serialize(BigInt(idx))))
+        // No type property, rely on inference from elements
+    });
 
-    // 5.3 All Vault Markers and their PriceInfoObjects
+    // 5.4 All Vault Markers and their PriceInfoObject indices
     const vaultMarkerObjectArgs = activeVaultMarkers.map(vm => txb.object(vm.markerId));
-    const vaultPriceInfoObjectArgs = activeVaultMarkers.map(vm => {
-        const pioId = feedIdToPriceInfoObjectStrId[vm.feedId];
-        if (!pioId) throw new Error(`PriceInfoObject not found for vault feed ID: ${vm.feedId}`);
-        return txb.object(pioId);
+    const allVaultPriceInfoIndices = activeVaultMarkers.map(vm => {
+        const index = uniquePriceFeedIds.indexOf(vm.feedId);
+        if (index === -1) {
+            throw new Error(`PriceInfoObject index not found for vault feed ID: ${vm.feedId}`);
+        }
+        return index;
     });
 
     const allVaultMarkersArg = txb.makeMoveVec({ elements: vaultMarkerObjectArgs });
-    const allVaultPriceInfoArg = txb.makeMoveVec({ elements: vaultPriceInfoObjectArgs });
+    const allVaultPriceInfoIsArg = txb.makeMoveVec({ 
+        elements: allVaultPriceInfoIndices.map(idx => txb.pure(bcs.u64().serialize(BigInt(idx))))
+        // No type property, rely on inference from elements
+    });
 
     // Step 6: Add the close_position_pyth move call
-    // Detailed logging of all object IDs before the moveCall
     console.log("--- Preparing for close_position_pyth moveCall ---");
-    console.log("Package ID used for target:", packageId); // Log packageId
-    console.log("Program ID for arg0 (txb.object(programId)):", programId); // Log programId again here for clarity
+    console.log("Package ID used for target:", packageId); 
+    console.log("Program ID for arg0 (txb.object(programId)):", programId); 
     console.log("accountObjectId:", accountObjectId);
     console.log("accountStatsId:", accountStatsId);
     console.log("positionToClose.position_id:", positionToClose.position_id);
-    console.log("positionMarketPriceInfoObjectId (for position_price_info):", positionMarketPriceInfoObjectId);
+    console.log("positionPriceInfoIndex (for position_price_info_i):", positionPriceInfoIndex);
     console.log("SUI_CLOCK_OBJECT_ID:", SUI_CLOCK_OBJECT_ID);
     
-    console.log("--- Collateral Markers & Prices ---");
-    activeCollateralMarkers.forEach((cm, index) => {
-        console.log(`CollateralMarker[${index}].markerId:`, cm.markerId, `| Corresponding PriceInfoObjectId:`, feedIdToPriceInfoObjectStrId[cm.feedId]);
+    console.log("--- All PriceInfoObject IDs (in order for all_price_info_objects vector) ---");
+    priceInfoObjectStringIds.forEach((id, index) => {
+        console.log(`all_price_info_objects[${index}]: ${id} (corresponds to uniquePriceFeedIds[${index}]: ${uniquePriceFeedIds[index]})`);
     });
-    // Also log the actual arguments being built for the vector
-    console.log("collateralMarkerObjectArgs (IDs being wrapped by txb.object):", collateralMarkerObjectArgs.map(arg => arg.toString())); // Assuming these are already object IDs or can be stringified
-    console.log("collateralPriceInfoObjectArgs (IDs being wrapped by txb.object):", collateralPriceInfoObjectArgs.map(arg => arg.toString()));
 
-    console.log("--- Vault Markers & Prices ---");
-    activeVaultMarkers.forEach((vm, index) => {
-        console.log(`VaultMarker[${index}].markerId:`, vm.markerId, `| Corresponding PriceInfoObjectId:`, feedIdToPriceInfoObjectStrId[vm.feedId]);
+    console.log("--- Collateral Markers & Price Indices ---");
+    activeCollateralMarkers.forEach((cm, i) => {
+        console.log(`CollateralMarker[${i}].markerId:`, cm.markerId, `| Corresponding PriceInfoIndex:`, allCollateralPriceInfoIndices[i]);
     });
-    console.log("vaultMarkerObjectArgs (IDs being wrapped by txb.object):", vaultMarkerObjectArgs.map(arg => arg.toString()));
-    console.log("vaultPriceInfoObjectArgs (IDs being wrapped by txb.object):", vaultPriceInfoObjectArgs.map(arg => arg.toString()));
+    console.log("collateralMarkerObjectArgs (IDs being wrapped by txb.object):", collateralMarkerObjectArgs.map(arg => String(arg))); 
+    console.log("allCollateralPriceInfoIs (indices passed to txb.pure):", allCollateralPriceInfoIndices);
+
+    console.log("--- Vault Markers & Price Indices ---");
+    activeVaultMarkers.forEach((vm, i) => {
+        console.log(`VaultMarker[${i}].markerId:`, vm.markerId, `| Corresponding PriceInfoIndex:`, allVaultPriceInfoIndices[i]);
+    });
+    console.log("vaultMarkerObjectArgs (IDs being wrapped by txb.object):", vaultMarkerObjectArgs.map(arg => String(arg)));
+    console.log("allVaultPriceInfoIs (indices passed to txb.pure):", allVaultPriceInfoIndices);
     console.log("------------------------------------------------------");
 
     txb.moveCall({
       target: `${packageId}::position_functions::close_position_pyth`,
       arguments: [
-        txb.object(programId),                        // program: &Program
-        txb.object(accountObjectId),                  // account: &Account
-        txb.object(accountStatsId),                   // stats: &mut AccountStats
-        txb.object(positionToClose.position_id),      // position: Position
-        positionPriceInfoArg,                         // position_price_info: &PriceInfoObject
-        allCollateralMarkersArg,                      // all_collateral_markers: &mut vector<CollateralMarker>
-        allCollateralPriceInfoArg,                    // all_collateral_price_info: &vector<PriceInfoObject>
-        allVaultMarkersArg,                           // all_vault_markers: &mut vector<VaultMarker>
-        allVaultPriceInfoArg,                         // all_vault_price_info: &vector<PriceInfoObject>
-        txb.object(SUI_CLOCK_OBJECT_ID),              // clock: &Clock
+        txb.object(programId),                        
+        txb.object(accountObjectId),                  
+        txb.object(accountStatsId),                   
+        txb.object(positionToClose.position_id),      
+        positionPriceInfoIArg,      // u64 index for position's price info
+        allCollateralMarkersArg,                      
+        allCollateralPriceInfoIsArg,                  
+        allVaultMarkersArg,                           
+        allVaultPriceInfoIsArg,                       
+        allPriceInfoObjectsArg,                       
+        txb.object(SUI_CLOCK_OBJECT_ID),              
       ],
     });
     console.log("Move call for close_position_pyth added to transaction.");
