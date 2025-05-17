@@ -231,7 +231,7 @@ export const closePosition = async (
     console.log("[closePosition] Processing fetchedVaults:", fetchedVaults);
     for (const vault of fetchedVaults) {
         const markerId = normalizeSuiObjectId(vault.vault_marker_address);
-        const originalTokenInfo = vault.coin_token_info; // Original value from indexer
+        const originalTokenInfo = "0x" + vault.coin_token_info; // Original value from indexer
         let tokenInfoForLookup = originalTokenInfo;
 
         console.log(`[closePosition] Vault: Original tokenInfo: '${originalTokenInfo}' (Marker: ${markerId})`);
@@ -336,11 +336,10 @@ export const closePosition = async (
         return index;
     });
 
+    const allCollateralPriceInfoIndicesBigInt = allCollateralPriceInfoIndices.map(idx => BigInt(idx));
+    const serializedCollateralIndices = bcs.vector(bcs.u64()).serialize(allCollateralPriceInfoIndicesBigInt).toBytes();
+    const allCollateralPriceInfoIsArg = txb.pure(serializedCollateralIndices);
     const allCollateralMarkersArg = txb.makeMoveVec({ elements: collateralMarkerObjectArgs });
-    const allCollateralPriceInfoIsArg = txb.makeMoveVec({ 
-        elements: allCollateralPriceInfoIndices.map(idx => txb.pure(bcs.u64().serialize(BigInt(idx))))
-        // No type property, rely on inference from elements
-    });
 
     // 5.4 All Vault Markers and their PriceInfoObject indices
     const vaultMarkerObjectArgs = activeVaultMarkers.map(vm => txb.object(vm.markerId));
@@ -352,11 +351,10 @@ export const closePosition = async (
         return index;
     });
 
+    const allVaultPriceInfoIndicesBigInt = allVaultPriceInfoIndices.map(idx => BigInt(idx));
+    const serializedVaultIndices = bcs.vector(bcs.u64()).serialize(allVaultPriceInfoIndicesBigInt).toBytes();
+    const allVaultPriceInfoIsArg = txb.pure(serializedVaultIndices);
     const allVaultMarkersArg = txb.makeMoveVec({ elements: vaultMarkerObjectArgs });
-    const allVaultPriceInfoIsArg = txb.makeMoveVec({ 
-        elements: allVaultPriceInfoIndices.map(idx => txb.pure(bcs.u64().serialize(BigInt(idx))))
-        // No type property, rely on inference from elements
-    });
 
     // Step 6: Add the close_position_pyth move call
     console.log("--- Preparing for close_position_pyth moveCall ---");

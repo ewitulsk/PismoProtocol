@@ -376,6 +376,7 @@ async def calc_total_vault_values() -> Dict:
             # Assuming the structure from Sui API follows: { type: "...", fields: { ... } }
             fields = token_id_obj.get('fields', {})
             token_info = fields.get('token_info')
+            print(f"Got Token Info: {token_info}")
             price_feed_bytes = fields.get('price_feed_id_bytes')
             token_decimals = fields.get('token_decimals')
             if token_info and price_feed_bytes is not None and token_decimals is not None:
@@ -415,7 +416,11 @@ async def calc_total_vault_values() -> Dict:
 
                 # Parse token type to extract underlying asset information
                 coin_type = await parse_vault_token_type(vault_type)
-                #print(f"\nCOIN_TYPE: {coin_type}\n")
+                
+
+                coin_type = coin_type[2:]
+
+                print(f"\nCOIN_TYPE: {coin_type}\n")
 
                 # Find the token data for this coin type in the mapping
                 if coin_type in coin_type_to_token_data:

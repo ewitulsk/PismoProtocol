@@ -235,7 +235,7 @@ async function main() {
         arguments: [
             txb.object(adminCapId),
             txb.object(globalObjectId),
-            txb.pure.string(testCoinType),
+            txb.pure.string(testCoinType.startsWith('0x') ? testCoinType.slice(2) : testCoinType),
             txb.pure.u8(testCoinDecimals),
             txb.pure(bcs.vector(bcs.u8()).serialize(priceFeedBytes).toBytes()),
             txb.pure.u16(PLACEHOLDER_ORACLE_FEED_ID),

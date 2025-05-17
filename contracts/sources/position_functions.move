@@ -150,8 +150,8 @@ public fun close_position_pyth(
             } else {
                 collateral_marker.create_collateral_transfer(remaining_collateral, vault_address, ctx);
                 transfer_value = transfer_value - collateral_value;
-            }
-            
+            };
+            i = i + 1;
         };
     } else if (positions::is_transfer_to_user(&transfer_data)) {
         //For right now, this is just going to transfer value from each of the vaults equally, ideally this still happens, but a swap takes place.
@@ -173,6 +173,7 @@ public fun close_position_pyth(
                 vault_token_id.token_decimals() //This isn't right. We need to rethink how we're handling shared decimals
             );
             vault_marker.create_vault_transfer(transfer_value, ctx.sender(), ctx);
+            i = i + 1;
         };
     } else {
       abort(0);

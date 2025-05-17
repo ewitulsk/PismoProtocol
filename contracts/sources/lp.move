@@ -21,6 +21,7 @@ use pismo_protocol::tokens::{get_value_pyth, TokenIdentifier};
 
 /// Error code for when a vault is not found for a given token info
 const E_VAULT_NOT_FOUND: u64 = 1;
+const E_INSUFFICIENT_VAULT_MARKER_BALANCE: u64 = 2;
 
 public struct LPToken<phantom CoinType> has drop, store {}
 
@@ -256,6 +257,7 @@ public(package) fun create_vault_transfer(marker: &mut VaultMarker, amount: u64,
         to_user_address,
     };
 
+    assert!(marker.vault_amount >= amount, E_INSUFFICIENT_VAULT_MARKER_BALANCE); // TODO: Define E_INSUFFICIENT_VAULT_MARKER_BALANCE
     vector::push_back(&mut marker.transfers, transfer);
     marker.vault_amount = marker.vault_amount - amount;
 }
