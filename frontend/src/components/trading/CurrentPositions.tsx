@@ -245,10 +245,44 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
 
     // Calculate the current total value of the position being closed
     const positionToCloseLivePrice = positionToClose ? livePrices[positionToClose.price_feed_id_bytes.startsWith('0x') ? positionToClose.price_feed_id_bytes : `0x${positionToClose.price_feed_id_bytes}`] : undefined;
-    const positionToCloseLiveValue = positionToClose ? calculatePositionValue(positionToClose, positionToCloseLivePrice, modalDecimals) : null;
 
-    // Calculate the value of the portion being closed
-    const closingValue = positionToCloseLiveValue !== null ? positionToCloseLiveValue * (closePercentage / 100) : null;
+    // --- Modal P/L Calculation ---
+    let modalClosingPLDisplay = "$ --";
+    let modalClosingPLColorClass = "text-secondaryText";
+
+    if (positionToClose && positionToCloseLivePrice !== undefined && modalCloseAmount) {
+        const amountToCloseNum = parseFloat(modalCloseAmount); // This is in asset units (e.g., 0.1 BTC)
+        
+        if (!isNaN(amountToCloseNum) && amountToCloseNum > 0 && totalPositionAmount > 0) { // Ensure amount is valid and positive
+            const entryPriceNum = parseFloat(positionToClose.entry_price) / (10 ** positionToClose.entry_price_decimals);
+            const leverageNum = parseFloat(positionToClose.leverage_multiplier);
+
+            if (!isNaN(entryPriceNum) && !isNaN(leverageNum)) {
+                let pnl;
+                if (positionToClose.position_type === "Long") {
+                    pnl = (positionToCloseLivePrice - entryPriceNum) * amountToCloseNum * leverageNum;
+                } else { // Short
+                    pnl = (entryPriceNum - positionToCloseLivePrice) * amountToCloseNum * leverageNum;
+                }
+
+                const formattedPL = formatCurrency(pnl);
+                if (pnl > 0) {
+                    modalClosingPLDisplay = `+${formattedPL}`;
+                    modalClosingPLColorClass = "text-emerald-400";
+                } else if (pnl < 0) {
+                    modalClosingPLDisplay = formattedPL; // formatCurrency handles the sign
+                    modalClosingPLColorClass = "text-red-400";
+                } else if (pnl === 0) { // Explicitly check for zero
+                    modalClosingPLDisplay = formattedPL;
+                    modalClosingPLColorClass = "text-secondaryText";
+                } else { // pnl is NaN or other cases formatCurrency might return "$ --" for
+                    modalClosingPLDisplay = "$ --"; // Default to "$ --" if pnl is NaN
+                    modalClosingPLColorClass = "text-secondaryText";
+                }
+            }
+        }
+    }
+    // --- End Modal P/L Calculation ---
 
     const openModal = (positionId: string) => {
         const position = positions.find(p => p.position_id === positionId);
@@ -496,9 +530,15 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                         className="card bg-backgroundOffset p-6 shadow-xl w-full max-w-md border border-secondary"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <h3 className="text-lg font-semibold text-primaryText mb-4">
-                            Close {positionToClose.supported_positions_token_i} {positionToClose.position_type} Position
-                        </h3>
+                        {(() => {
+                            const asset = availableAssets[positionToClose.supported_positions_token_i];
+                            const assetName = asset ? asset.displayName : `Token Index ${positionToClose.supported_positions_token_i}`;
+                            return (
+                                <h3 className="text-lg font-semibold text-primaryText mb-4">
+                                    Close {assetName} {positionToClose.position_type} Position
+                                </h3>
+                            );
+                        })()}
 
                         <div className="mb-1">
                             <label className="input-label block text-secondaryText mb-2" htmlFor="modal-close-amount">
@@ -529,10 +569,9 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                                 value={closePercentage}
                                 onChange={handleSliderChange}
                             />
-                            {/* Display the calculated closing value */}
+                            {/* Display the calculated closing P/L */}
                             <div className="text-sm text-secondaryText mt-2">
-                                {/* Ensure closingValue calculation uses the parsed modal amount */}
-                                Closing Value: <span className="text-primaryText font-medium">{formatCurrency(positionToCloseLiveValue !== null ? positionToCloseLiveValue * (closePercentage / 100) : null)}</span>
+                                Gain/Loss: <span className={`font-medium ${modalClosingPLColorClass}`}>{modalClosingPLDisplay}</span>
                             </div>
                         </div>
 
