@@ -68,7 +68,8 @@ const calculatePercentChange = (
     entryPriceStr: string,
     entryDecimals: number,
     currentPrice: number | undefined,
-    positionType: "Long" | "Short"
+    positionType: "Long" | "Short",
+    leverageMultiplier: string
 ): number | null => {
     if (!entryPriceStr || currentPrice === undefined) return null;
     const entryPrice = parseFloat(entryPriceStr) / (10 ** entryDecimals);
@@ -77,7 +78,7 @@ const calculatePercentChange = (
     const rawChange = positionType === "Long"
         ? (currentPrice - entryPrice) / entryPrice
         : (entryPrice - currentPrice) / entryPrice;
-    return rawChange * 100;
+    return rawChange * 100 * parseInt(leverageMultiplier, 10);
 };
 
 // --- Slider Component ---
@@ -372,7 +373,8 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                             position.entry_price,
                             position.entry_price_decimals,
                             livePrice,
-                            position.position_type
+                            position.position_type,
+                            position.leverage_multiplier
                         );
                         // Format entry and current price
                         const entryPriceFormatted = position.entry_price
@@ -393,6 +395,50 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                         const asset = availableAssets[position.supported_positions_token_i];
                         const assetName = asset ? asset.displayName : `Token Index ${position.supported_positions_token_i}`;
 
+                        // Calculate P/L display string and color
+                        let plDisplayString = "N/A";
+                        let plColorClass = "text-secondaryText"; // Default color for N/A or zero P/L
+                        const currentLiveValueFormatted = formatCurrency(liveValue); // Handles null/NaN to "$ --"
+
+                        // Only attempt to calculate and show P/L if the liveValue itself is a valid number.
+                        if (livePrice !== undefined && liveValue !== null && !isNaN(liveValue)) {
+                            if (position.entry_price && position.amount) {
+                                const entryPriceNumeric = parseFloat(position.entry_price) / (10 ** position.entry_price_decimals);
+                                if (!isNaN(entryPriceNumeric)) {
+                                    const entryValue = calculatePositionValue(position, entryPriceNumeric, decimals);
+                                    if (entryValue !== null && !isNaN(entryValue)) {
+                                        const rawDelta = liveValue - entryValue;
+                                        
+                                        let effectivePL = rawDelta;
+                                        if (position.position_type === "Short") {
+                                            effectivePL = -rawDelta;
+                                        }
+
+                                        const formattedPL = formatCurrency(effectivePL); // Returns "$X.YZ", "-$X.YZ", or "$ --"
+                                        
+                                        if (formattedPL === "$ --") { // Indicates effectivePL was null/NaN
+                                            plDisplayString = "N/A";
+                                            plColorClass = "text-secondaryText";
+                                        } else if (effectivePL > 0) {
+                                            plDisplayString = `+${formattedPL}`; // e.g., +$10.00
+                                            plColorClass = "text-emerald-400";
+                                        } else if (effectivePL < 0) {
+                                            plDisplayString = formattedPL; // e.g., -$5.00 (formatCurrency handles the sign)
+                                            plColorClass = "text-red-400";
+                                        } else { // effectivePL is 0
+                                            plDisplayString = formattedPL; // e.g., $0.00
+                                            plColorClass = "text-secondaryText"; 
+                                        }
+                                    }
+                                    // If entryValue is null/NaN, plDisplayString remains "N/A", plColorClass remains "text-secondaryText"
+                                }
+                                // If entryPriceNumeric is NaN, plDisplayString remains "N/A", plColorClass remains "text-secondaryText"
+                            }
+                            // If no entry_price or amount, plDisplayString remains "N/A", plColorClass remains "text-secondaryText"
+                        }
+                        // If livePrice is undefined or liveValue is null/NaN, 
+                        // currentLiveValueFormatted is "$ --", plDisplayString is "N/A", plColorClass is "text-secondaryText"
+
                         return (
                             <div key={position.position_id} className="card bg-backgroundOffset p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap">
                                 <div className="flex items-center gap-3 flex-shrink-0">
@@ -410,15 +456,14 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                                     <span>
                                         {percentChange === null ? '--' : `${percentChange > 0 ? '+' : ''}${percentChange.toFixed(2)}%`}
                                     </span>
-                                    <span className="text-xs font-normal text-secondaryText mt-1">P/L</span>
                                 </div>
 
                                 <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
                                     <div>
-                                        <span className="text-secondaryText block">Value</span>
-                                        <span className="text-primaryText font-medium">
-                                            {formatCurrency(liveValue)}
-                                            {livePrice === undefined && <span className="text-xs text-secondaryText"> (Loading...)</span>}
+                                        <span className="text-secondaryText block">Gain/Loss</span>
+                                        <span className="font-medium">
+                                            <span className={`${plColorClass}`}>{plDisplayString}</span>
+                                            <span className="text-xs text-primaryText ml-1">({currentLiveValueFormatted})</span>
                                         </span>
                                     </div>
                                     <div>
@@ -428,11 +473,6 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ accountId, availabl
                                     <div className="col-span-2 sm:col-span-1">
                                         <span className="text-secondaryText block">Amount</span>
                                         <span className="text-primaryText font-medium">{formattedAmount}</span>
-                                    </div>
-                                    {/* Entry and Current Price */}
-                                    <div className="col-span-2 sm:col-span-3 flex gap-4 mt-2">
-                                        <span className="text-xs text-secondaryText">Entry: <span className="text-primaryText font-medium">{entryPriceFormatted}</span></span>
-                                        <span className="text-xs text-secondaryText">Current: <span className="text-primaryText font-medium">{currentPriceFormatted}</span></span>
                                     </div>
                                 </div>
 
