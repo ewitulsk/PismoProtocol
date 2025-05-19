@@ -9,6 +9,7 @@ use diesel::RunQueryDsl;
 use crate::db::models::open_position_events::{OpenPositionEvent, NewOpenPositionEvent};
 // Import the schema's dsl for easy table access
 use crate::db::postgres::schema::open_position_events::dsl::*;
+use crate::db::postgres::schema::position_liquidated_events; // Added for position_liquidated_events table
 use super::DBPool; // Import DBPool from parent mod.rs
 
 /// Repository struct holding the connection pool for OpenPositionEvent operations
@@ -98,6 +99,11 @@ impl OpenPositionEventRepository {
                 SELECT 1
                 FROM close_position_events cpe
                 WHERE cpe.position_id = ope.position_id
+            )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM position_liquidated_events ple
+                WHERE ple.position_id = ope.position_id
             );
         "#;
 

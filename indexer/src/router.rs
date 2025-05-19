@@ -12,6 +12,7 @@ use crate::handlers::vaults::{get_all_vaults, get_vault_by_address};
 use crate::handlers::collateral::{get_account_collateral, get_account_collateral_by_token_address, get_latest_collateral_assertion_by_account_id}; // Import the new collateral handler
 use crate::handlers::accounts::{get_account_by_id, get_all_accounts}; // Import the new accounts handlers
 use crate::handlers::transfers::{get_unfulfilled_vault_transfers, get_unfulfilled_collateral_transfers}; // Added
+use crate::handlers::liquidations::{get_all_position_liquidated_events, get_all_collateral_marker_liquidated_events}; // Added
 use crate::db::repositories::DBPool; // Import DBPool from the repo mod
 
 // Define the application state struct
@@ -55,6 +56,9 @@ pub fn create_router(pool: Arc<DBPool>) -> Router {
         // Add routes for unfulfilled transfers
         .route("/v0/vault-transfers/unfulfilled", get(get_unfulfilled_vault_transfers)) // Added
         .route("/v0/collateral-transfers/unfulfilled", get(get_unfulfilled_collateral_transfers)) // Added
+        // Add routes for liquidation events
+        .route("/v0/liquidations/positions", get(get_all_position_liquidated_events)) // Added
+        .route("/v0/liquidations/collateral-markers", get(get_all_collateral_marker_liquidated_events)) // Added
         .with_state(app_state) // Pass the AppState instance
         .layer(cors) // Apply the CORS middleware
 }

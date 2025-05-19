@@ -13,6 +13,8 @@ pub mod collateral_deposit_event;
 pub mod start_collateral_value_assertion_event;
 pub mod vault_transfer;
 pub mod collateral_transfer;
+pub mod position_liquidated_event;
+pub mod collateral_marker_liquidated_event;
 
 // Declare the utility module
 pub mod repositories_utils;
@@ -26,6 +28,8 @@ pub use collateral_deposit_event::CollateralDepositEventRepository;
 pub use start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository;
 pub use vault_transfer::VaultTransferRepository;
 pub use collateral_transfer::CollateralTransferRepository;
+pub use position_liquidated_event::PositionLiquidatedEventRepository;
+pub use collateral_marker_liquidated_event::CollateralMarkerLiquidatedEventRepository;
 
 // Pool definition
 use std::env;

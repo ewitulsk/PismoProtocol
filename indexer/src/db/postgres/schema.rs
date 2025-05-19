@@ -32,6 +32,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    collateral_marker_liquidated_events (transaction_hash) {
+        transaction_hash -> Text,
+        collateral_marker_id -> Text,
+        account_id -> Text,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
     collateral_transfers (transfer_id) {
         transaction_hash -> Text,
         transfer_id -> Text,
@@ -65,6 +74,14 @@ diesel::table! {
         supported_positions_token_i -> Int4,
         price_feed_id_bytes -> Text,
         account_id -> Text,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    position_liquidated_events (transaction_hash) {
+        transaction_hash -> Text,
+        position_id -> Text,
         timestamp -> Timestamptz,
     }
 }
@@ -107,9 +124,11 @@ diesel::table! {
 diesel::allow_tables_to_appear_in_same_query!(
     close_position_events,
     collateral_deposit_events,
+    collateral_marker_liquidated_events,
     collateral_transfers,
     new_account_events,
     open_position_events,
+    position_liquidated_events,
     start_collateral_value_assertion_events,
     vault_created_events,
     vault_transfers,

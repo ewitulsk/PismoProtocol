@@ -12,6 +12,7 @@ import type {
     SignAndExecuteTransactionArgs,  // Ensure this is imported
     SignAndExecuteTransactionError // Ensure this is imported
 } from './depositCollateral'; 
+import type { VaultAssetData } from '../../types/index'; // More explicit import path
 
 // --- Type Definitions ---
 
@@ -31,15 +32,6 @@ export interface CollateralAssetData {
   collateral_marker_id: string; // Object ID of the CollateralMarker struct (this is what we pass to the contract)
   token_info: string; // Full token type string, e.g., "0x2::sui::SUI"
   // We will use token_info to find the price_feed_id_bytes via supportedCollateral
-}
-
-// Data structure for vault assets fetched from the indexer
-// Derived from /v0/vaults endpoint (see indexer/src/db/models/vault_created_events.rs)
-export interface VaultAssetData {
-  vault_address: string; // Object ID of the Vault struct
-  vault_marker_address: string; // Object ID of the VaultMarker struct (this is what we pass to the contract)
-  coin_token_info: string; // Full token type string for the vault's underlying asset, e.g., "0x2::sui::SUI"
-  // We will use coin_token_info to find the price_feed_id_bytes via supportedCollateral (or a similar mapping for vault tokens)
 }
 
 // Explicit type for assets fetched from /v0/:account_id/collateral

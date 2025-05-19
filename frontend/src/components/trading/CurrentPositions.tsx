@@ -29,6 +29,7 @@ interface CurrentPositionsProps {
     availableAssets: import('./AssetSelector').SelectableMarketAsset[];
     supportedCollateral: SupportedCollateralToken[];
     onTPDChange?: (tpd: number) => void; // Add callback prop for TPD
+    onPositionsChange: (positions: PositionData[]) => void; // Add callback for positions
 }
 
 // --- Helper Functions ---
@@ -116,7 +117,7 @@ const Slider: React.FC<{ value: number; onChange: (value: number) => void; min?:
 };
 
 // Update component to use props
-const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accountId, accountObjectId, accountStatsId, availableAssets, supportedCollateral, onTPDChange }) => {
+const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accountId, accountObjectId, accountStatsId, availableAssets, supportedCollateral, onTPDChange, onPositionsChange }) => {
     const [positions, setPositions] = useState<PositionData[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, number | undefined>>({}); // Allow undefined for loading state
     const [isLoadingData, setIsLoadingData] = useState<boolean>(true); // Renamed from isLoading
@@ -203,6 +204,12 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accoun
             clearInterval(intervalId); // Clear interval on cleanup
         };
     }, [accountObjectId]); // Update dependency array to use accountObjectId
+
+    useEffect(() => {
+        if (positions) {
+            onPositionsChange(positions);
+        }
+    }, [positions, onPositionsChange]);
 
     useEffect(() => {
         const requiredFeedIds = new Set(positions.map(p => {
