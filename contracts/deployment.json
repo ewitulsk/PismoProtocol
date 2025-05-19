@@ -40,17 +40,30 @@
         "payment": [
           {
             "objectId": "0x240493aebf5fc12a839ec8d7239fbbc2af01a46a1601b302f6c243de97379a4b",
+<<<<<<< HEAD
             "version": 432527791,
             "digest": "3NopT4H5MC9chV3pPmesBAJy7iahd7aC3jzkNkMTvSYW"
+=======
+            "version": 431329687,
+            "digest": "HsioYaj28eEBqY5WVbnxpzksbD1nQkaD1KYsvF7WE3PJ"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
           }
         ],
         "owner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
         "price": "1000",
+<<<<<<< HEAD
         "budget": "263992800"
       }
     },
     "txSignatures": [
       "AGA3T4cHfisOUeCSvo1PA9GZZOjVQWNRMnQEMoPAXLH+erdaD+DqVxFOvcQHC6Qvd1qOxMr9HE5ik/juxZxvoA7wNF0RNszDkCKsyxwp6dP3CC3ylKkRmZcAVhjLF2Fk3g=="
+=======
+        "budget": "263415200"
+      }
+    },
+    "txSignatures": [
+      "AMtRNqepvJSO41zOo4mXTJjjzrysFQ8i0QhqokYaBC7SHguu+RmaJ/n5AcVky8Ci7kMJsfvT5IS+kXe15qcYWwrwNF0RNszDkCKsyxwp6dP3CC3ylKkRmZcAVhjLF2Fk3g=="
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     ]
   },
   "effects": {
@@ -58,16 +71,24 @@
     "status": {
       "status": "success"
     },
+<<<<<<< HEAD
     "executedEpoch": "742",
     "gasUsed": {
       "computationCost": "4000000",
       "storageCost": "258992800",
+=======
+    "executedEpoch": "740",
+    "gasUsed": {
+      "computationCost": "4000000",
+      "storageCost": "258415200",
+>>>>>>> b5cad36 ([PP-133] Liquidations)
       "storageRebate": "978120",
       "nonRefundableStorageFee": "9880"
     },
     "modifiedAtVersions": [
       {
         "objectId": "0x240493aebf5fc12a839ec8d7239fbbc2af01a46a1601b302f6c243de97379a4b",
+<<<<<<< HEAD
         "sequenceNumber": "432527791"
       }
     ],
@@ -93,11 +114,39 @@
           "objectId": "0x4b6ee248ce1f564e07d58b14c11674653d76cd880b89cca00336615d3cb2aff7",
           "version": 432527792,
           "digest": "DDkcntLWWFTiofVhMguPdh5LsHUbwV8PbCGA5EsVrkUo"
+=======
+        "sequenceNumber": "431329687"
+      }
+    ],
+    "transactionDigest": "8t7Zz5TcXZxajZvAXT8bcL8FRTM13bf16DnhEovAEzvo",
+    "created": [
+      {
+        "owner": {
+          "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
+        },
+        "reference": {
+          "objectId": "0x03a185d3cf40a4d88f395d2dbe8ffb8ff829d0a214883c3620562924573adda0",
+          "version": 431329688,
+          "digest": "3HyGDQCxKznaZo4JxWnjFGKMgyyzC9cs6dNjJzX1BKSU"
+        }
+      },
+      {
+        "owner": {
+          "Shared": {
+            "initial_shared_version": 431329688
+          }
+        },
+        "reference": {
+          "objectId": "0x31c932d9889dd074bbcdecd0b6a3e7ce52cf2559545616df490a57ab8e1c1f4d",
+          "version": 431329688,
+          "digest": "ES98QA1HPfYyVPQYhZDb78dgVj1vPVwXdhc7VoKXibFH"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
         }
       },
       {
         "owner": "Immutable",
         "reference": {
+<<<<<<< HEAD
           "objectId": "0x5440482471363bc5a1cd3d789fe06648beecdf03b3d55a583985bac8a1213dee",
           "version": 432527792,
           "digest": "71TxQKkejt3vUsksmZk1WD1oMxyNwjVJ8VNQS78aw2jm"
@@ -111,14 +160,25 @@
           "objectId": "0x72c0936cdc00829802be11915825945c5be28b2a77ab7071d7516505d24ceff4",
           "version": 432527792,
           "digest": "HskRUebjKFt9Y1hfNhFSfNRxsW8n8HYpLHMSCtZt3C2F"
+=======
+          "objectId": "0x6b19e1f8daab229cbac6c4884687014f1f3111bcd18b533b032d1d25aaeb4b87",
+          "version": 431329688,
+          "digest": "3QWCM14GnrUnqfh9pwHT6KwYEw9B7T1BarQ1rVtG3e2f"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
         }
       },
       {
         "owner": "Immutable",
         "reference": {
+<<<<<<< HEAD
           "objectId": "0x83f2f76eba00373280da583af065fccacbe9312da6399f510ef68caea0cd2912",
           "version": 1,
           "digest": "H1tvceBgA2MWNVfgmCLugARDSW1Nwwf64LY4gMVQyVTH"
+=======
+          "objectId": "0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099",
+          "version": 1,
+          "digest": "9cndEyDqGTvJ1VXQePduuCGcEfauj2QTe55mP5Hmq8c8"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
         }
       },
       {
@@ -126,6 +186,7 @@
           "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
         },
         "reference": {
+<<<<<<< HEAD
           "objectId": "0xb8b0b8693a0b940d991df25808625dea487e3c30f17228189619ce8cface6eb8",
           "version": 432527792,
           "digest": "EEunGssWpe8kXiAHsoHEcg2pdqbFwdi6d6RQdKr8vTbP"
@@ -139,14 +200,45 @@
           "objectId": "0xbf47254a6bae5687fd44c368ebdba15af560e7e81b1fd4e27c807ac6b45b1d16",
           "version": 432527792,
           "digest": "FBXz95fU5wJyBd1oiwEzjPiAKdtB4sKt1aXxrfTNWVHW"
+=======
+          "objectId": "0xbc8982d67bdd262ab61a5b85b2d6fd871045189f6d1bd38c5859af63940048ec",
+          "version": 431329688,
+          "digest": "CLu92ZNzvQaUZgaQztJL1LqYJo4qbCrjKvPdkQJcwaFW"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
         }
       },
       {
         "owner": "Immutable",
         "reference": {
+<<<<<<< HEAD
           "objectId": "0xc217ba087629ccde9fa023b653f2e7d6fcb6c245d66d9966900e046d9c4a8153",
           "version": 432527792,
           "digest": "CjdY51vTpKYCK4atXLpe3SyLD3bcoh5rX56D2C1QDrmt"
+=======
+          "objectId": "0xdac6a50ee000e80464a15cd0ccfaf76896e6433701a0cba10032a585337d245a",
+          "version": 431329688,
+          "digest": "BRvL7RPyCLGhoJtYFpcya8XDdnh5DCRzDpCE36tniTdM"
+        }
+      },
+      {
+        "owner": {
+          "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
+        },
+        "reference": {
+          "objectId": "0xf20961d6271c7cfbe1ff9176cadd55512e765eb87d723f947a408f3585d6e101",
+          "version": 431329688,
+          "digest": "Ka8dzE8DT9UexdcMphWYuxkvDzKLKzd9WwKuT8NzSp4"
+        }
+      },
+      {
+        "owner": {
+          "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
+        },
+        "reference": {
+          "objectId": "0xf9061426481bbdf325f5c81c0fda48fa98dfe1fd00d6d79b89730f57f99abe65",
+          "version": 431329688,
+          "digest": "G6cwASzw6oEz6ck42w18T79T5xmVdKHYosHnNZ7gpetg"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
         }
       }
     ],
@@ -157,8 +249,13 @@
         },
         "reference": {
           "objectId": "0x240493aebf5fc12a839ec8d7239fbbc2af01a46a1601b302f6c243de97379a4b",
+<<<<<<< HEAD
           "version": 432527792,
           "digest": "8s85kwcVeA3XFPmjZb9rpBCAmy6MRR2hQanioYAuNqG2"
+=======
+          "version": 431329688,
+          "digest": "BE8aut4THb7jM5FdJgGyZKqtMqpL97Fmhhs7PisFR3Zu"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
         }
       }
     ],
@@ -168,21 +265,34 @@
       },
       "reference": {
         "objectId": "0x240493aebf5fc12a839ec8d7239fbbc2af01a46a1601b302f6c243de97379a4b",
+<<<<<<< HEAD
         "version": 432527792,
         "digest": "8s85kwcVeA3XFPmjZb9rpBCAmy6MRR2hQanioYAuNqG2"
       }
     },
     "eventsDigest": "3rwcxhDp5vV9ig6GHqhk6p6DkeMDXzbPMVCEs9kLLZpP",
+=======
+        "version": 431329688,
+        "digest": "BE8aut4THb7jM5FdJgGyZKqtMqpL97Fmhhs7PisFR3Zu"
+      }
+    },
+    "eventsDigest": "BGM1JRR2FXDFqQqrBDhFsovdN7t29qvPMrCgdwnn5CxU",
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     "dependencies": [
       "6pZ2bpkwLwnCH4qdHS1NcJypXLFUNvSHRKfKXhZvXQuo",
       "BF2e72MvTgXtwCcf3fJ2Ai89nYhbiR5P3sCxUjcCsjAJ",
       "CNmS7baTJffHBw3XE4xhYVQfEX5JzWFFRsiEh2XWL44K",
+<<<<<<< HEAD
       "HqfxfY25sGdLysXq6neX4xhdfjB2GDccNyCnb5R5HEX8"
+=======
+      "EBoPrQGSSnqaGkm67Kzz4tego5qV7Auxt4LrFXH7QH7K"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     ]
   },
   "events": [
     {
       "id": {
+<<<<<<< HEAD
         "txDigest": "9iEJE3CSFHhpPUmjgAbLj4VoYRdBVeNwdAGBmKGDLsbc",
         "eventSeq": "0"
       },
@@ -195,6 +305,20 @@
       },
       "bcsEncoding": "base64",
       "bcs": "OSmpRrqYdj4yD4cyzJtBGvVdcX/Ll4GsizF9rmquZkU="
+=======
+        "txDigest": "8t7Zz5TcXZxajZvAXT8bcL8FRTM13bf16DnhEovAEzvo",
+        "eventSeq": "0"
+      },
+      "packageId": "0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099",
+      "transactionModule": "main",
+      "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
+      "type": "0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::main::GlobalCreatedEvent",
+      "parsedJson": {
+        "global_id": "0x31c932d9889dd074bbcdecd0b6a3e7ce52cf2559545616df490a57ab8e1c1f4d"
+      },
+      "bcsEncoding": "base64",
+      "bcs": "Mcky2Yid0HS7zezQtqPnzlLPJVlUVhbfSQpXq44cH00="
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     }
   ],
   "objectChanges": [
@@ -206,15 +330,33 @@
       },
       "objectType": "0x2::coin::Coin<0x2::sui::SUI>",
       "objectId": "0x240493aebf5fc12a839ec8d7239fbbc2af01a46a1601b302f6c243de97379a4b",
+<<<<<<< HEAD
       "version": "432527792",
       "previousVersion": "432527791",
       "digest": "8s85kwcVeA3XFPmjZb9rpBCAmy6MRR2hQanioYAuNqG2"
+=======
+      "version": "431329688",
+      "previousVersion": "431329687",
+      "digest": "BE8aut4THb7jM5FdJgGyZKqtMqpL97Fmhhs7PisFR3Zu"
+    },
+    {
+      "type": "created",
+      "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
+      "owner": {
+        "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
+      },
+      "objectType": "0x2::coin::TreasuryCap<0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::test_lp::TEST_LP>",
+      "objectId": "0x03a185d3cf40a4d88f395d2dbe8ffb8ff829d0a214883c3620562924573adda0",
+      "version": "431329688",
+      "digest": "3HyGDQCxKznaZo4JxWnjFGKMgyyzC9cs6dNjJzX1BKSU"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     },
     {
       "type": "created",
       "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
       "owner": {
         "Shared": {
+<<<<<<< HEAD
           "initial_shared_version": 432527792
         }
       },
@@ -222,10 +364,20 @@
       "objectId": "0x3929a946ba98763e320f8732cc9b411af55d717fcb9781ac8b317dae6aae6645",
       "version": "432527792",
       "digest": "8F4LV1mhENQxWGpkYRRUNYkACEPsQkjoRqh75wdw9Nb9"
+=======
+          "initial_shared_version": 431329688
+        }
+      },
+      "objectType": "0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::main::Global",
+      "objectId": "0x31c932d9889dd074bbcdecd0b6a3e7ce52cf2559545616df490a57ab8e1c1f4d",
+      "version": "431329688",
+      "digest": "ES98QA1HPfYyVPQYhZDb78dgVj1vPVwXdhc7VoKXibFH"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     },
     {
       "type": "created",
       "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
+<<<<<<< HEAD
       "owner": {
         "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
       },
@@ -259,6 +411,19 @@
       "packageId": "0x83f2f76eba00373280da583af065fccacbe9312da6399f510ef68caea0cd2912",
       "version": "1",
       "digest": "H1tvceBgA2MWNVfgmCLugARDSW1Nwwf64LY4gMVQyVTH",
+=======
+      "owner": "Immutable",
+      "objectType": "0x2::coin::CoinMetadata<0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::test_lp::TEST_LP>",
+      "objectId": "0x6b19e1f8daab229cbac6c4884687014f1f3111bcd18b533b032d1d25aaeb4b87",
+      "version": "431329688",
+      "digest": "3QWCM14GnrUnqfh9pwHT6KwYEw9B7T1BarQ1rVtG3e2f"
+    },
+    {
+      "type": "published",
+      "packageId": "0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099",
+      "version": "1",
+      "digest": "9cndEyDqGTvJ1VXQePduuCGcEfauj2QTe55mP5Hmq8c8",
+>>>>>>> b5cad36 ([PP-133] Liquidations)
       "modules": [
         "accounts",
         "collateral",
@@ -284,6 +449,7 @@
       "owner": {
         "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
       },
+<<<<<<< HEAD
       "objectType": "0x2::package::UpgradeCap",
       "objectId": "0xb8b0b8693a0b940d991df25808625dea487e3c30f17228189619ce8cface6eb8",
       "version": "432527792",
@@ -299,15 +465,50 @@
       "objectId": "0xbf47254a6bae5687fd44c368ebdba15af560e7e81b1fd4e27c807ac6b45b1d16",
       "version": "432527792",
       "digest": "FBXz95fU5wJyBd1oiwEzjPiAKdtB4sKt1aXxrfTNWVHW"
+=======
+      "objectType": "0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::main::AdminCap",
+      "objectId": "0xbc8982d67bdd262ab61a5b85b2d6fd871045189f6d1bd38c5859af63940048ec",
+      "version": "431329688",
+      "digest": "CLu92ZNzvQaUZgaQztJL1LqYJo4qbCrjKvPdkQJcwaFW"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     },
     {
       "type": "created",
       "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
       "owner": "Immutable",
+<<<<<<< HEAD
       "objectType": "0x2::coin::CoinMetadata<0x83f2f76eba00373280da583af065fccacbe9312da6399f510ef68caea0cd2912::test_lp::TEST_LP>",
       "objectId": "0xc217ba087629ccde9fa023b653f2e7d6fcb6c245d66d9966900e046d9c4a8153",
       "version": "432527792",
       "digest": "CjdY51vTpKYCK4atXLpe3SyLD3bcoh5rX56D2C1QDrmt"
+=======
+      "objectType": "0x2::coin::CoinMetadata<0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::test_coin::TEST_COIN>",
+      "objectId": "0xdac6a50ee000e80464a15cd0ccfaf76896e6433701a0cba10032a585337d245a",
+      "version": "431329688",
+      "digest": "BRvL7RPyCLGhoJtYFpcya8XDdnh5DCRzDpCE36tniTdM"
+    },
+    {
+      "type": "created",
+      "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
+      "owner": {
+        "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
+      },
+      "objectType": "0x2::coin::TreasuryCap<0x805b0d2f375082fc03c5f158e963aa1ab59f5a5a042fae16056b45336acdc099::test_coin::TEST_COIN>",
+      "objectId": "0xf20961d6271c7cfbe1ff9176cadd55512e765eb87d723f947a408f3585d6e101",
+      "version": "431329688",
+      "digest": "Ka8dzE8DT9UexdcMphWYuxkvDzKLKzd9WwKuT8NzSp4"
+    },
+    {
+      "type": "created",
+      "sender": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865",
+      "owner": {
+        "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
+      },
+      "objectType": "0x2::package::UpgradeCap",
+      "objectId": "0xf9061426481bbdf325f5c81c0fda48fa98dfe1fd00d6d79b89730f57f99abe65",
+      "version": "431329688",
+      "digest": "G6cwASzw6oEz6ck42w18T79T5xmVdKHYosHnNZ7gpetg"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
     }
   ],
   "balanceChanges": [
@@ -316,10 +517,19 @@
         "AddressOwner": "0xab8d1b5a5311c9400e3eaf5c3b641f10fb48b43cc30d365fa8a98a6ca6bd4865"
       },
       "coinType": "0x2::sui::SUI",
+<<<<<<< HEAD
       "amount": "-262014680"
     }
   ],
   "timestampMs": "1747888674154",
   "confirmedLocalExecution": true,
   "checkpoint": "198820591"
+=======
+      "amount": "-261437080"
+    }
+  ],
+  "timestampMs": "1747719434158",
+  "confirmedLocalExecution": true,
+  "checkpoint": "198067675"
+>>>>>>> b5cad36 ([PP-133] Liquidations)
 }
