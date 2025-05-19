@@ -1,5 +1,6 @@
 use crate::db::models::collateral_deposit_event::{CollateralDepositEvent, NewCollateralDepositEvent};
 use crate::db::postgres::schema::collateral_deposit_events::dsl::*;
+use crate::db::postgres::schema::collateral_marker_liquidated_events;
 use crate::db::repositories::DBPool;
 use anyhow::{Context, Result};
 use diesel::prelude::*;
@@ -54,6 +55,10 @@ impl CollateralDepositEventRepository {
         let mut conn = self.get_conn()?;
         match collateral_deposit_events
             .filter(account_id.eq(target_account_id))
+            .filter(diesel::dsl::not(diesel::dsl::exists(
+                collateral_marker_liquidated_events::table
+                    .filter(collateral_marker_liquidated_events::collateral_marker_id.eq(collateral_marker_id))
+            )))
             .load::<CollateralDepositEvent>(&mut conn)
         {
             Ok(events) => Ok(events),
@@ -70,6 +75,10 @@ impl CollateralDepositEventRepository {
         match collateral_deposit_events
             .filter(account_id.eq(target_account_id))
             .filter(token_address.eq(target_token_address))
+            .filter(diesel::dsl::not(diesel::dsl::exists(
+                collateral_marker_liquidated_events::table
+                    .filter(collateral_marker_liquidated_events::collateral_marker_id.eq(collateral_marker_id))
+            )))
             .load::<CollateralDepositEvent>(&mut conn)
         {
             Ok(events) => Ok(events),

@@ -15,6 +15,8 @@ use crate::db::repositories::collateral_deposit_event::CollateralDepositEventRep
 use crate::db::repositories::start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository;
 use crate::db::repositories::collateral_transfer::CollateralTransferRepository;
 use crate::db::repositories::vault_transfer::VaultTransferRepository;
+use crate::db::repositories::position_liquidated_event::PositionLiquidatedEventRepository;
+use crate::db::repositories::collateral_marker_liquidated_event::CollateralMarkerLiquidatedEventRepository;
 
 use crate::events::position_created::PositionCreatedEvent as MovePositionCreatedEvent;
 use crate::events::position_closed::PositionClosedEvent as MovePositionClosedEvent;
@@ -24,6 +26,8 @@ use crate::events::collateral_deposit_event::CollateralDepositEvent as MoveColla
 use crate::events::start_collateral_value_assertion_event::StartCollateralValueAssertionEvent as MoveStartCollateralValueAssertionEvent;
 use crate::events::collateral_transfer_created::CollateralTransferCreatedEvent as MoveCollateralTransferCreatedEvent;
 use crate::events::vault_transfer_created::VaultTransferCreatedEvent as MoveVaultTransferCreatedEvent;
+use crate::events::position_liquidated::PositionLiquidatedEvent as MovePositionLiquidatedEvent;
+use crate::events::collateral_marker_liquidated::CollateralMarkerLiquidatedEvent as MoveCollateralMarkerLiquidatedEvent;
 
 use crate::callbacks::transfers_callbacks;
 use crate::config::Config;
@@ -37,6 +41,8 @@ pub struct PositionEventWorker {
     start_collateral_value_assertion_repo: Arc<StartCollateralValueAssertionEventRepository>,
     collateral_transfer_repo: Arc<CollateralTransferRepository>,
     vault_transfer_repo: Arc<VaultTransferRepository>,
+    position_liquidated_repo: Arc<PositionLiquidatedEventRepository>,
+    collateral_marker_liquidated_repo: Arc<CollateralMarkerLiquidatedEventRepository>,
     position_created_event_type: String,
     position_closed_event_type: String,
     vault_created_event_type: String,
@@ -45,6 +51,8 @@ pub struct PositionEventWorker {
     start_collateral_value_assertion_event_type: String,
     collateral_transfer_created_event_type: String,
     vault_transfer_created_event_type: String,
+    position_liquidated_event_type: String,
+    collateral_marker_liquidated_event_type: String,
     liquidation_transfer_service_url: String,
 }
 
@@ -58,6 +66,8 @@ impl PositionEventWorker {
         start_collateral_value_assertion_repo: Arc<StartCollateralValueAssertionEventRepository>,
         collateral_transfer_repo: Arc<CollateralTransferRepository>,
         vault_transfer_repo: Arc<VaultTransferRepository>,
+        position_liquidated_repo: Arc<PositionLiquidatedEventRepository>,
+        collateral_marker_liquidated_repo: Arc<CollateralMarkerLiquidatedEventRepository>,
         app_config: &Config,
     ) -> Self {
         let package_id = &app_config.package_id;
@@ -69,6 +79,8 @@ impl PositionEventWorker {
         let start_collateral_value_assertion_event_type = format!("{}::collateral::StartCollateralValueAssertionEvent", package_id);
         let collateral_transfer_created_event_type = format!("{}::collateral::CollateralTransferCreated", package_id);
         let vault_transfer_created_event_type = format!("{}::lp::VaultTransferCreated", package_id);
+        let position_liquidated_event_type = format!("{}::positions::PositionLiquidatedEvent", package_id);
+        let collateral_marker_liquidated_event_type = format!("{}::collateral::CollateralMarkerLiquidatedEvent", package_id);
 
         info!("Worker configured for package ID: {}", package_id);
         info!("Listening for event type: {}", position_created_event_type);
@@ -79,6 +91,8 @@ impl PositionEventWorker {
         info!("Listening for event type: {}", start_collateral_value_assertion_event_type);
         info!("Listening for event type: {}", collateral_transfer_created_event_type);
         info!("Listening for event type: {}", vault_transfer_created_event_type);
+        info!("Listening for event type: {}", position_liquidated_event_type);
+        info!("Listening for event type: {}", collateral_marker_liquidated_event_type);
         info!("Liquidation transfer service URL: {}", app_config.liquidation_transfer_service_url);
 
         Self {
@@ -90,6 +104,8 @@ impl PositionEventWorker {
             start_collateral_value_assertion_repo,
             collateral_transfer_repo,
             vault_transfer_repo,
+            position_liquidated_repo,
+            collateral_marker_liquidated_repo,
             position_created_event_type,
             position_closed_event_type,
             vault_created_event_type,
@@ -98,6 +114,8 @@ impl PositionEventWorker {
             start_collateral_value_assertion_event_type,
             collateral_transfer_created_event_type,
             vault_transfer_created_event_type,
+            position_liquidated_event_type,
+            collateral_marker_liquidated_event_type,
             liquidation_transfer_service_url: app_config.liquidation_transfer_service_url.clone(),
         }
     }
@@ -283,6 +301,44 @@ impl Worker for PositionEventWorker {
                             },
                             Err(e) => {
                                 error!("BCS Deserialization Error for VaultTransferCreatedEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
+                            }
+                        }
+                     } else if event_type_str == self.position_liquidated_event_type {
+                        match bcs::from_bytes::<MovePositionLiquidatedEvent>(&event.contents) {
+                            Ok(parsed_event) => {
+                                match parsed_event.try_map_to_db(tx_digest_str.clone(), checkpoint_time) {
+                                    Ok(db_event) => {
+                                        match self.position_liquidated_repo.create(db_event) {
+                                            Ok(_) => info!("Successfully stored PositionLiquidatedEvent for tx {}", tx_digest_str),
+                                            Err(e) => error!("DB Error storing PositionLiquidatedEvent for tx {}: {}", tx_digest_str, e),
+                                        }
+                                    },
+                                    Err(map_err) => {
+                                        error!("Mapping Error for PositionLiquidatedEvent tx {}: {}", tx_digest_str, map_err);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                error!("BCS Deserialization Error for PositionLiquidatedEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
+                            }
+                        }
+                     } else if event_type_str == self.collateral_marker_liquidated_event_type {
+                        match bcs::from_bytes::<MoveCollateralMarkerLiquidatedEvent>(&event.contents) {
+                            Ok(parsed_event) => {
+                                match parsed_event.try_map_to_db(tx_digest_str.clone(), checkpoint_time) {
+                                    Ok(db_event) => {
+                                        match self.collateral_marker_liquidated_repo.create(db_event) {
+                                            Ok(_) => info!("Successfully stored CollateralMarkerLiquidatedEvent for tx {}", tx_digest_str),
+                                            Err(e) => error!("DB Error storing CollateralMarkerLiquidatedEvent for tx {}: {}", tx_digest_str, e),
+                                        }
+                                    },
+                                    Err(map_err) => {
+                                        error!("Mapping Error for CollateralMarkerLiquidatedEvent tx {}: {}", tx_digest_str, map_err);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                error!("BCS Deserialization Error for CollateralMarkerLiquidatedEvent tx {}: {}. Data: {:?}", tx_digest_str, e, &event.contents);
                             }
                         }
                      }

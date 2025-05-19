@@ -21,11 +21,10 @@ use pismo_protocol::accounts::{
     Account, 
     AccountStats, 
     assert_account_program_match, 
-    id as account_id, 
-    collateral_count, 
+    id as account_id,
+    collateral_count,
     assert_account_stats_match,
     num_open_positions,
-    single_position_upnl
 };
 use pismo_protocol::collateral::{
     Collateral, 
@@ -46,7 +45,8 @@ use pismo_protocol::positions::{
     get_type as position_type,
     leverage_multiplier as position_leverage_multiplier,
     entry_price as position_entry_price,
-    entry_price_decimals as position_entry_price_decimals
+    entry_price_decimals as position_entry_price_decimals,
+    single_position_upnl
 };
 use pismo_protocol::signed::{SignedU128, Sign, new_signed_u128, add_signed_u128, amount as signed_amount, is_positive as signed_is_positive, new_sign as signed_new_sign}; // Added new_sign as signed_new_sign
 
@@ -68,9 +68,11 @@ const E_POSITION_ALREADY_VISITED: u64 = 20;
 const E_VISITED_TOO_MANY_POSITIONS: u64 = 21;
 const E_PRICE_OBJS_DONT_MATCH_POSITIONS: u64 = 22;
 const E_INCOMPLETE_POSITION_ASSERTION: u64 = 23;
+const E_VALUE_ASSERTION_ACCOUNT_MISMATCH: u64 = 24;
 
 
-public struct CollateralValueAssertionObject has store {
+public struct CollateralValueAssertionObject has store, key {
+    id: UID,
     account_id: address,
     program_id: address,
     num_open_collateral_objects: u64,
@@ -79,13 +81,24 @@ public struct CollateralValueAssertionObject has store {
     collateral_set_times: vector<u64>
 }
 
-public struct PositionValueAssertionObject has store {
+public struct PositionValueAssertionObject has store, key {
+    id: UID,
     account_id: address,
     program_id: address,
     num_open_position_objects: u64,
     visited_position_object_ids: vector<address>,
     position_values: vector<SignedU128>, // Changed to vector<SignedU128>
     position_set_times: vector<u64>
+}
+
+public fun assert_value_assertion_account_matches_stats(
+    collateral_assertion: &CollateralValueAssertionObject,
+    position_assertion: &PositionValueAssertionObject,
+    stats: &AccountStats
+) {
+    let stats_account_id = pismo_protocol::accounts::account_id(stats);
+    assert!(collateral_assertion.account_id == stats_account_id, E_VALUE_ASSERTION_ACCOUNT_MISMATCH);
+    assert!(position_assertion.account_id == stats_account_id, E_VALUE_ASSERTION_ACCOUNT_MISMATCH);
 }
 
 public fun start_collateral_value_assertion(
@@ -97,6 +110,7 @@ public fun start_collateral_value_assertion(
     assert_account_program_match(account, program);
     assert_account_stats_match(account, stats);
     let mut collat_assertion = CollateralValueAssertionObject {
+        id: object::new(ctx),
         account_id: account_id(account),
         program_id: program.id(),
         num_open_collateral_objects: collateral_count(stats),
@@ -119,6 +133,7 @@ public fun start_position_value_assertion(
     assert_account_program_match(account, program);
     assert_account_stats_match(account, stats);
     let mut pos_assertion = PositionValueAssertionObject {
+        id: object::new(ctx),
         account_id: account_id(account),
         program_id: program.id(),
         num_open_position_objects: num_open_positions(stats), // Corrected to use num_open_positions function
@@ -179,15 +194,13 @@ public fun set_collateral_value_assertion<CoinType>(
     let token_id = program.supported_collateral()[collat_idx];
     assert_price_obj_match_token_id(price_info_obj, &token_id);
 
-    let collat_value = token_id.get_value_pyth(price_info_obj, clock, collat_amount, program.shared_price_decimals());
-
-    let collateral_value_no_decimals = collat_value / pow(10, token_id.token_decimals());
+    let collat_value = token_id.get_value_pyth(price_info_obj, clock, collat_amount);
 
     // Calling set_remaining_collateral_value() method on CollateralMarker
     collateral_marker.set_remaining_collateral_value(collat_value, clock);
 
     let current_val_ref = vector::borrow_mut(&mut mut_cva.collateral_values, collat_idx);
-    *current_val_ref = *current_val_ref + (collateral_value_no_decimals as u128);
+    *current_val_ref = *current_val_ref + (collat_value as u128);
 
     vector::push_back(&mut mut_cva.visited_collateral_object_ids, collat_obj_id);
 
@@ -225,14 +238,15 @@ public fun sum_collateral_values_assertion(
 }
 
 public fun destroy_collateral_value_assertion(cva: CollateralValueAssertionObject) {
-    let CollateralValueAssertionObject {
-        account_id: _,
-        program_id: _,
-        num_open_collateral_objects: _,
-        visited_collateral_object_ids: _,
-        collateral_values: _,
-        collateral_set_times: _
-    } = cva;
+    // let CollateralValueAssertionObject {
+    //     account_id: _,
+    //     program_id: _,
+    //     num_open_collateral_objects: _,
+    //     visited_collateral_object_ids: _,
+    //     collateral_values: _,
+    //     collateral_set_times: _
+    // } = cva;
+    transfer::share_object(cva);
 }
 
 public fun set_position_value_assertion(
@@ -262,6 +276,7 @@ public fun set_position_value_assertion(
     let entry_val_no_decimals = position.entry_price() as u128 / pow(10, position.entry_price_decimals());
     
     let pnl = single_position_upnl(
+        position.position_type(),
         position_leverage_multiplier(position) as u64,
         entry_val_no_decimals,
         current_val_no_decimals
@@ -306,13 +321,41 @@ public fun sum_position_values_assertion(
     total_value
 }
 
+public fun calc_position_abs_values_assertion(
+    pva: &PositionValueAssertionObject,
+    clock: &Clock
+): u128 {
+    let visited_count = vector::length(&pva.visited_position_object_ids);
+    assert!(visited_count == pva.num_open_position_objects, E_INCOMPLETE_POSITION_ASSERTION);
+
+    let mut total_value: u128 = 0; 
+    let mut i = 0;
+    let num_values = vector::length(&pva.position_values);
+    let current_time_ms = clock.timestamp_ms();
+    let max_age_ms = get_PYTH_MAX_PRICE_AGE_ms();
+
+    while (i < num_values) {
+        let value = vector::borrow(&pva.position_values, i);
+        let set_time_ms = *vector::borrow(&pva.position_set_times, i);
+
+        if (set_time_ms > 0) { 
+            assert!(current_time_ms <= set_time_ms + max_age_ms, E_VALUE_UPDATED_TOO_LONG_AGO);
+        };
+
+        total_value = value.signed_amount(); 
+        i = i + 1;
+    };
+    total_value
+}
+
 public fun destroy_position_value_assertion(pva: PositionValueAssertionObject) {
-    let PositionValueAssertionObject {
-        account_id: _,
-        program_id: _,
-        num_open_position_objects: _,
-        visited_position_object_ids: _,
-        position_values: _,
-        position_set_times: _
-    } = pva;
+    // let PositionValueAssertionObject {
+    //     account_id: _,
+    //     program_id: _,
+    //     num_open_position_objects: _,
+    //     visited_position_object_ids: _,
+    //     position_values: _,
+    //     position_set_times: _
+    // } = pva;
+    transfer::share_object(pva);
 } 

@@ -22,7 +22,7 @@ use std::u128::pow;
 use pismo_protocol::programs::Program;
 use pismo_protocol::tokens::{
     TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth,
-    get_value_pyth as token_get_value_pyth, price_feed_id_bytes as token_price_feed_id_bytes,
+    price_feed_id_bytes as token_price_feed_id_bytes,
     get_PYTH_MAX_PRICE_AGE_ms
 };
 use pismo_protocol::accounts::{
@@ -78,6 +78,11 @@ public struct StartCollateralValueAssertionEvent has copy, drop {
     account_id: address,
     program_id: address,
     num_open_collateral_objects: u64
+}
+
+public struct CollateralMarkerLiquidatedEvent has copy, drop {
+    collateral_marker_id: address,
+    account_id: address
 }
 
 // Collateral struct needs key for sharing, and store for passing by value
@@ -398,12 +403,16 @@ public(package) fun id_in_vector(vec: &vector<address>, id: address): bool {
     false
 }
 
-public(package) fun liquidate_all_markers(markers: &mut vector<CollateralMarker>) {
+
+public(package) fun liquidate_all_markers_no_sub(markers: &vector<CollateralMarker>) {
     let len = vector::length(markers);
     let mut i = 0;
     while (i < len) {
-        let marker = vector::borrow_mut(markers, i);
-        marker.remaining_collateral = 0;
+        let marker = markers.borrow(i);
+        event::emit(CollateralMarkerLiquidatedEvent {
+            collateral_marker_id: object::uid_to_address(&marker.id),
+            account_id: marker.account_id
+        });
         i = i + 1;
     }
 }

@@ -18,6 +18,7 @@ use pismo_protocol::positions::{
     Position, PositionType, u64_to_position_type, new_position_internal,
     account_id as get_position_account_id,
     supported_positions_token_i, close_position_internal, TransferData,
+    sum_position_original_values_truncated_decimals
 };
 use pismo_protocol::positions as positions;
 use pismo_protocol::tokens::{get_price_pyth, get_price_feed_bytes_pyth as token_get_price_feed_bytes_pyth, amount_for_target_value_pyth};
@@ -25,7 +26,7 @@ use pismo_protocol::collateral::{
     Collateral,
     CollateralMarker,
 };
-use pismo_protocol::value_assertion_objects::{CollateralValueAssertionObject, sum_collateral_values_assertion, PositionValueAssertionObject, sum_position_values_assertion};
+use pismo_protocol::value_assertion_objects::{CollateralValueAssertionObject, sum_collateral_values_assertion, PositionValueAssertionObject, calc_position_abs_values_assertion};
 use pismo_protocol::signed::{new_signed_u128, new_sign};
 use pismo_protocol::main::Global;
 use pismo_protocol::lp::{Vault, find_vault_address, VaultMarker};
@@ -33,6 +34,7 @@ use pismo_protocol::value_transfers::{Self};
 use pyth::price_info;
 use std::u128;
 use std::u128::pow;
+use pismo_protocol::value_assertion_objects::sum_position_values_assertion;
 
 const E_TOKEN_INFO_PRICE_FEED_MISMATCH: u64 = 1;
 const E_NOT_POSITION_OWNER: u64 = 8;
@@ -50,6 +52,7 @@ public fun open_position_pyth(
     position_price_info: &PriceInfoObject,
     collateral_value_assertion: &CollateralValueAssertionObject,
     position_value_assertion: &PositionValueAssertionObject,
+    mut all_open_positions: vector<Position>,
     clock: &Clock,
     ctx: &mut TxContext
 ) {
@@ -66,8 +69,10 @@ public fun open_position_pyth(
     let collateral_value = new_signed_u128(total_collateral_value_u128, new_sign(true));
 
     let total_upnl = sum_position_values_assertion(position_value_assertion, clock);
+
+    let existing_position_sizes = sum_position_original_values_truncated_decimals(&all_open_positions, program.supported_positions());
     
-    assert_inital_margin(collateral_value, total_upnl, pos_amount, token_id.token_decimals(), entry_price, entry_price_decimals, leverage_multiplier as u64);
+    assert_inital_margin(collateral_value, total_upnl,existing_position_sizes, pos_amount, token_id.token_decimals(), entry_price, entry_price_decimals, leverage_multiplier as u64);
 
     stats.increment_open_positions(); //We need to validate we're not double counting positions.
 
@@ -82,6 +87,12 @@ public fun open_position_pyth(
         account.id(),
         ctx
     );
+
+    while(vector::length(&all_open_positions) > 0) {
+        let all_open_positions = vector::pop_back(&mut all_open_positions);
+        transfer::public_share_object(all_open_positions);
+    };
+    all_open_positions.destroy_empty();
 } 
 
 
@@ -143,7 +154,7 @@ public fun close_position_pyth(
             assert!(collateral_price_info_byte == collateral_token_id.price_feed_id_bytes(), E_COLLATERAL_PRICE_DOES_NOT_MATCH);
 
             let remaining_collateral = collateral_marker.remaining_collateral();
-            let collateral_value = collateral_marker.get_token_id().get_value_pyth(collateral_price_info, clock, remaining_collateral, collateral_token_id.token_decimals()); //The decimals might be fucked up here.
+            let collateral_value = collateral_marker.get_token_id().get_value_pyth(collateral_price_info, clock, remaining_collateral); //The decimals might be fucked up here.
             if(collateral_value > transfer_value){
                 let amount_collateral_to_remove = amount_for_target_value_pyth( //This function could be wildly wrong.
                     &collateral_token_id,

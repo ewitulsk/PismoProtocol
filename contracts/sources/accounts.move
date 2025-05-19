@@ -23,17 +23,18 @@ use pismo_protocol::positions::{
     amount as position_amount, leverage_multiplier, entry_price,
     account_id as position_account_id
 };
-use pismo_protocol::tokens::{get_price_pyth, normalize_value};
-use pismo_protocol::signed::{SignedU128, sub_signed_u128, is_positive, Sign, new_signed_u128, new_sign, amount as signed_amount, sign, add_signed_u128, is_negative};
+use pismo_protocol::tokens::get_price_pyth;
+use pismo_protocol::signed::{SignedU128, is_positive, amount as signed_amount, sub_u128_from_signed, add_signed_u128};
 use pismo_protocol::collateral::{Collateral};
 use pismo_protocol::main::Global;
 use pismo_protocol::lp::Vault;
 use std::u128;
 use std::u64;
+use pismo_protocol::signed::sub_signed_u128;
 
 const E_ACCOUNT_PROGRAM_MISMATCH: u64 = 0;
 const E_INVALID_INITAL_MARGIN: u64 = 3;
-const E_BRO_SHOULD_BE_LIQUIDATED: u64 = 4;
+const E_NO_REMAINING_COLLATERAL: u64 = 4;
 const E_COLLATERAL_ACCOUNT_MISMATCH: u64 = 9;
 const E_INPUT_LENGTH_MISMATCH: u64 = 12;
 const E_ACCOUNT_STATS_MISMATCH: u64 = 13;
@@ -136,58 +137,6 @@ public(package) fun assert_account_program_match(account: &Account, program: &Pr
     assert!(account.program_id == program.id(), E_ACCOUNT_PROGRAM_MISMATCH);
 }
 
-public(package) fun assert_account_stats_program_positions_match(
-    account: &Account,
-    stats: &AccountStats,
-    program: &Program,
-    positions: &vector<Position>
-) {
-    assert_account_stats_match(account, stats);
-    assert_account_program_match(account, program);
-    let account_struct_id = id(account);
-    let mut i = 0;
-    while (i < vector::length(positions)) {
-        let position = vector::borrow(positions, i);
-        assert!(position_account_id(position) == account_struct_id, E_ACCOUNT_STATS_MISMATCH);
-        i = i + 1;
-    };
-}
-
-// public fun single_position_upnl(
-//     position_size: u64,
-//     leverage: u64,
-//     entry_asset_price: u64,
-//     cur_asset_price: u64,
-//     token_decimals: u8,
-//     shared_decimals: u8
-// ): SignedU128 {
-//     let position_size_u128 = position_size as u128;
-//     let leverage_u128 = leverage as u128;
-//     let entry_asset_price_u128 = entry_asset_price as u128;
-//     let cur_asset_price_u128 = cur_asset_price as u128;
-
-//     let entry_value = normalize_value(position_size_u128 * leverage_u128 * entry_asset_price_u128, token_decimals, shared_decimals);
-//     let cur_value = normalize_value(position_size_u128 * leverage_u128 * cur_asset_price_u128, token_decimals, shared_decimals);
-    
-//     sub_signed_u128(cur_value, entry_value)
-// }
-
-public fun single_position_upnl(
-    leverage: u64,
-    entry_value_no_decimals: u128,
-    cur_value_no_decimals: u128
-): SignedU128 {
-    let leverage_u128 = leverage as u128;
-
-    let (price_delta, sign) = if(cur_value_no_decimals > entry_value_no_decimals) {
-        ((cur_value_no_decimals - entry_value_no_decimals), new_sign(true))
-    } else {
-        ((entry_value_no_decimals - cur_value_no_decimals), new_sign(false))
-    };
-
-    new_signed_u128((price_delta * leverage_u128), sign)
-}
-
 public fun calc_inital_margin(
     position_size: u64,
     position_decimals: u8,
@@ -207,16 +156,17 @@ public fun calc_inital_margin(
 
 public fun assert_inital_margin( //Inital margin needs to take into account position values too...
     collateral_value_truncated_decimals: SignedU128, //The expectation is that the collateral decimals have been truncated by this point
-    position_value_truncated_decimals: SignedU128,
+    position_value_truncated_decimals: SignedU128, //The expectation is that the collateral decimals have been truncated by this point
+    existing_position_values: u128,
     position_size: u64,
     position_decimals: u8,
     mark_price: u64,
     mark_price_decimals: u8,
     leverage: u64
 ) { 
-
     let account_value = add_signed_u128(&collateral_value_truncated_decimals, &position_value_truncated_decimals);
+    let remaining_collateral = sub_u128_from_signed(&account_value, existing_position_values);
 
-    assert!(is_positive(&account_value), E_BRO_SHOULD_BE_LIQUIDATED);
-    assert!(signed_amount(&account_value) >= calc_inital_margin(position_size, position_decimals, mark_price, mark_price_decimals, leverage), E_INVALID_INITAL_MARGIN);
+    assert!(is_positive(&remaining_collateral), E_NO_REMAINING_COLLATERAL);
+    assert!(signed_amount(&remaining_collateral) >= calc_inital_margin(position_size, position_decimals, mark_price, mark_price_decimals, leverage), E_INVALID_INITAL_MARGIN);
 }

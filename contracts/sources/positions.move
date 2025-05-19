@@ -19,6 +19,7 @@ use std::u128::pow;
 use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers_pyth, get_PYTH_ID, get_price_feed_bytes_pyth, get_price_pyth};
 use pismo_protocol::main::{Self, AdminCap, Global};
 use pismo_protocol::programs::Program;
+use pismo_protocol::signed::{SignedU128, new_signed_u128, new_sign};
 use std::u128;
 
 const E_BAD_POSITION: u64 = 225;
@@ -49,6 +50,10 @@ public struct PositionClosedEvent has copy, drop {
     transfer_amount: u128,
     transfer_to: TransferTo,
     account_id: address
+}
+
+public struct PositionLiquidatedEvent has copy, drop {
+    position_id: address
 }
 
 public enum PositionType has store, drop, copy {
@@ -113,6 +118,22 @@ public fun u64_to_position_type(pos_id: u64): PositionType {
 //         ctx,
 //     );
 // }
+
+public(package) fun sum_position_original_values_truncated_decimals (
+    positions: &vector<Position>,
+    supported_positions: &vector<TokenIdentifier>
+): u128 {
+    let mut original_values_truncated_decimals = 0;
+
+    let mut i = 0;
+    while(i < positions.length()) {
+        let pos = positions.borrow(i);
+        let position_token_id = supported_positions.borrow(pos.supported_positions_token_i); //WE REALLLLLY should just add position decimals to the object
+        original_values_truncated_decimals = original_values_truncated_decimals + (((pos.amount as u128) * (pos.entry_price as u128)) / pow(10, pos.entry_price_decimals)) / pow(10, position_token_id.token_decimals());
+        i = i + 1;
+    };
+    original_values_truncated_decimals
+}
 
 public(package) fun new_position_internal (
     program: &Program,
@@ -320,6 +341,52 @@ public fun account_id(position: &Position): address {
     position.account_id
 }
 
+public fun single_position_upnl(
+    pos_type: PositionType,
+    leverage: u64,
+    entry_value_no_decimals: u128,
+    cur_value_no_decimals: u128
+): SignedU128 {
+    let leverage_u128 = leverage as u128;
+
+    let price_delta_abs: u128;
+    let pnl_sign_is_positive: bool;
+
+    match (pos_type) {
+        PositionType::None => {
+            price_delta_abs = 0;
+            pnl_sign_is_positive = true; // UPNL is 0, sign is conventionally positive
+        },
+        PositionType::Long => {
+            if (cur_value_no_decimals == entry_value_no_decimals) {
+                price_delta_abs = 0;
+                pnl_sign_is_positive = true;
+            } else if (cur_value_no_decimals > entry_value_no_decimals) { // Price increased
+                price_delta_abs = cur_value_no_decimals - entry_value_no_decimals;
+                pnl_sign_is_positive = true; // Long profits
+            } else { // Price decreased (cur_value_no_decimals < entry_value_no_decimals)
+                price_delta_abs = entry_value_no_decimals - cur_value_no_decimals;
+                pnl_sign_is_positive = false; // Long loses
+            }
+        },
+        PositionType::Short => {
+            if (cur_value_no_decimals == entry_value_no_decimals) {
+                price_delta_abs = 0;
+                pnl_sign_is_positive = true;
+            } else if (cur_value_no_decimals > entry_value_no_decimals) { // Price increased
+                price_delta_abs = cur_value_no_decimals - entry_value_no_decimals;
+                pnl_sign_is_positive = false; // Short loses
+            } else { // Price decreased (cur_value_no_decimals < entry_value_no_decimals)
+                price_delta_abs = entry_value_no_decimals - cur_value_no_decimals;
+                pnl_sign_is_positive = true; // Short profits
+            }
+        }
+    };
+
+    let final_sign = new_sign(pnl_sign_is_positive);
+    new_signed_u128((price_delta_abs * leverage_u128), final_sign)
+}
+
 /// Destroys a vector of Position objects.
 public(package) fun destroy_positions(positions: &mut vector<Position>) {
     while (!vector::is_empty(positions)) {
@@ -333,6 +400,8 @@ public(package) fun destroy_positions(positions: &mut vector<Position>) {
             supported_positions_token_i: _,
             account_id: _,
         } = vector::pop_back(positions);
+        let position_id = object::uid_to_address(&id);
+        event::emit(PositionLiquidatedEvent { position_id });
         object::delete(id);
     };
 }

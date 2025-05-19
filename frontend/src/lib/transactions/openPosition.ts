@@ -377,6 +377,14 @@ export const openPosition = async (
       throw new Error(`PriceInfoObject ID not found for position market feed ${newPositionMarketFeedId} after Pyth update.`);
     }
 
+    // Prepare all_open_positions argument
+    const allOpenPositionObjectIds = existingPositionAssets.map(p => txb.object(normalizeSuiObjectId(p.position_id)));
+    const allOpenPositionsArg = txb.makeMoveVec({
+      type: `${packageId}::positions::Position`,
+      elements: allOpenPositionObjectIds
+    });
+    console.log("Transaction command added: makeMoveVec for all_open_positions");
+
     // Step 3: Open Position
     // open_position_pyth takes CVA as 8th arg, PVA as 9th arg.
     txb.moveCall({
@@ -392,7 +400,8 @@ export const openPosition = async (
         txb.object(priceInfoObjectIdForPositionMarket),     // Arg 7: position_price_info
         cvaHotPotato,                                       // Arg 8: collateral_value_assertion
         pvaHotPotato,                                       // Arg 9: position_value_assertion
-        txb.object(SUI_CLOCK_OBJECT_ID),                    // Arg 10: clock
+        allOpenPositionsArg,                                // Arg 10: all_open_positions
+        txb.object(SUI_CLOCK_OBJECT_ID),                    // Arg 11: clock
       ],
     });
     console.log("Transaction command added: open_position_pyth");

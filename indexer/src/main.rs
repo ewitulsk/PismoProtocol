@@ -28,6 +28,8 @@ use crate::db::repositories::{
     start_collateral_value_assertion_event::StartCollateralValueAssertionEventRepository,
     collateral_transfer::CollateralTransferRepository,
     vault_transfer::VaultTransferRepository,
+    position_liquidated_event::PositionLiquidatedEventRepository,
+    collateral_marker_liquidated_event::CollateralMarkerLiquidatedEventRepository,
 };
 use crate::router::create_router;
 use crate::worker::PositionEventWorker;
@@ -68,6 +70,8 @@ async fn main() -> Result<()> {
     let start_collateral_value_assertion_repo = Arc::new(StartCollateralValueAssertionEventRepository::new(db_pool.clone()));
     let collateral_transfer_repo = Arc::new(CollateralTransferRepository::new(db_pool.clone()));
     let vault_transfer_repo = Arc::new(VaultTransferRepository::new(db_pool.clone()));
+    let position_liquidated_repo = Arc::new(PositionLiquidatedEventRepository::new(db_pool.clone()));
+    let collateral_marker_liquidated_repo = Arc::new(CollateralMarkerLiquidatedEventRepository::new(db_pool.clone()));
     info!("Repositories initialized.");
 
     // Worker
@@ -80,6 +84,8 @@ async fn main() -> Result<()> {
         start_collateral_value_assertion_repo.clone(),
         collateral_transfer_repo.clone(),
         vault_transfer_repo.clone(),
+        position_liquidated_repo.clone(),
+        collateral_marker_liquidated_repo.clone(),
         &config
     );
     info!("PositionEventWorker initialized.");

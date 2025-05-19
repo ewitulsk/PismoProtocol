@@ -291,7 +291,7 @@ public fun set_vault_value<CoinType, LPType>(
     clock: &Clock
 ) {
     let token_id = global.get_supported_positions()[vault.global_index];
-    let vault_value = get_value_pyth(&token_id, price_info_obj, clock, marker.vault_amount, token_id.token_decimals());
+    let vault_value = get_value_pyth(&token_id, price_info_obj, clock, marker.vault_amount);
     marker.set_vault_marker_value(vault_value, clock);
 }
 
