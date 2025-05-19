@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react"; 
+import React, { useState, useEffect, useRef } from "react"; 
 import Layout from "../common/Layout";
 import ChartContainer from "./ChartContainer";
 import AccountHealth from "./AccountHealth";
@@ -115,6 +115,8 @@ const TradingPlatform: React.FC = () => {
   const [userDepositedCollateral, setUserDepositedCollateral] = useState<Record<string, string>>({});
   const [isLoadingDepositedCollateral, setIsLoadingDepositedCollateral] = useState(false);
   const [depositedCollateralError, setDepositedCollateralError] = useState<string | null>(null);
+
+  const isFirstDepositedCollateralFetch = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -510,11 +512,12 @@ const TradingPlatform: React.FC = () => {
     if (!accountObjectId || supportedCollateral.length === 0 || !INDEXER_URL) {
       setUserDepositedCollateral({});
       setIsLoadingDepositedCollateral(false);
+      isFirstDepositedCollateralFetch.current = true; // Reset on dependency change
       return;
     }
     let cancelled = false;
     const fetchAllDepositedCollateral = async () => {
-      setIsLoadingDepositedCollateral(true);
+      if (isFirstDepositedCollateralFetch.current) setIsLoadingDepositedCollateral(true);
       let fetchErrorOccurred = false;
       const accountIdForUrl = accountObjectId.startsWith('0x') ? accountObjectId.substring(2) : accountObjectId;
 
@@ -570,7 +573,10 @@ const TradingPlatform: React.FC = () => {
         } else {
           setDepositedCollateralError(null);
         }
-        setIsLoadingDepositedCollateral(false);
+        if (isFirstDepositedCollateralFetch.current) {
+          setIsLoadingDepositedCollateral(false);
+          isFirstDepositedCollateralFetch.current = false; // Only set to false after first fetch
+        }
       }
     };
     fetchAllDepositedCollateral();
