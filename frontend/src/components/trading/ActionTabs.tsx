@@ -27,27 +27,18 @@ export type CollateralInfo = SupportedCollateralToken & {
     name: string; // User-friendly name like 'SUI', 'USDC'
 };
 
-// Type matching the indexer /v0/:account_id/collateral/:token_info response
-type DepositedCollateralResponse = {
-    collateral_id: number[]; // Assuming bytes represented as number array in JSON
-    collateral_marker_id: number[];
-    account_id: number[];
-    token_id: {
-        account_address: number[];
-        creation_num: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53)
-    };
-    amount: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53) - MUST TREAT AS BIGINT
-};
-
 // Define Props for ActionTabs
 export interface ActionTabsProps {
     account: MinimalAccountInfo | null; 
     accountObjectId: string | null;
-    accountStatsId: string | null; // Added: To be passed from parent
-    isLoadingAccount: boolean; // This prop now reflects loading of account, accountObjectId, AND accountStatsId from parent
-    supportedCollateral: CollateralInfo[]; // Added: To be passed from parent
+    accountStatsId: string | null;
+    isLoadingAccount: boolean;
+    supportedCollateral: CollateralInfo[];
     selectedMarketIndex?: number; 
     selectedMarketPriceFeedId?: string; 
+    userDepositedCollateral: Record<string, string>; // NEW: passed from TradingPlatform
+    isLoadingDepositedCollateral: boolean;           // NEW: passed from TradingPlatform
+    depositedCollateralError: string | null;         // NEW: passed from TradingPlatform
 }
 
 // --- Constants ---
@@ -111,11 +102,14 @@ const formatBalance = (balance: string | bigint, decimals: number): string => {
 const ActionTabs: React.FC<ActionTabsProps> = ({ 
   account, 
   accountObjectId, 
-  accountStatsId, // Destructure new prop
-  isLoadingAccount, // Use this for overall loading state of necessary account details
-  supportedCollateral, // Destructure new prop
+  accountStatsId,
+  isLoadingAccount,
+  supportedCollateral,
   selectedMarketIndex,
-  selectedMarketPriceFeedId
+  selectedMarketPriceFeedId,
+  userDepositedCollateral,
+  isLoadingDepositedCollateral,
+  depositedCollateralError
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("Positions");
   const [positionType, setPositionType] = useState<PositionType>("Long");
@@ -128,14 +122,10 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   const [withdrawAmount, setWithdrawAmount] = useState<string>("");
   const [userWalletBalances, setUserWalletBalances] = useState<Record<string, string>>({}); 
   const [isLoadingWalletBalances, setIsLoadingWalletBalances] = useState(false); 
-  const [userDepositedCollateral, setUserDepositedCollateral] = useState<Record<string, string>>({}); 
-  const [isLoadingDepositedCollateral, setIsLoadingDepositedCollateral] = useState(false);
-  const [depositedCollateralError, setDepositedCollateralError] = useState<string | null>(null);
   const [isLoadingTx, setIsLoadingTx] = useState(false);
   const [notification, setNotification] = useState<NotificationState>(null);
   const [optimisticHasAccount, setOptimisticHasAccount] = useState<boolean>(false);
   const [hasWalletBalancesLoadedOnce, setHasWalletBalancesLoadedOnce] = useState(false);
-  const [hasDepositedCollateralLoadedOnce, setHasDepositedCollateralLoadedOnce] = useState(false);
 
   const client = useSuiClient(); 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
@@ -181,61 +171,6 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         setHasWalletBalancesLoadedOnce(true);
     }
   }, [walletBalancesData, isLoadingWalletBalancesQuery, hasWalletBalancesLoadedOnce]);
-
-  useEffect(() => {
-    if (!accountObjectId || supportedCollateral.length === 0 || !INDEXER_URL) {
-        setUserDepositedCollateral({}); 
-        setIsLoadingDepositedCollateral(false);
-        return;
-    }
-    const fetchAllDepositedCollateral = async () => {
-        setIsLoadingDepositedCollateral(true);
-        const newDepositedBalances: Record<string, string> = {};
-        let fetchErrorOccurred = false;
-        const accountIdForUrl = accountObjectId.startsWith('0x') ? accountObjectId.substring(2) : accountObjectId;
-
-        for (const token of supportedCollateral) {
-            const tokenInfo = token.fields.token_info;
-            const decimals = token.fields.token_decimals;
-            const tokenInfoForUrl = tokenInfo.startsWith('0x') ? tokenInfo.substring(2) : tokenInfo;
-            const encodedTokenInfo = encodeURIComponent(tokenInfoForUrl);
-            const url = `${INDEXER_URL}/v0/${accountIdForUrl}/collateral/${encodedTokenInfo}`;
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        newDepositedBalances[tokenInfo] = formatBalance(BigInt(0), decimals);
-                        continue;
-                    }
-                    const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
-                    throw new Error(errorData.error || `Failed to fetch deposited collateral for ${token.name}: ${response.status}`);
-                }
-                const data: DepositedCollateralResponse[] = await response.json();
-                let totalDepositedAmount = BigInt(0);
-                data.forEach(deposit => { totalDepositedAmount += BigInt(String(deposit.amount)); });
-                newDepositedBalances[tokenInfo] = formatBalance(totalDepositedAmount, decimals);
-            } catch (error) {
-                console.error(`Error fetching deposited collateral for ${token.name}:`, error);
-                fetchErrorOccurred = true;
-                newDepositedBalances[tokenInfo] = "Error";
-            }
-        }
-        setUserDepositedCollateral(newDepositedBalances);
-        if (fetchErrorOccurred && !depositedCollateralError) {
-            setDepositedCollateralError("Error fetching some deposited collateral balances. Check console.");
-            setNotification({ show: true, message: "Error fetching some deposited collateral balances. See console.", type: 'error' });
-        } else if (!fetchErrorOccurred) {
-            setDepositedCollateralError(null);
-        }
-        setIsLoadingDepositedCollateral(false);
-        if (!hasDepositedCollateralLoadedOnce) {
-            setHasDepositedCollateralLoadedOnce(true);
-        }
-    };
-    fetchAllDepositedCollateral();
-    const intervalId = setInterval(fetchAllDepositedCollateral, 5000);
-    return () => clearInterval(intervalId);
-  }, [accountObjectId, supportedCollateral, INDEXER_URL, depositedCollateralError, hasDepositedCollateralLoadedOnce]);
 
   useEffect(() => {
     const availableWithdrawTokens = supportedCollateral

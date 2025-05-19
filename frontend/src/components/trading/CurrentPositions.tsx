@@ -27,7 +27,8 @@ interface CurrentPositionsProps {
     accountObjectId: string | null; // Added: Protocol-specific Account object ID
     accountStatsId: string | null; // Added: Protocol-specific AccountStats object ID
     availableAssets: import('./AssetSelector').SelectableMarketAsset[];
-    supportedCollateral: SupportedCollateralToken[]; 
+    supportedCollateral: SupportedCollateralToken[];
+    onTPDChange?: (tpd: number) => void; // Add callback prop for TPD
 }
 
 // --- Helper Functions ---
@@ -115,7 +116,7 @@ const Slider: React.FC<{ value: number; onChange: (value: number) => void; min?:
 };
 
 // Update component to use props
-const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accountId, accountObjectId, accountStatsId, availableAssets, supportedCollateral }) => {
+const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accountId, accountObjectId, accountStatsId, availableAssets, supportedCollateral, onTPDChange }) => {
     const [positions, setPositions] = useState<PositionData[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, number | undefined>>({}); // Allow undefined for loading state
     const [isLoadingData, setIsLoadingData] = useState<boolean>(true); // Renamed from isLoading
@@ -272,6 +273,47 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accoun
             subscribedFeedIdsRef.current.clear();
         };
     }, [positions]);
+
+    // --- Total Position Delta (TPD) calculation and logging ---
+    useEffect(() => {
+        let tpd = 0;
+        if (!positions || positions.length === 0) {
+            if (onTPDChange) onTPDChange(0);
+            console.log("[CurrentPositions] Total Position Delta (TPD): 0");
+            return;
+        }
+        positions.forEach(position => {
+            const formattedFeedId = position.price_feed_id_bytes.startsWith('0x')
+                ? position.price_feed_id_bytes
+                : `0x${position.price_feed_id_bytes}`;
+            const livePrice = livePrices[formattedFeedId];
+            const decimals = getPositionDecimals(position, availableAssets);
+            const liveValue = calculatePositionValue(position, livePrice, decimals);
+
+            if (
+                livePrice !== undefined &&
+                liveValue !== null &&
+                !isNaN(liveValue) &&
+                position.entry_price &&
+                position.amount
+            ) {
+                const entryPriceNumeric = parseFloat(position.entry_price) / (10 ** position.entry_price_decimals);
+                if (!isNaN(entryPriceNumeric)) {
+                    const entryValue = calculatePositionValue(position, entryPriceNumeric, decimals);
+                    if (entryValue !== null && !isNaN(entryValue)) {
+                        let rawDelta = liveValue - entryValue;
+                        if (position.position_type === "Short") {
+                            rawDelta = -rawDelta;
+                        }
+                        tpd += rawDelta;
+                    }
+                }
+            }
+        });
+        if (onTPDChange) onTPDChange(tpd);
+        // console.log("[CurrentPositions] Total Position Delta (TPD):", tpd);
+    }, [positions, livePrices, availableAssets, onTPDChange]);
+    // --- End TPD calculation and logging ---
 
     const positionToClose = closingPositionId ? positions.find(p => p.position_id === closingPositionId) : null;
     // Calculate total position amount considering decimals
