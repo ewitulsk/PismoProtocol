@@ -1,0 +1,1 @@
+DROP TABLE collateral_marker_liquidated_events; 

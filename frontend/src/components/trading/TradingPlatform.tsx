@@ -17,8 +17,10 @@ import {
     useCurrentWallet,
 } from "@mysten/dapp-kit";
 import { PaginatedObjectsResponse, SuiObjectData, SuiClient, getFullnodeUrl, SuiObjectResponse } from '@mysten/sui/client';
-import { bytesToHex } from '@noble/hashes/utils'; // For converting price_feed_id_bytes
 import type { MinimalAccountInfo, SupportedCollateralToken as ExtSupportedCollateralToken, NotificationState as ExtNotificationState } from '../../lib/transactions/depositCollateral'; // Added for supportedCollateral type
+import { PositionData } from '@/types'; // Import PositionData
+import type { VaultAssetData } from '../../types/index'; // Import VaultAssetData from new central types file
+import { bytesToHex } from '@noble/hashes/utils'; // Import bytesToHex
 
 const PACKAGE_ID = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID;
 const PROGRAM_OBJECT_ID = process.env.NEXT_PUBLIC_SUI_PROGRAM_OBJECT_ID;
@@ -26,7 +28,7 @@ const ACCOUNT_TYPE = PACKAGE_ID ? `${PACKAGE_ID}::accounts::Account` : undefined
 const PROGRAM_TYPE = PACKAGE_ID ? `${PACKAGE_ID}::programs::Program` : undefined;
 const PUBLIC_NETWORK_NAME = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'devnet' | 'mainnet' | 'localnet'; 
 const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL; // Added for fetching accountStatsId
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL; // Added for fetching supportedCollateral
+const LIQUIDATION_SERVICE_URL = process.env.NEXT_PUBLIC_LIQUIDATION_SERVICE_URL; // New URL for liquidation service
 
 interface TokenIdentifier {
     token_info: string;
@@ -57,11 +59,21 @@ type DepositedCollateralResponse = {
     collateral_marker_id: number[];
     account_id: number[];
     token_id: {
-        account_address: number[];
+        token_address: string; 
         creation_num: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53)
     };
     amount: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53) - MUST TREAT AS BIGINT
 };
+
+// New type for detailed user deposited collateral information
+interface DepositedCollateralDetail {
+    collateralId: string; // Hex string
+    markerId: string; // Hex string
+    tokenInfo: string; // Full coin type, e.g., "0x2::sui::SUI"
+    amount: string; // Formatted amount as string
+    priceFeedIdBytes?: string; // Optional: Hex string, to be added later from supportedCollateral
+    rawAmount: bigint; // Store the raw amount as bigint
+}
 
 // Create a read-only SuiClient for fetching public program data
 let readOnlySuiClient: SuiClient;
@@ -109,10 +121,35 @@ const TradingPlatform: React.FC = () => {
   // Add state for Total Position Delta (TPD)
   const [totalPositionDelta, setTotalPositionDelta] = useState<number>(0);
 
+  // State for current positions data (lifted from CurrentPositions)
+  const [currentPositionsData, setCurrentPositionsData] = useState<PositionData[]>([]);
+
+  // State for all vault marker IDs
+  const [allVaultMarkerIds, setAllVaultMarkerIds] = useState<string[]>([]);
+  const [isLoadingVaultMarkers, setIsLoadingVaultMarkers] = useState<boolean>(true);
+
   // --- Collateral Value Calculation and Logging ---
   const [totalCollateralValue, setTotalCollateralValue] = useState<number>(0);
+
+  // State for Account Health Percentage
+  const [accountHealthPercentage, setAccountHealthPercentage] = useState<number>(100);
+
+  // State for managing liquidation process
+  const [isLiquidating, setIsLiquidating] = useState<boolean>(false);
+  const [liquidationError, setLiquidationError] = useState<string | null>(null);
+  const [lastLiquidationAttemptTime, setLastLiquidationAttemptTime] = useState<number>(0);
+
+  // Ref to hold the latest account health percentage for the delayed check
+  const accountHealthPercentageRef = useRef(accountHealthPercentage);
+  useEffect(() => {
+    accountHealthPercentageRef.current = accountHealthPercentage;
+  }, [accountHealthPercentage]);
+
+  // Ref to hold the liquidation timer
+  const liquidationTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // --- Deposited Collateral State (moved from ActionTabs) ---
-  const [userDepositedCollateral, setUserDepositedCollateral] = useState<Record<string, string>>({});
+  const [userDepositedCollateralDetails, setUserDepositedCollateralDetails] = useState<DepositedCollateralDetail[]>([]);
   const [isLoadingDepositedCollateral, setIsLoadingDepositedCollateral] = useState(false);
   const [depositedCollateralError, setDepositedCollateralError] = useState<string | null>(null);
 
@@ -121,36 +158,35 @@ const TradingPlatform: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     async function calculateAndLogTotalCollateralValue() {
-      if (!supportedCollateral.length || !userDepositedCollateral) {
+      if (!supportedCollateral.length || userDepositedCollateralDetails.length === 0) {
         setTotalCollateralValue(0);
         // console.log("[TradingPlatform] Total Collateral Value: 0");
         return;
       }
       let totalValue = 0;
-      const pricePromises = supportedCollateral.map(async (collateral) => {
-        const tokenInfo = collateral.fields.token_info;
-        const amountStr = userDepositedCollateral[tokenInfo];
-        if (!amountStr || amountStr === "Error") return 0;
-        const amount = parseFloat(amountStr);
+      const pricePromises = userDepositedCollateralDetails.map(async (detail) => {
+        const collateralDefinition = supportedCollateral.find(sc => sc.fields.token_info === detail.tokenInfo);
+        if (!collateralDefinition) return 0;
+
+        const amount = parseFloat(detail.amount);
         if (!amount || isNaN(amount) || amount <= 0) return 0;
 
-        let priceFeedIdHex: string | undefined = undefined;
-        if (collateral.fields.price_feed_id_bytes_hex) {
-          priceFeedIdHex = collateral.fields.price_feed_id_bytes_hex;
-        } else if (Array.isArray(collateral.fields.price_feed_id_bytes)) {
-          try {
-            const bytes = Uint8Array.from(collateral.fields.price_feed_id_bytes);
-            priceFeedIdHex = "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-          } catch {
-            priceFeedIdHex = undefined;
-          }
+        let priceFeedIdHex: string | undefined = collateralDefinition.fields.price_feed_id_bytes_hex;
+        if (!priceFeedIdHex) {
+            if (Array.isArray(collateralDefinition.fields.price_feed_id_bytes)) {
+                try {
+                    const bytes = Uint8Array.from(collateralDefinition.fields.price_feed_id_bytes);
+                    priceFeedIdHex = "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+                } catch { priceFeedIdHex = undefined; }
+            }
         }
         if (!priceFeedIdHex) return 0;
 
         try {
           const priceData = await pythPriceFeedService.getLatestPrice(priceFeedIdHex);
           if (!priceData || typeof priceData.price !== "number" || isNaN(priceData.price)) return 0;
-          return amount * priceData.price;
+          const value = (Number(detail.rawAmount) / Math.pow(10, collateralDefinition.fields.token_decimals)) * priceData.price;
+          return value;
         } catch {
           return 0;
         }
@@ -159,16 +195,189 @@ const TradingPlatform: React.FC = () => {
       const values = await Promise.all(pricePromises);
       if (!cancelled) {
         totalValue = values.reduce((a, b) => a + b, 0);
-        setTotalCollateralValue(totalValue); // <-- Set state
+        setTotalCollateralValue(totalValue);
         // console.log("[TradingPlatform] Total Collateral Value:", totalValue);
       }
     }
     calculateAndLogTotalCollateralValue();
     return () => { cancelled = true; };
-  }, [userDepositedCollateral, supportedCollateral]);
-  // --- End Collateral Value Calculation and Logging ---
+  }, [userDepositedCollateralDetails, supportedCollateral]);
 
-  
+  // Calculate Account Health Percentage
+  useEffect(() => {
+    let computedPercentage = 100;
+    if (typeof totalCollateralValue === "number" && totalCollateralValue > 0) {
+      computedPercentage =
+        ((totalCollateralValue + totalPositionDelta) / totalCollateralValue) * 100;
+    }
+    // Ensure accountHealthPercentage is never NaN or Infinity, default to 100 if issues.
+    if (isNaN(computedPercentage) || !isFinite(computedPercentage)) {
+        // console.warn(`[TradingPlatform] Computed percentage was NaN or Infinity. TCV: ${totalCollateralValue}, TPD: ${totalPositionDelta}. Defaulting to 100.`);
+        computedPercentage = 100;
+    }
+    setAccountHealthPercentage(computedPercentage);
+    // console.log("[TradingPlatform] Account Health Percentage:", computedPercentage.toFixed(2), "TPD:", totalPositionDelta, "TCV:", totalCollateralValue);
+  }, [totalPositionDelta, totalCollateralValue]);
+
+  // Effect to trigger liquidation with a delay and re-check
+  useEffect(() => {
+    const LIQUIDATION_COOLDOWN_MS = 60000; // 1 minute cooldown
+    const LIQUIDATION_DELAY_MS = 1000; // 1 second delay
+
+    // Define the actual liquidation execution logic
+    // This function will be called after the delay if conditions are still met
+    const performDelayedLiquidation = async () => {
+      // Re-check critical conditions *inside* the delayed function, as state might have changed
+      // accountObjectId is from the useEffect closure, which is fine as the effect re-runs if it changes.
+      if (!PROGRAM_OBJECT_ID || !accountObjectId || !accountStatsId) {
+        console.warn("[Liquidation] Missing critical IDs (Program, Account, or Stats) at time of delayed execution. Aborting.");
+        setLiquidationError("Missing critical IDs for liquidation.");
+        return;
+      }
+
+      if (currentPositionsData.length === 0 && userDepositedCollateralDetails.length === 0) {
+        console.log("[Liquidation] No positions or collaterals to liquidate (at time of delayed execution).");
+        return;
+      }
+
+      // Prevent re-triggering if already liquidating or within cooldown
+      // This check is crucial to be up-to-date by using current state values
+      if (isLiquidating || Date.now() - lastLiquidationAttemptTime < LIQUIDATION_COOLDOWN_MS) {
+        const reason = isLiquidating ? "already liquidating" : "in cooldown";
+        console.log(`[Liquidation] Skipping delayed execution: ${reason}.`);
+        return;
+      }
+
+      setIsLiquidating(true);
+      setLiquidationError(null);
+      setLastLiquidationAttemptTime(Date.now()); // Record time when actual liquidation process starts
+      console.log(`[Liquidation] Initiating account liquidation (after ${LIQUIDATION_DELAY_MS}ms delay and re-check) for account:`, accountObjectId);
+
+      const positionsPayload = currentPositionsData.map(p => ({
+        id: p.position_id,
+        priceFeedIdBytes: p.price_feed_id_bytes.startsWith('0x')
+          ? p.price_feed_id_bytes
+          : '0x' + p.price_feed_id_bytes,
+      }));
+
+      const collateralsPayload = userDepositedCollateralDetails.map(detail => ({
+        collateralId: detail.collateralId,
+        markerId: detail.markerId,
+        coinType: detail.tokenInfo, // This should be the full coin type string
+        priceFeedIdBytes: detail.priceFeedIdBytes || "", // Ensure it's always a string
+      })).filter(c => c.priceFeedIdBytes); // Filter out collaterals without a price feed ID
+
+      if (collateralsPayload.length !== userDepositedCollateralDetails.length) {
+        console.warn("[Liquidation] Some collaterals were filtered out (delayed check) due to missing priceFeedIdBytes.");
+      }
+
+      const requestBody = {
+        programId: PROGRAM_OBJECT_ID,
+        accountObjectId,
+        accountStatsId,
+        positions: positionsPayload,
+        collaterals: collateralsPayload,
+        vaultMarkerIds: allVaultMarkerIds,
+      };
+
+      console.log("[Liquidation] Request body (delayed check):", JSON.stringify(requestBody, null, 2));
+
+      try {
+        if (!LIQUIDATION_SERVICE_URL) {
+          throw new Error("Liquidation service URL is not configured. Please set NEXT_PUBLIC_LIQUIDATION_SERVICE_URL.");
+        }
+        const response = await fetch(`${LIQUIDATION_SERVICE_URL}/liquidate_account`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        const responseData = await response.json();
+        if (!response.ok) {
+          throw new Error(responseData.error || `Liquidation failed with status: ${response.status}`);
+        }
+        console.log("[Liquidation] Success (delayed):", responseData);
+        // TODO: Add user notification for successful liquidation
+      } catch (error: any) {
+        console.error("[Liquidation] Error (delayed):", error);
+        setLiquidationError(error.message || "An unknown error occurred during delayed liquidation.");
+        // TODO: Add user notification for failed liquidation
+      } finally {
+        setIsLiquidating(false);
+      }
+    };
+
+    // --- Logic to schedule or clear the timer ---
+
+    // If a timer is already running from a previous render/effect run, clear it.
+    // This is crucial if accountHealthPercentage or accountObjectId changes, prompting a re-evaluation.
+    if (liquidationTimerRef.current) {
+      clearTimeout(liquidationTimerRef.current);
+      liquidationTimerRef.current = null;
+      // console.log("[Liquidation] Cleared existing timer due to effect re-run.");
+    }
+
+    // Conditions to schedule a new liquidation attempt
+    // Use accountHealthPercentage from state for the initial check.
+    if (accountObjectId && accountHealthPercentage <= 0) {
+      console.log(
+        `[Liquidation] Account health at or below 0% (${accountHealthPercentage.toFixed(2)}%). Scheduling liquidation check in ${LIQUIDATION_DELAY_MS}ms for account ${accountObjectId}.`
+      );
+
+      liquidationTimerRef.current = setTimeout(() => {
+        // IMPORTANT: Re-check conditions using the most up-to-date values.
+        // accountObjectId from the effect's closure is used here. If it became null, this effect would have re-run and cleared the timer.
+        // accountHealthPercentageRef.current provides the latest health.
+        console.log(`[Liquidation] Timer elapsed for account ${accountObjectId}. Re-checking health (ref: ${accountHealthPercentageRef.current.toFixed(2)}).`);
+
+        if (accountObjectId && accountHealthPercentageRef.current <= 0) {
+          console.log("[Liquidation] Account health still at or below 0% (ref check) and account active. Proceeding with liquidation.");
+          performDelayedLiquidation().finally(() => {
+            // Ensure the timer ref is cleared after the async operation (or if it bails out early)
+            // Note: This might be redundant if performDelayedLiquidation itself clears it,
+            // but it's safer to manage the ref here where the timer was created.
+            if (liquidationTimerRef.current === (setTimeout(() => {}, 0) as any)) { // Basic check if it's our timer
+                 // liquidationTimerRef.current = null; // Timer ref is instance-specific, not just ID
+            }
+          });
+        } else {
+          let reason = "";
+          if (!accountObjectId) reason = "accountObjectId became null";
+          else reason = `account health recovered or changed (ref: ${accountHealthPercentageRef.current.toFixed(2)}%)`;
+          console.log(`[Liquidation] Conditions no longer met after delay (${reason}). Aborting delayed liquidation for account ${accountObjectId}.`);
+          // liquidationTimerRef.current = null; // Timer ref is cleared if aborted after timer fires
+        }
+        // Always clear the ref for THIS timer instance once its callback has executed.
+        liquidationTimerRef.current = null;
+
+      }, LIQUIDATION_DELAY_MS);
+    }
+    // No 'else' block here to clear the timer, as it's handled at the top of the effect.
+    // If conditions (health > 0 or no accountId) are not met, any existing timer
+    // would have been cleared by the lines at the start of this effect.
+
+    // Cleanup function for the useEffect: clear timer if component unmounts or dependencies change before timer fires.
+    return () => {
+      if (liquidationTimerRef.current) {
+        clearTimeout(liquidationTimerRef.current);
+        liquidationTimerRef.current = null;
+        // console.log("[Liquidation] Cleared liquidation timer on effect cleanup for account", accountObjectId);
+      }
+    };
+  }, [
+    accountHealthPercentage, // Main trigger for evaluation
+    accountObjectId,         // Critical for any action and for performDelayedLiquidation closure
+    // Dependencies for performDelayedLiquidation (captured by its closure, effect re-runs if they change, creating a new closure)
+    accountStatsId,
+    PROGRAM_OBJECT_ID,
+    currentPositionsData,
+    userDepositedCollateralDetails,
+    allVaultMarkerIds,
+    isLiquidating,             // To re-evaluate cooldown/ongoing liquidation status
+    lastLiquidationAttemptTime,// To re-evaluate cooldown
+    LIQUIDATION_SERVICE_URL,
+    // setLiquidationError, setIsLiquidating, setLastLiquidationAttemptTime are stable setters from useState
+  ]);
 
   // Hooks for account object fetching (moved from ActionTabs)
   const currentWalletAccount = useCurrentAccount(); // Renamed from account to avoid conflict with MinimalAccountInfo state
@@ -510,7 +719,7 @@ const TradingPlatform: React.FC = () => {
   // Fetch deposited collateral for all supported collateral tokens
   useEffect(() => {
     if (!accountObjectId || supportedCollateral.length === 0 || !INDEXER_URL) {
-      setUserDepositedCollateral({});
+      setUserDepositedCollateralDetails([]);
       setIsLoadingDepositedCollateral(false);
       isFirstDepositedCollateralFetch.current = true; // Reset on dependency change
       return;
@@ -532,42 +741,77 @@ const TradingPlatform: React.FC = () => {
           const response = await fetch(url);
           if (!response.ok) {
             if (response.status === 404) {
-              return [tokenInfo, "0.0"];
+              return null;
             }
             const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
             throw new Error(errorData.error || `Failed to fetch deposited collateral for ${token.name}: ${response.status}`);
           }
           const data: DepositedCollateralResponse[] = await response.json();
-          let totalDepositedAmount = BigInt(0);
-          if (Array.isArray(data)) {
-            data.forEach((deposit: DepositedCollateralResponse) => { totalDepositedAmount += BigInt(String(deposit.amount)); });
-          }
-          const formatted = (() => {
-            try {
-              if (typeof totalDepositedAmount === "bigint" && typeof decimals === "number") {
-                return (Number(totalDepositedAmount) / Math.pow(10, decimals)).toString();
-              }
-              return totalDepositedAmount.toString();
-            } catch {
-              return totalDepositedAmount.toString();
+          let totalDepositedRawAmount = BigInt(0);
+          const details: DepositedCollateralDetail[] = [];
+
+          if (Array.isArray(data) && data.length > 0) {
+            data.forEach((deposit: DepositedCollateralResponse) => {
+                totalDepositedRawAmount += BigInt(String(deposit.amount));
+                
+                const collateralIdHex = "0x" + bytesToHex(Uint8Array.from(deposit.collateral_id));
+                const markerIdHex = "0x" + bytesToHex(Uint8Array.from(deposit.collateral_marker_id));
+                
+                let depositTokenInfo = (deposit.token_id && deposit.token_id.token_address) 
+                                        ? (deposit.token_id.token_address.startsWith('0x') ? deposit.token_id.token_address : '0x' + deposit.token_id.token_address)
+                                        : token.fields.token_info;
+
+                const priceFeedIdBytes = token.fields.price_feed_id_bytes_hex?.startsWith('0x') 
+                                        ? token.fields.price_feed_id_bytes_hex 
+                                        : (token.fields.price_feed_id_bytes_hex ? '0x' + token.fields.price_feed_id_bytes_hex : undefined);
+
+                details.push({
+                    collateralId: collateralIdHex,
+                    markerId: markerIdHex,
+                    tokenInfo: depositTokenInfo,
+                    amount: "0",
+                    priceFeedIdBytes: priceFeedIdBytes,
+                    rawAmount: BigInt(String(deposit.amount))
+                });
+            });
+            
+            if (details.length > 0) {
+                 const formattedTotalAmount = (() => {
+                    try {
+                        if (typeof totalDepositedRawAmount === "bigint" && typeof decimals === "number") {
+                            return (Number(totalDepositedRawAmount) / Math.pow(10, decimals)).toString();
+                        }
+                        return totalDepositedRawAmount.toString();
+                    } catch {
+                        return totalDepositedRawAmount.toString();
+                    }
+                })();
+                return {
+                    collateralId: details[0].collateralId,
+                    markerId: details[0].markerId,
+                    tokenInfo: details[0].tokenInfo,
+                    amount: formattedTotalAmount,
+                    priceFeedIdBytes: details[0].priceFeedIdBytes,
+                    rawAmount: totalDepositedRawAmount
+                };
+            } else {
+                return null;
             }
-          })();
-          return [tokenInfo, formatted];
+
+          } else {
+            return null;
+          }
         } catch (error) {
           console.error(`Error fetching deposited collateral for ${token.name}:`, error);
           fetchErrorOccurred = true;
-          return [tokenInfo, "Error"];
+          return null;
         }
       });
 
-      const results = await Promise.all(fetchPromises);
-      const newDepositedBalances: Record<string, string> = {};
-      results.forEach(([tokenInfo, value]) => {
-        newDepositedBalances[tokenInfo] = value;
-      });
-
+      const results = (await Promise.all(fetchPromises)).filter(Boolean) as DepositedCollateralDetail[];
+      
       if (!cancelled) {
-        setUserDepositedCollateral(newDepositedBalances);
+        setUserDepositedCollateralDetails(results);
         if (fetchErrorOccurred) {
           setDepositedCollateralError("Error fetching some deposited collateral balances. Check console.");
         } else {
@@ -585,12 +829,53 @@ const TradingPlatform: React.FC = () => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [accountObjectId, supportedCollateral, INDEXER_URL]);
+  }, [accountObjectId, supportedCollateral, INDEXER_URL, bytesToHex]);
 
   const handleAssetSelect = (asset: SelectableMarketAsset) => {
     setSelectedAsset(asset);
     console.log("[TradingPlatform] New asset selected:", asset);
   };
+
+  const handlePositionsChange = (positions: PositionData[]) => {
+    setCurrentPositionsData(positions);
+  };
+
+  // Fetch all Vault Marker IDs
+  useEffect(() => {
+    let isMounted = true;
+    const fetchVaultMarkers = async () => {
+      if (!INDEXER_URL) {
+        console.warn("[TradingPlatform] Indexer URL not set, cannot fetch vault markers.");
+        setIsLoadingVaultMarkers(false);
+        return;
+      }
+      setIsLoadingVaultMarkers(true);
+      try {
+        const response = await fetch(`${INDEXER_URL}/v0/vaults`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch vaults: ${response.status}`);
+        }
+        const vaultsData: VaultAssetData[] = await response.json();
+        if (isMounted) {
+          const markerIds = vaultsData.map(vault => vault.vault_marker_address);
+          setAllVaultMarkerIds(markerIds);
+          console.log("[TradingPlatform] Fetched all vault marker IDs:", markerIds);
+        }
+      } catch (error) {
+        console.error("[TradingPlatform] Error fetching vault markers:", error);
+        if (isMounted) {
+          setAllVaultMarkerIds([]); // Clear on error
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingVaultMarkers(false);
+        }
+      }
+    };
+
+    fetchVaultMarkers();
+    return () => { isMounted = false; };
+  }, [INDEXER_URL]); // Re-fetch if INDEXER_URL changes (though unlikely)
 
   if (isLoadingProgram && availableAssets.length === 0) {
     return (
@@ -644,8 +929,7 @@ const TradingPlatform: React.FC = () => {
             </div>
             <aside className="trading-sidebar lg:col-span-1 flex flex-col gap-4">
               <AccountHealth
-                totalPositionDelta={totalPositionDelta}
-                totalCollateralValue={totalCollateralValue}
+                accountHealthPercentage={accountHealthPercentage}
               />
               <ActionTabs
                 account={account}
@@ -655,7 +939,10 @@ const TradingPlatform: React.FC = () => {
                 supportedCollateral={supportedCollateral}
                 selectedMarketIndex={selectedAsset?.marketIndex}
                 selectedMarketPriceFeedId={selectedAsset?.priceFeedId}
-                userDepositedCollateral={userDepositedCollateral}
+                userDepositedCollateral={userDepositedCollateralDetails.reduce((acc, detail) => { 
+                    acc[detail.tokenInfo] = detail.amount;
+                    return acc;
+                }, {} as Record<string, string>)}
                 isLoadingDepositedCollateral={isLoadingDepositedCollateral}
                 depositedCollateralError={depositedCollateralError}
               />
@@ -668,6 +955,7 @@ const TradingPlatform: React.FC = () => {
             availableAssets={availableAssets} 
             supportedCollateral={supportedCollateral}
             onTPDChange={setTotalPositionDelta}
+            onPositionsChange={handlePositionsChange}
           />
         </section>
       </div>

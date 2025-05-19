@@ -1,12 +1,18 @@
 import express, { Request, Response } from 'express';
+import cors from 'cors';
 import { Transaction } from '@mysten/sui/transactions';
 import { suiClient, keypair } from './sui-client';
-import { PACKAGE_ID, LIQUIDATION_SERVICE_PORT, SUI_RPC_URL } from './config';
+import { PACKAGE_ID, LIQUIDATION_SERVICE_PORT, SUI_RPC_URL, PYTH_STATE_OBJECT_ID, WORMHOLE_STATE_ID, HERMES_ENDPOINT } from './config';
 // Import necessary types for the sui_queryObjects RPC call parameters
 import { SuiObjectDataOptions, SuiObjectResponseQuery, PaginatedObjectsResponse, SuiObjectResponse } from '@mysten/sui/client';
+import { SUI_CLOCK_OBJECT_ID } from '@mysten/sui/utils';
+import { SuiPythClient, SuiPriceServiceConnection } from '@pythnetwork/pyth-sui-js';
+
+// Constants moved to config.ts and imported above
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 const PORT = LIQUIDATION_SERVICE_PORT || 3000;
 
@@ -165,6 +171,157 @@ app.post('/execute_collateral_transfer', async (req: Request, res: Response) => 
     } catch (error: any) {
         console.error('Error executing collateral transfer:', error);
         res.status(500).json({ error: error.message || 'Failed to execute collateral transfer' });
+    }
+});
+
+app.post('/liquidate_account', async (req: Request, res: Response) => {
+    const { 
+        programId,
+        accountObjectId,
+        accountStatsId,
+        positions, // Array<{ id: string, priceFeedIdBytes: string }>
+        collaterals, // Array<{ collateralId: string, markerId: string, coinType: string, priceFeedIdBytes: string }>
+        vaultMarkerIds // string[]
+    } = req.body;
+
+    if (!programId || !accountObjectId || !accountStatsId || !positions || !collaterals || !vaultMarkerIds) {
+        return res.status(400).json({ error: 'Missing required parameters for liquidation' });
+    }
+    
+    // Check if essential Pyth config is loaded
+    if (!PYTH_STATE_OBJECT_ID || !WORMHOLE_STATE_ID || !HERMES_ENDPOINT) {
+        console.error("Pyth/Hermes configuration is missing from environment variables.");
+        return res.status(500).json({ error: 'Server configuration error: Pyth/Hermes settings missing.' });
+    }
+
+    try {
+        console.log(`Processing /liquidate_account for account: ${accountObjectId}`);
+        const txb = new Transaction();
+        const pythClient = new SuiPythClient(suiClient, PYTH_STATE_OBJECT_ID, WORMHOLE_STATE_ID);
+        const priceServiceConnection = new SuiPriceServiceConnection(HERMES_ENDPOINT);
+
+        // 1. Pyth Price Updates
+        const uniqueFeedIds = Array.from(new Set([
+            ...positions.map((p: any) => p.priceFeedIdBytes),
+            ...collaterals.map((c: any) => c.priceFeedIdBytes)
+        ]));
+        console.log('[Liquidate Account] Unique Pyth Feed IDs:', JSON.stringify(uniqueFeedIds));
+
+        let priceInfoObjectTxArgs: any[] = [];
+        const feedToPriceInfoObjectArg = new Map<string, any>();
+
+        if (uniqueFeedIds.length > 0) {
+            const vaaHexStrings = await priceServiceConnection.getPriceFeedsUpdateData(uniqueFeedIds);
+            if (vaaHexStrings.length !== uniqueFeedIds.length) {
+                throw new Error("Mismatch between requested Pyth price feeds and received VAA data.");
+            }
+            priceInfoObjectTxArgs = await pythClient.updatePriceFeeds(
+                txb,
+                vaaHexStrings,
+                uniqueFeedIds,
+            );
+            console.log('[Liquidate Account] priceInfoObjectTxArgs from Pyth SDK:', JSON.stringify(priceInfoObjectTxArgs, null, 2));
+            uniqueFeedIds.forEach((feedId, index) => {
+                feedToPriceInfoObjectArg.set(feedId, priceInfoObjectTxArgs[index]);
+            });
+        } else {
+            // This case should ideally not happen if positions/collaterals requiring price exist
+            console.warn("No unique price feed IDs found for Pyth update.");
+        }
+        
+        // 2. Collateral Value Assertion Object (CVAO)
+        let cvao = txb.moveCall({
+            target: `${PACKAGE_ID}::value_assertion_objects::start_collateral_value_assertion`,
+            arguments: [txb.object(accountObjectId), txb.object(accountStatsId), txb.object(programId)],
+        });
+
+        for (const collateral of collaterals) {
+            const priceInfoObjectStringId = feedToPriceInfoObjectArg.get(collateral.priceFeedIdBytes);
+            if (!priceInfoObjectStringId) {
+                throw new Error(`PriceInfoObject string ID not found for collateral feed ID: ${collateral.priceFeedIdBytes}`);
+            }
+            console.log(`[Liquidate Account] Using priceInfoObjectStringId for collateral ${collateral.collateralId} (feed: ${collateral.priceFeedIdBytes}):`, JSON.stringify(priceInfoObjectStringId, null, 2));
+            cvao = txb.moveCall({
+                target: `${PACKAGE_ID}::value_assertion_objects::set_collateral_value_assertion`,
+                typeArguments: [collateral.coinType],
+                arguments: [
+                    cvao,
+                    txb.object(programId),
+                    txb.object(collateral.collateralId),
+                    txb.object(collateral.markerId),
+                    txb.object(priceInfoObjectStringId),
+                    txb.object(SUI_CLOCK_OBJECT_ID)
+                ],
+            });
+        }
+
+        // 3. Position Value Assertion Object (PVAO)
+        let pvao = txb.moveCall({
+            target: `${PACKAGE_ID}::value_assertion_objects::start_position_value_assertion`,
+            arguments: [txb.object(accountObjectId), txb.object(accountStatsId), txb.object(programId)],
+        });
+
+        for (const position of positions) {
+            const priceInfoObjectStringId = feedToPriceInfoObjectArg.get(position.priceFeedIdBytes);
+            if (!priceInfoObjectStringId) {
+                throw new Error(`PriceInfoObject string ID not found for position feed ID: ${position.priceFeedIdBytes}`);
+            }
+            console.log(`[Liquidate Account] Using priceInfoObjectStringId for position ${position.id} (feed: ${position.priceFeedIdBytes}):`, JSON.stringify(priceInfoObjectStringId, null, 2));
+            pvao = txb.moveCall({
+                target: `${PACKAGE_ID}::value_assertion_objects::set_position_value_assertion`,
+                arguments: [
+                    pvao,
+                    txb.object(programId),
+                    txb.object(position.id),
+                    txb.object(priceInfoObjectStringId),
+                    txb.object(SUI_CLOCK_OBJECT_ID)
+                ],
+            });
+        }
+
+        // 4. Prepare arguments for liquidate_account_pyth
+        const allPositionsArgs = txb.makeMoveVec({ elements: positions.map((p: any) => txb.object(p.id)) });
+        const allCollateralMarkersArgs = txb.makeMoveVec({ elements: collaterals.map((c: any) => txb.object(c.markerId)) });
+        const allVaultMarkersArgs = txb.makeMoveVec({ elements: vaultMarkerIds.map((id: string) => txb.object(id)) });
+
+        // 5. Call liquidate_account_pyth
+        txb.moveCall({
+            target: `${PACKAGE_ID}::liquidation::liquidate_account_pyth`,
+            arguments: [
+                txb.object(accountStatsId),
+                allPositionsArgs,
+                cvao, // CollateralValueAssertionObject
+                pvao, // PositionValueAssertionObject
+                allCollateralMarkersArgs,
+                allVaultMarkersArgs,
+                txb.object(SUI_CLOCK_OBJECT_ID)
+            ],
+        });
+
+        // 6. Destroy CollateralValueAssertionObject
+        txb.moveCall({
+            target: `${PACKAGE_ID}::value_assertion_objects::destroy_collateral_value_assertion`,
+            arguments: [cvao], 
+        });
+
+        // 7. Destroy PositionValueAssertionObject
+        txb.moveCall({
+            target: `${PACKAGE_ID}::value_assertion_objects::destroy_position_value_assertion`,
+            arguments: [pvao],
+        });
+
+        const result = await suiClient.signAndExecuteTransaction({
+            signer: keypair,
+            transaction: txb,
+            options: { showEffects: true, showObjectChanges: true },
+        });
+
+        console.log('Account liquidation execution result:', JSON.stringify(result, null, 2));
+        res.json({ success: true, transactionDigest: result.digest });
+
+    } catch (error: any) {
+        console.error('Error executing account liquidation:', error);
+        res.status(500).json({ error: error.message || 'Failed to execute account liquidation' });
     }
 });
 

@@ -24,6 +24,9 @@ export const SUI_PRIVATE_KEY = process.env.SUI_PRIVATE_KEY;
 export const PACKAGE_ID = (tomlConfig.PACKAGE_ID as string) || process.env.PACKAGE_ID;
 export const SUI_RPC_URL = (tomlConfig.SUI_RPC_URL as string) || process.env.SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443';
 export const LIQUIDATION_SERVICE_PORT = (tomlConfig.LIQUIDATION_SERVICE_PORT as string) || process.env.LIQUIDATION_SERVICE_PORT || '3000';
+export const PYTH_STATE_OBJECT_ID = (tomlConfig.PYTH_STATE_OBJECT_ID as string);
+export const WORMHOLE_STATE_ID = (tomlConfig.WORMHOLE_STATE_ID as string);
+export const HERMES_ENDPOINT = (tomlConfig.HERMES_ENDPOINT as string);
 
 if (!SUI_PRIVATE_KEY) {
   console.error("Error: SUI_PRIVATE_KEY is not set in .env. Please ensure the .env file exists in the 'liquidation_transfer_service' directory and SUI_PRIVATE_KEY is defined.");

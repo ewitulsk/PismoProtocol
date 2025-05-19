@@ -55,30 +55,13 @@ public(package) fun get_price_pyth(price_info_obj: &PriceInfoObject, clock: &Clo
     (price_u64, price_decimal_u8)
 }
 
-public(package) fun normalize_value(value: u128, local_decimals: u8, shared_decimals: u8): u128 {
-    let mut normalized_value = value; 
-    if(local_decimals > shared_decimals){
-        let diff = local_decimals-shared_decimals;
-        normalized_value = value / pow(10, diff);
-    }
-    else if(shared_decimals > local_decimals){
-        let diff = shared_decimals-local_decimals;
-        normalized_value = value * pow(10, diff);
-    };
-    normalized_value
-}
-
-public(package) fun get_value_pyth(token_id: &TokenIdentifier, price_info_obj: &PriceInfoObject, clock: &Clock, amount: u64, shared_decimals: u8): u128 {
+public(package) fun get_value_pyth(token_id: &TokenIdentifier, price_info_obj: &PriceInfoObject, clock: &Clock, amount: u64): u128 {
     assert!(token_id.price_feed_id_bytes() == get_price_feed_bytes_pyth(price_info_obj));
-    let (price, decimals) = get_price_pyth(price_info_obj, clock);
+    let (price, price_decimals) = get_price_pyth(price_info_obj, clock);
 
-    let token_decimal = token_id.token_decimals();
-    let token_balance_u128 = amount as u128;
+    let token_decimals = token_id.token_decimals();
 
-    let local_decimals = decimals + token_decimal;
-    let value = (price as u128) * token_balance_u128;
-
-    normalize_value(value, local_decimals, shared_decimals)
+    ((amount as u128) * (price as u128)) / (pow(10, token_decimals) * pow(10, price_decimals)) //This effectively truncates cents
 }
 
 fun internal_amount_for_target_value(
