@@ -99,6 +99,25 @@ public(package) fun add_u128_to_signed(a: &SignedU128, b: u128): SignedU128 {
     }
 }
 
+public(package) fun sub_u128_from_signed(a: &SignedU128, b: u128): SignedU128 {
+    let sign_a = sign(a);
+    let amount_a = amount(a);
+
+    if (sign_a == Sign::Positive) {
+        if (amount_a >= b) {
+            // e.g., 5 - 3 = 2
+            new_signed_u128(amount_a - b, Sign::Positive)
+        } else {
+            // e.g., 3 - 5 = -2
+            new_signed_u128(b - amount_a, Sign::Negative)
+        }
+    } else { // a is Negative
+        // e.g., -5 - 3 = -8
+        // e.g., -3 - 5 = -8
+        new_signed_u128(amount_a + b, Sign::Negative)
+    }
+}
+
 public(package) fun multiply(a: &SignedU128, b: &SignedU128): SignedU128 {
     let new_amount = amount(a) * amount(b);
     let new_sign = if (sign(a) == sign(b)) {
