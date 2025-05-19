@@ -8,6 +8,7 @@ import CurrentPositions from "./CurrentPositions";
 import "./trading-styles.css";
 import { SelectableMarketAsset } from "./AssetSelector"; 
 import { PRICE_FEED_TO_INFO_MAP } from "../../config/priceFeedMapping";
+import { pythPriceFeedService } from '@/utils/pythPriceFeed';
 
 import {
     useCurrentAccount,
@@ -49,6 +50,18 @@ interface ProgramObjectDataFields {
     supported_positions: TokenIdentifierWrapper[];
     max_leverage: number[]; // vector<u16>
 }
+
+// Type matching the indexer /v0/:account_id/collateral/:token_info response
+type DepositedCollateralResponse = {
+    collateral_id: number[]; // Assuming bytes represented as number array in JSON
+    collateral_marker_id: number[];
+    account_id: number[];
+    token_id: {
+        account_address: number[];
+        creation_num: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53)
+    };
+    amount: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53) - MUST TREAT AS BIGINT
+};
 
 // Create a read-only SuiClient for fetching public program data
 let readOnlySuiClient: SuiClient;
@@ -92,6 +105,68 @@ const TradingPlatform: React.FC = () => {
   const [selectedAsset, setSelectedAsset] = useState<SelectableMarketAsset | null>(null);
   const [isLoadingProgram, setIsLoadingProgram] = useState<boolean>(true);
   const [programError, setProgramError] = useState<string | null>(null);
+
+  // Add state for Total Position Delta (TPD)
+  const [totalPositionDelta, setTotalPositionDelta] = useState<number>(0);
+
+  // --- Collateral Value Calculation and Logging ---
+  const [totalCollateralValue, setTotalCollateralValue] = useState<number>(0);
+  // --- Deposited Collateral State (moved from ActionTabs) ---
+  const [userDepositedCollateral, setUserDepositedCollateral] = useState<Record<string, string>>({});
+  const [isLoadingDepositedCollateral, setIsLoadingDepositedCollateral] = useState(false);
+  const [depositedCollateralError, setDepositedCollateralError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function calculateAndLogTotalCollateralValue() {
+      if (!supportedCollateral.length || !userDepositedCollateral) {
+        setTotalCollateralValue(0);
+        // console.log("[TradingPlatform] Total Collateral Value: 0");
+        return;
+      }
+      let totalValue = 0;
+      const pricePromises = supportedCollateral.map(async (collateral) => {
+        const tokenInfo = collateral.fields.token_info;
+        const amountStr = userDepositedCollateral[tokenInfo];
+        if (!amountStr || amountStr === "Error") return 0;
+        const amount = parseFloat(amountStr);
+        if (!amount || isNaN(amount) || amount <= 0) return 0;
+
+        let priceFeedIdHex: string | undefined = undefined;
+        if (collateral.fields.price_feed_id_bytes_hex) {
+          priceFeedIdHex = collateral.fields.price_feed_id_bytes_hex;
+        } else if (Array.isArray(collateral.fields.price_feed_id_bytes)) {
+          try {
+            const bytes = Uint8Array.from(collateral.fields.price_feed_id_bytes);
+            priceFeedIdHex = "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+          } catch {
+            priceFeedIdHex = undefined;
+          }
+        }
+        if (!priceFeedIdHex) return 0;
+
+        try {
+          const priceData = await pythPriceFeedService.getLatestPrice(priceFeedIdHex);
+          if (!priceData || typeof priceData.price !== "number" || isNaN(priceData.price)) return 0;
+          return amount * priceData.price;
+        } catch {
+          return 0;
+        }
+      });
+
+      const values = await Promise.all(pricePromises);
+      if (!cancelled) {
+        totalValue = values.reduce((a, b) => a + b, 0);
+        setTotalCollateralValue(totalValue); // <-- Set state
+        // console.log("[TradingPlatform] Total Collateral Value:", totalValue);
+      }
+    }
+    calculateAndLogTotalCollateralValue();
+    return () => { cancelled = true; };
+  }, [userDepositedCollateral, supportedCollateral]);
+  // --- End Collateral Value Calculation and Logging ---
+
+  
 
   // Hooks for account object fetching (moved from ActionTabs)
   const currentWalletAccount = useCurrentAccount(); // Renamed from account to avoid conflict with MinimalAccountInfo state
@@ -430,6 +505,82 @@ const TradingPlatform: React.FC = () => {
     return () => { isMounted = false; };
   }, []); // Changed dependency array to [] to fetch once on mount
 
+  // Fetch deposited collateral for all supported collateral tokens
+  useEffect(() => {
+    if (!accountObjectId || supportedCollateral.length === 0 || !INDEXER_URL) {
+      setUserDepositedCollateral({});
+      setIsLoadingDepositedCollateral(false);
+      return;
+    }
+    let cancelled = false;
+    const fetchAllDepositedCollateral = async () => {
+      setIsLoadingDepositedCollateral(true);
+      let fetchErrorOccurred = false;
+      const accountIdForUrl = accountObjectId.startsWith('0x') ? accountObjectId.substring(2) : accountObjectId;
+
+      // Use Promise.all to fetch all collateral in parallel
+      const fetchPromises = supportedCollateral.map(async (token) => {
+        const tokenInfo = token.fields.token_info;
+        const decimals = token.fields.token_decimals;
+        const tokenInfoForUrl = tokenInfo.startsWith('0x') ? tokenInfo.substring(2) : tokenInfo;
+        const encodedTokenInfo = encodeURIComponent(tokenInfoForUrl);
+        const url = `${INDEXER_URL}/v0/${accountIdForUrl}/collateral/${encodedTokenInfo}`;
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            if (response.status === 404) {
+              return [tokenInfo, "0.0"];
+            }
+            const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
+            throw new Error(errorData.error || `Failed to fetch deposited collateral for ${token.name}: ${response.status}`);
+          }
+          const data: DepositedCollateralResponse[] = await response.json();
+          let totalDepositedAmount = BigInt(0);
+          if (Array.isArray(data)) {
+            data.forEach((deposit: DepositedCollateralResponse) => { totalDepositedAmount += BigInt(String(deposit.amount)); });
+          }
+          const formatted = (() => {
+            try {
+              if (typeof totalDepositedAmount === "bigint" && typeof decimals === "number") {
+                return (Number(totalDepositedAmount) / Math.pow(10, decimals)).toString();
+              }
+              return totalDepositedAmount.toString();
+            } catch {
+              return totalDepositedAmount.toString();
+            }
+          })();
+          return [tokenInfo, formatted];
+        } catch (error) {
+          console.error(`Error fetching deposited collateral for ${token.name}:`, error);
+          fetchErrorOccurred = true;
+          return [tokenInfo, "Error"];
+        }
+      });
+
+      const results = await Promise.all(fetchPromises);
+      const newDepositedBalances: Record<string, string> = {};
+      results.forEach(([tokenInfo, value]) => {
+        newDepositedBalances[tokenInfo] = value;
+      });
+
+      if (!cancelled) {
+        setUserDepositedCollateral(newDepositedBalances);
+        if (fetchErrorOccurred) {
+          setDepositedCollateralError("Error fetching some deposited collateral balances. Check console.");
+        } else {
+          setDepositedCollateralError(null);
+        }
+        setIsLoadingDepositedCollateral(false);
+      }
+    };
+    fetchAllDepositedCollateral();
+    const intervalId = setInterval(fetchAllDepositedCollateral, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [accountObjectId, supportedCollateral, INDEXER_URL]);
+
   const handleAssetSelect = (asset: SelectableMarketAsset) => {
     setSelectedAsset(asset);
     console.log("[TradingPlatform] New asset selected:", asset);
@@ -486,7 +637,10 @@ const TradingPlatform: React.FC = () => {
               />
             </div>
             <aside className="trading-sidebar lg:col-span-1 flex flex-col gap-4">
-              <AccountHealth percentage={85} />
+              <AccountHealth
+                totalPositionDelta={totalPositionDelta}
+                totalCollateralValue={totalCollateralValue}
+              />
               <ActionTabs
                 account={account}
                 accountObjectId={accountObjectId}
@@ -495,6 +649,9 @@ const TradingPlatform: React.FC = () => {
                 supportedCollateral={supportedCollateral}
                 selectedMarketIndex={selectedAsset?.marketIndex}
                 selectedMarketPriceFeedId={selectedAsset?.priceFeedId}
+                userDepositedCollateral={userDepositedCollateral}
+                isLoadingDepositedCollateral={isLoadingDepositedCollateral}
+                depositedCollateralError={depositedCollateralError}
               />
             </aside>
           </div>
@@ -504,6 +661,7 @@ const TradingPlatform: React.FC = () => {
             accountStatsId={accountStatsId}
             availableAssets={availableAssets} 
             supportedCollateral={supportedCollateral}
+            onTPDChange={setTotalPositionDelta}
           />
         </section>
       </div>
