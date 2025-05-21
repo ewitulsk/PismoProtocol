@@ -133,7 +133,8 @@ diesel::table! {
 }
 
 diesel::table! {
-    vault_created_events (transaction_hash) {
+    vault_created_events (id) {
+        id -> Int4,
         transaction_hash -> Text,
         vault_address -> Text,
         vault_marker_address -> Text,

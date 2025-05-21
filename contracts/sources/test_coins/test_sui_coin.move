@@ -1,34 +1,37 @@
-module pismo_protocol::test_coin;
+module pismo_protocol::test_sui_coin;
 
 use sui::coin::{Self, TreasuryCap};
+use sui::transfer;
+use sui::tx_context::{Self, TxContext};
+use std::option;
 
-public struct TEST_COIN has drop {}
+public struct TEST_SUI_COIN has drop {}
 
-fun init(witness: TEST_COIN, ctx: &mut TxContext) {
+fun init(witness: TEST_SUI_COIN, ctx: &mut TxContext) {
 		let (treasury, metadata) = coin::create_currency(
 				witness,
 				8,
-				b"TEST_COIN",
+				b"TEST_SUI",
 				b"",
 				b"",
 				option::none(),
 				ctx,
 		);
 		transfer::public_freeze_object(metadata);
-		transfer::public_transfer(treasury, ctx.sender())
+		transfer::public_share_object(treasury)
 }
 
 #[test_only]
 public(package) fun test_init(ctx: &mut TxContext){
-	init(TEST_COIN{}, ctx)
+	init(TEST_SUI_COIN{}, ctx)
 }
 
 #[test_only]
-public(package) fun init_token(ctx: &mut TxContext): TreasuryCap<TEST_COIN> {
+public(package) fun init_token(ctx: &mut TxContext): TreasuryCap<TEST_SUI_COIN> {
 	let (treasury, metadata) = coin::create_currency(
-			TEST_COIN {},
+			TEST_SUI_COIN {},
 			8,
-			b"TEST_COIN",
+			b"TEST_SUI",
 			b"",
 			b"",
 			option::none(),
@@ -39,7 +42,7 @@ public(package) fun init_token(ctx: &mut TxContext): TreasuryCap<TEST_COIN> {
 }
 
 public entry fun mint(
-		treasury_cap: &mut TreasuryCap<TEST_COIN>,
+		treasury_cap: &mut TreasuryCap<TEST_SUI_COIN>,
 		amount: u64,
 		recipient: address,
 		ctx: &mut TxContext

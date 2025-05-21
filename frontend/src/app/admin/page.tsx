@@ -158,16 +158,6 @@ const AdminPage = () => {
                  />
               </div>
             )}
-
-            {selectedFunction === 'mint_test_coin' && (
-              <div>
-                 <h2 className="text-xl font-semibold mb-3">Mint Test Coin</h2>
-                 <MintTestCoinForm
-                    suiPackageId={SUI_PACKAGE_ID}
-                    chainIdentifier={chainIdentifier}
-                 />
-              </div>
-            )}
           </div>
         )}
       </div>

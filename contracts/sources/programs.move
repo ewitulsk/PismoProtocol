@@ -24,54 +24,6 @@ public struct Program has key {
     max_leverage: vector<u16>
 }
 
-// public entry fun init_program(
-//     _: &AdminCap, 
-//     init_collateral_token_info: vector<String>, 
-//     init_collateral_price_feed_id_bytes: vector<vector<u8>>, 
-//     init_collateral_oracle_feed_id: vector<u16>, // 0: pyth
-//     init_positions_info: vector<String>,
-//     init_positions_price_feed_id_bytes: vector<vector<u8>>,
-//     init_position_oracle_feed_id: vector<u16>, // 0: pyth
-//     init_max_leverage: vector<u16>,
-//     shared_price_decimals: u8, 
-//     ctx: &mut TxContext
-// ) {
-//     let mut collateral_identifiers = vector::empty<TokenIdentifier>();
-//     let mut i = 0;
-//     while(i < init_collateral_token_info.length()){
-//         let info = init_collateral_token_info[i];
-//         let feed_id = init_collateral_price_feed_id_bytes[i];
-//         let oracle_feed_id = init_collateral_oracle_feed_id[i];
-//         collateral_identifiers.push_back(new_token_identifier(
-//             info,
-//             shared_price_decimals,
-
-//             feed_id,
-//             oracle_feed_id
-//         ));
-//         i = i + 1;
-//     };
-
-//     let mut position_identifiers = vector::empty<TokenIdentifier>();
-//     let mut j = 0;
-//     while(j < init_positions_info.length()) {
-//         let info = init_positions_info[j];
-//         let feed_id = init_positions_price_feed_id_bytes[j];
-//         let oracle_feed_id = init_position_oracle_feed_id[j];
-//         position_identifiers.push_back(new_token_identifier(
-//             info,
-//             shared_price_decimals,
-//             feed_id,
-//             oracle_feed_id
-//         ));
-//         j = j + 1;
-//     };
-
-//     transfer::share_object(
-//         init_program_internal(ctx, collateral_identifiers, position_identifiers, shared_price_decimals, init_max_leverage)
-//     );
-// }
-
 public(package) fun init_program_internal(ctx: &mut TxContext, init_collateral: vector<TokenIdentifier>, supported_positions: vector<TokenIdentifier>, shared_price_decimals: u8, max_leverage: vector<u16>): Program {
     Program { 
         id: object::new(ctx), 
@@ -136,5 +88,45 @@ public(package) fun shared_price_decimals(program: &Program): u8 {
 public(package) fun destroy_program(program: Program){
     let Program {id, supported_collateral: _, shared_price_decimals: _, supported_positions: _, max_leverage: _} = program;
     object::delete(id);
+}
+
+public entry fun add_supported_collateral<CoinType>(
+    _admin_cap: &AdminCap, 
+    program: &mut Program,
+    price_feed_id: vector<u8>,    
+    oracle_id: u16,                
+    _ctx: &mut TxContext          
+) {
+    let type_str_ascii = type_name::get<CoinType>().into_string();
+    let token_type_name = std::string::from_ascii(type_str_ascii);
+
+    let token_id = new_token_identifier(
+        token_type_name,
+        program.shared_price_decimals,
+        price_feed_id,
+        oracle_id
+    );
+    vector::push_back(&mut program.supported_collateral, token_id);
+}
+
+public entry fun add_supported_position<CoinType>(
+    _admin_cap: &AdminCap, 
+    program: &mut Program,
+    price_feed_id: vector<u8>,     
+    oracle_id: u16,               
+    max_leverage_for_position: u16, 
+    _ctx: &mut TxContext 
+) {
+    let type_str_ascii = type_name::get<CoinType>().into_string();
+    let token_type_name = std::string::from_ascii(type_str_ascii);
+
+    let token_id = new_token_identifier(
+        token_type_name,
+        program.shared_price_decimals,
+        price_feed_id,
+        oracle_id
+    );
+    vector::push_back(&mut program.supported_positions, token_id);
+    vector::push_back(&mut program.max_leverage, max_leverage_for_position);
 }
 
