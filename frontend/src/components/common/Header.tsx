@@ -58,6 +58,12 @@ const Header: React.FC<HeaderProps> = ({ activePage = 'home' }) => {
           >
             Earn
           </Link>
+          <Link 
+            href="/admin/mint-test-coins" 
+            className={activePage === 'admin' ? "nav-link-active" : "nav-link"}
+          >
+            Admin
+          </Link>
         </nav>
       </div>
       <div className="flex items-center gap-4">

@@ -8,6 +8,13 @@ interface DeploymentInfo {
   programObjectId: string;
   initializationCheckpoint: string;
   network: 'testnet' | 'mainnet' | string; // Allow other network names too
+  btc_tcap?: string;
+  eth_tcap?: string;
+  sui_tcap?: string;
+  usdc_tcap?: string;
+  tsla_tcap?: string;
+  nvda_tcap?: string;
+  cmg_tcap?: string;
 }
 
 const deploymentInfoPath = path.resolve(__dirname, '../initialized_deployment.json');
@@ -74,6 +81,15 @@ async function updateFrontendConfig(info: DeploymentInfo) {
       // are also meant to be sourced from deploymentInfo and are present in config.toml.
       // For now, we only update those explicitly mentioned.
     };
+
+    // Add tcap values if they exist
+    if (info.btc_tcap) (updatedConfig as any).NEXT_PUBLIC_BTC_TCAP = info.btc_tcap;
+    if (info.eth_tcap) (updatedConfig as any).NEXT_PUBLIC_ETH_TCAP = info.eth_tcap;
+    if (info.sui_tcap) (updatedConfig as any).NEXT_PUBLIC_SUI_TCAP = info.sui_tcap;
+    if (info.usdc_tcap) (updatedConfig as any).NEXT_PUBLIC_USDC_TCAP = info.usdc_tcap;
+    if (info.tsla_tcap) (updatedConfig as any).NEXT_PUBLIC_TSLA_TCAP = info.tsla_tcap;
+    if (info.nvda_tcap) (updatedConfig as any).NEXT_PUBLIC_NVDA_TCAP = info.nvda_tcap;
+    if (info.cmg_tcap) (updatedConfig as any).NEXT_PUBLIC_CMG_TCAP = info.cmg_tcap;
 
     await fs.writeFile(frontendConfigPath, TOML.stringify(updatedConfig as TOML.JsonMap));
     console.log(`Successfully updated ${path.basename(frontendConfigPath)}`);

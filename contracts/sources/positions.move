@@ -20,7 +20,6 @@ use pismo_protocol::tokens::{TokenIdentifier, assert_price_obj_match_identifiers
 use pismo_protocol::main::{Self, AdminCap, Global};
 use pismo_protocol::programs::Program;
 use pismo_protocol::signed::{SignedU128, new_signed_u128, new_sign};
-use std::u128;
 
 const E_BAD_POSITION: u64 = 225;
 const E_INVALID_POSITION_TOKEN_INDEX: u64 = 226;
@@ -339,6 +338,14 @@ public fun supported_positions_token_i(position: &Position): u64 {
 
 public fun account_id(position: &Position): address {
     position.account_id
+}
+
+public fun match_type(position_type: &PositionType): u8 {
+    match (position_type) {
+        PositionType::Long => 0u8,
+        PositionType::Short => 1u8,
+        PositionType::None => 2u8
+    }
 }
 
 public fun single_position_upnl(

@@ -187,7 +187,7 @@ public fun set_collateral_value_assertion<CoinType>(
     
     assert!(vector::length(&mut_cva.visited_collateral_object_ids) < mut_cva.num_open_collateral_objects, E_VISITED_TOO_MANY_COLLATERALS); 
 
-    let collat_idx = get_collateral_index(collateral);
+    let collat_idx = collateral.get_collateral_index();
     // Calling remaining_collateral() method on CollateralMarker
     let collat_amount = collateral_marker.remaining_collateral(); 
 
