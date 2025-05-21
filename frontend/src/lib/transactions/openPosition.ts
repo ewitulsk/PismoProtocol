@@ -67,7 +67,8 @@ export interface OpenPositionCallbacks {
 }
 
 function getTokenPriceFeedId(tokenInfo: string, supportedCollateral: SupportedCollateralToken[]): string {
-  const selectedToken = supportedCollateral.find(t => t.fields.token_info === tokenInfo); //This should actually work....
+  console.log("Supported Collateral: ", supportedCollateral);
+  const selectedToken = supportedCollateral.find(t => t.fields.token_info === "0x"+tokenInfo); //This should actually work....
   if (selectedToken && selectedToken.fields.price_feed_id_bytes_hex) {
     return selectedToken.fields.price_feed_id_bytes_hex.startsWith('0x')
         ? selectedToken.fields.price_feed_id_bytes_hex
@@ -232,6 +233,7 @@ export const openPosition = async (
     const priceFeedIdsForUpdate: string[] = [];
     for (const asset of depositedCollateralAssets) {
         const collateralTokenInfo = asset.token_id.token_address;
+        console.log("Collateral Token Info: ", asset.token_id.token_address);
         const collateralPriceFeedId = getTokenPriceFeedId(collateralTokenInfo, supportedCollateral);
         if (collateralPriceFeedId && !priceFeedIdsForUpdate.includes(collateralPriceFeedId)) {
             priceFeedIdsForUpdate.push(collateralPriceFeedId);
@@ -248,7 +250,9 @@ export const openPosition = async (
         }
     }
 
-    const newPositionMarketFeedId = selectedMarketPriceFeedId || DEFAULT_BTC_PRICE_FEED_ID; // Use prop or fallback
+    console.log("Selected Market Price Feed Id: ", selectedMarketPriceFeedId);
+
+    const newPositionMarketFeedId = selectedMarketPriceFeedId as string; // Use prop or fallback
     if (newPositionMarketFeedId && !priceFeedIdsForUpdate.includes(newPositionMarketFeedId)) {
         priceFeedIdsForUpdate.push(newPositionMarketFeedId);
     }
@@ -256,8 +260,7 @@ export const openPosition = async (
     console.log("Fetching Pyth VAA data for feeds:", priceFeedIdsForUpdate);
     const priceServiceConnection = new SuiPriceServiceConnection(effectiveHermesEndpoint);
     const vaaHexStrings = await priceServiceConnection.getPriceFeedsUpdateData(priceFeedIdsForUpdate);
-    if (vaaHexStrings.length !== priceFeedIdsForUpdate.length) throw new Error("Mismatch between requested price feeds and received VAA data.");
-
+    
     console.log("Submitting Pyth VAAs to updatePriceFeeds...");
     // Assuming pythClient.updatePriceFeeds is compatible with being called this way and returns object IDs.
     // The TransactionResult from this is an array of PriceInfoObject IDs.
@@ -267,7 +270,7 @@ export const openPosition = async (
         priceFeedIdsForUpdate,
         // effectivePythStateObjectId // Assuming pythClient.updatePriceFeeds handles this internally or via its setup
     );
-    console.log("Raw priceInfoObjectStringIds from updatePriceFeeds:", JSON.stringify(priceInfoObjectStringIds, null, 2));
+    console.log("Got Back: ", priceInfoObjectStringIds);
 
     // Map feed IDs to their corresponding PriceInfoObject TransactionResult from the array
     const feedIdToPriceInfoObjectId: Record<string, string> = {}; // Stores string object IDs

@@ -7,8 +7,9 @@ use crate::db::postgres::schema::vault_created_events;
 
 #[derive(Queryable, Insertable, Identifiable, AsChangeset, Debug, Clone, Serialize)]
 #[diesel(table_name = vault_created_events)] // This now refers to the schema import
-#[diesel(primary_key(transaction_hash))]
+#[diesel(primary_key(id))]
 pub struct VaultCreatedEvent {
+    pub id: i32,
     pub transaction_hash: String,
     pub vault_address: String,
     pub vault_marker_address: String,
