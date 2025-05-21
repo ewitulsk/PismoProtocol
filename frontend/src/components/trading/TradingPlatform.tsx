@@ -124,6 +124,15 @@ const TradingPlatform: React.FC = () => {
   // State for current positions data (lifted from CurrentPositions)
   const [currentPositionsData, setCurrentPositionsData] = useState<PositionData[]>([]);
 
+  // State for existing position values
+  const [existingPositionValues, setExistingPositionValues] = useState<number>(0);
+
+  // State for selected asset price
+  const [selectedAssetPrice, setSelectedAssetPrice] = useState<number | null>(null);
+
+  // State for biggest position size
+  const [biggestPositionSize, setBiggestPositionSize] = useState<number | null>(null);
+
   // State for all vault marker IDs
   const [allVaultMarkerIds, setAllVaultMarkerIds] = useState<string[]>([]);
   const [isLoadingVaultMarkers, setIsLoadingVaultMarkers] = useState<boolean>(true);
@@ -840,6 +849,89 @@ const TradingPlatform: React.FC = () => {
     setCurrentPositionsData(positions);
   };
 
+  // Calculate existing position values
+  useEffect(() => {
+    let totalValue = 0;
+    if (currentPositionsData && availableAssets) {
+      currentPositionsData.forEach(position => {
+        const asset = availableAssets[position.supported_positions_token_i];
+        const assetDecimals = asset?.decimals ?? 0;
+
+        const amount = parseFloat(position.amount);
+        const entryPrice = parseFloat(position.entry_price);
+        const entryPriceDecimals = parseInt(position.entry_price_decimals, 10);
+        const leverageMultiplier = parseFloat(position.leverage_multiplier);
+
+        if (isNaN(amount) || isNaN(entryPrice) || isNaN(entryPriceDecimals) || isNaN(leverageMultiplier) || assetDecimals === undefined) {
+          console.warn("[TradingPlatform] Invalid data for position, skipping:", position);
+          return; // Skip this position if any value is invalid
+        }
+
+        const initialValue = (amount / (10 ** assetDecimals)) * (entryPrice / (10 ** entryPriceDecimals)) * leverageMultiplier;
+        totalValue += initialValue;
+      });
+    }
+    setExistingPositionValues(totalValue);
+    // console.log("[TradingPlatform] Existing Position Values:", totalValue);
+  }, [currentPositionsData, availableAssets]);
+
+  // Fetch live price for the selected asset
+  useEffect(() => {
+    if (!selectedAsset || !selectedAsset.priceFeedId || !pythPriceFeedService) {
+      setSelectedAssetPrice(null);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchPrice = async () => {
+      try {
+        const priceData = await pythPriceFeedService.getLatestPrice(selectedAsset.priceFeedId);
+        if (isMounted) {
+          if (priceData && typeof priceData.price === 'number') {
+            setSelectedAssetPrice(priceData.price);
+            // console.log(`[TradingPlatform] Fetched price for ${selectedAsset.displayName}:`, priceData.price);
+          } else {
+            setSelectedAssetPrice(null);
+            // console.warn(`[TradingPlatform] Invalid price data for ${selectedAsset.displayName}:`, priceData);
+          }
+        }
+      } catch (error) {
+        if (isMounted) {
+          setSelectedAssetPrice(null);
+          // console.error(`[TradingPlatform] Error fetching price for ${selectedAsset.displayName}:`, error);
+        }
+      }
+    };
+
+    fetchPrice();
+    const intervalId = setInterval(fetchPrice, 5000); // Refresh price every 5 seconds
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [selectedAsset, pythPriceFeedService]);
+
+  // Calculate biggest position size
+  useEffect(() => {
+    if (selectedAssetPrice === null || selectedAssetPrice === 0) {
+      setBiggestPositionSize(null);
+      return;
+    }
+
+    const account_value = totalCollateralValue + totalPositionDelta;
+    const remaining_collateral_value = account_value - existingPositionValues;
+    const biggest_position = remaining_collateral_value / selectedAssetPrice;
+
+    if (isNaN(biggest_position)) {
+      setBiggestPositionSize(null);
+      // console.warn("[TradingPlatform] Biggest position calculation resulted in NaN.");
+    } else {
+      setBiggestPositionSize(biggest_position);
+      // console.log("[TradingPlatform] Biggest Position Size:", biggest_position);
+    }
+  }, [totalCollateralValue, totalPositionDelta, existingPositionValues, selectedAssetPrice]);
+
   // Fetch all Vault Marker IDs
   useEffect(() => {
     let isMounted = true;
@@ -945,6 +1037,8 @@ const TradingPlatform: React.FC = () => {
                 }, {} as Record<string, string>)}
                 isLoadingDepositedCollateral={isLoadingDepositedCollateral}
                 depositedCollateralError={depositedCollateralError}
+                biggestPositionSize={biggestPositionSize}
+                biggestPositionAssetSymbol={selectedAsset?.baseAsset}
               />
             </aside>
           </div>

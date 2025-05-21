@@ -39,6 +39,8 @@ export interface ActionTabsProps {
     userDepositedCollateral: Record<string, string>; // NEW: passed from TradingPlatform
     isLoadingDepositedCollateral: boolean;           // NEW: passed from TradingPlatform
     depositedCollateralError: string | null;         // NEW: passed from TradingPlatform
+    biggestPositionSize?: number | null;             // NEW: Max position size based on available collateral
+    biggestPositionAssetSymbol?: string;             // NEW: Symbol for the biggest position size asset
 }
 
 // --- Constants ---
@@ -109,7 +111,9 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   selectedMarketPriceFeedId,
   userDepositedCollateral,
   isLoadingDepositedCollateral,
-  depositedCollateralError
+  depositedCollateralError,
+  biggestPositionSize,
+  biggestPositionAssetSymbol
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("Positions");
   const [positionType, setPositionType] = useState<PositionType>("Long");
@@ -447,7 +451,14 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                   <Slider value={leverage} onChange={handleLeverageChange} />
                 </div>
                 <div className="mb-6">
-                  <label className="input-label block text-secondaryText mb-2" htmlFor="amount-input">Amount</label>
+                  <label className="input-label block text-secondaryText mb-2" htmlFor="amount-input">
+                    Amount
+                    {typeof biggestPositionSize === 'number' && (
+                      <span className="text-xs text-gray-400 ml-2">
+                        (Max: {biggestPositionSize.toFixed(2)} {biggestPositionAssetSymbol || ''})
+                      </span>
+                    )}
+                  </label>
                     <div className="flex gap-5 justify-between px-4 py-3 mt-2 bg-mainBackground rounded-lg">
                     <input id="amount-input" type="text" className="input-field bg-transparent p-0 my-auto w-full text-primaryText focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:placeholder-transparent" value={amount} onChange={handleAmountChange} placeholder="0.00"/>
                     </div>
