@@ -12,6 +12,7 @@ import { depositCollateral, DepositCollateralParams, DepositCollateralCallbacks,
 import { withdrawCollateral, WithdrawCollateralParams, WithdrawCollateralCallbacks } from '../../lib/transactions/withdrawCollateral'; // Added import
 import { openPosition, OpenPositionParams, OpenPositionCallbacks, PositionType as ExtPositionType } from '../../lib/transactions/openPosition'; // Added import
 import { SuiPythClient } from '@pythnetwork/pyth-sui-js';
+import { SelectableMarketAsset } from "./AssetSelector"; // Added this line
 
 // --- Component Types ---
 type TabType = "Positions" | "Collateral";
@@ -39,6 +40,7 @@ export interface ActionTabsProps {
     userDepositedCollateral: Record<string, string>; // NEW: passed from TradingPlatform
     isLoadingDepositedCollateral: boolean;           // NEW: passed from TradingPlatform
     depositedCollateralError: string | null;         // NEW: passed from TradingPlatform
+    availableAssets: SelectableMarketAsset[]; // Added this line
 }
 
 // --- Constants ---
@@ -109,7 +111,8 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   selectedMarketPriceFeedId,
   userDepositedCollateral,
   isLoadingDepositedCollateral,
-  depositedCollateralError
+  depositedCollateralError,
+  availableAssets
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("Positions");
   const [positionType, setPositionType] = useState<PositionType>("Long");
@@ -250,6 +253,14 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         return;
     }
 
+    // Find the market index from availableAssets
+    const selectedAsset = availableAssets.find(asset => asset.priceFeedId === selectedMarketPriceFeedId);
+    if (!selectedAsset) {
+        setNotification({ show: true, message: "Selected market is not available.", type: 'error' });
+        return;
+    }
+    const positionMarketIndex = selectedAsset.marketIndex;
+
     // TODO: Determine the correct decimals based on selectedMarketIndex or the asset being traded
     // For now, using decimals from the first supported collateral as a placeholder. THIS NEEDS TO BE CORRECTED.
     const assetDecimals = supportedCollateral.length > 0 ? supportedCollateral[0].fields.token_decimals : 9; // Default to 9 if no supported collateral loaded
@@ -276,9 +287,10 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         wormholeStateId: WORMHOLE_STATE_ID_CONST,
         hermesEndpoint: HERMES_ENDPOINT_CONST,
         pythClient: suiPythClient, 
-        positionMarketIndex: 0, 
+        positionMarketIndex, 
         indexerUrl: INDEXER_URL,
         positionType, amount: amountBigInt.toString(), leverage, supportedCollateral, suiClient: client, signAndExecuteTransaction,
+        selectedMarketPriceFeedId
     };
     const callbacks: OpenPositionCallbacks = { setNotification, setIsLoadingTx, clearForm: () => setAmount("") };
     await openPosition(params, callbacks);

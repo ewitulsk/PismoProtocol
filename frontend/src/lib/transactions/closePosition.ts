@@ -290,9 +290,6 @@ export const closePosition = async (
         console.log(`[closePosition] Number of unique price feeds to update (U): ${uniquePriceFeedIds.length}`);
         const priceServiceConnection = new SuiPriceServiceConnection(hermesEndpoint);
         const vaaHexStrings = await priceServiceConnection.getPriceFeedsUpdateData(uniquePriceFeedIds);
-        if (vaaHexStrings.length !== uniquePriceFeedIds.length) {
-            throw new Error("Mismatch between requested Pyth price feeds and received VAA data.");
-        }
         
         priceInfoObjectStringIds = await pythClient.updatePriceFeeds(
             txb,

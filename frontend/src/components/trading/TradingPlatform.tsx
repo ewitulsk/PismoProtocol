@@ -945,6 +945,7 @@ const TradingPlatform: React.FC = () => {
                 }, {} as Record<string, string>)}
                 isLoadingDepositedCollateral={isLoadingDepositedCollateral}
                 depositedCollateralError={depositedCollateralError}
+                availableAssets={availableAssets}
               />
             </aside>
           </div>

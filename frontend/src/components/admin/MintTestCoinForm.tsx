@@ -17,75 +17,36 @@ type NotificationState = {
 interface MintTestCoinFormProps {
   suiPackageId: string;
   chainIdentifier: `${string}:${string}`;
+  coinDisplayName: string; // e.g., "Test BTC"
+  coinModule: string;      // e.g., "test_btc_coin"
+  coinStruct: string;      // e.g., "TEST_BTC_COIN"
+  treasuryCapId: string;   // Hardcoded Treasury Cap ID
 }
 
 const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
   suiPackageId,
   chainIdentifier,
+  coinDisplayName,
+  coinModule,
+  coinStruct,
+  treasuryCapId,
 }) => {
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
-  const [treasuryCapId, setTreasuryCapId] = useState<string | null>(null);
-  const [isFetchingCap, setIsFetchingCap] = useState(false);
-  const [fetchCapError, setFetchCapError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState<NotificationState>(null);
 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
-  const suiClient = useSuiClient();
 
-  const TEST_COIN_TYPE = `${suiPackageId}::test_coin::TEST_COIN`;
-  const TREASURY_CAP_TYPE = `0x2::coin::TreasuryCap<${TEST_COIN_TYPE}>`;
+  const TEST_COIN_TYPE = `${suiPackageId}::${coinModule}::${coinStruct}`;
 
-  // Fetch TreasuryCap when account or packageId changes
+  // Auto-populate recipient address with current account if available and field is empty
   useEffect(() => {
-    const fetchTreasuryCap = async () => {
-      if (!currentAccount) {
-        setTreasuryCapId(null);
-        setFetchCapError('Wallet not connected.');
-        return;
-      }
-
-      setIsFetchingCap(true);
-      setFetchCapError(null);
-      setTreasuryCapId(null); // Reset before fetching
-
-      try {
-        console.log(`Fetching TreasuryCap of type ${TREASURY_CAP_TYPE} for account ${currentAccount.address}`);
-        const objects = await suiClient.getOwnedObjects({
-          owner: currentAccount.address,
-          filter: { StructType: TREASURY_CAP_TYPE },
-          options: { showType: true, showContent: true },
-        });
-
-        const caps = objects.data.filter(obj => obj.data?.type === TREASURY_CAP_TYPE);
-
-        if (caps.length === 0) {
-          console.log(`No TreasuryCap object of type ${TREASURY_CAP_TYPE} found for account ${currentAccount.address}`);
-          setFetchCapError(`No ${TEST_COIN_TYPE} TreasuryCap found for your account. Ensure the package is deployed and you hold the cap.`);
-          setTreasuryCapId(null);
-        } else {
-          if (caps.length > 1) {
-            console.warn(`Multiple TreasuryCap objects found for account ${currentAccount.address}. Using the first one.`);
-          }
-          const capId = caps[0].data?.objectId ?? null;
-          console.log(`Found TreasuryCap ID: ${capId}`);
-          setTreasuryCapId(capId);
-          setFetchCapError(null); // Clear error on success
-        }
-      } catch (error) {
-        console.error("Error fetching TreasuryCap:", error);
-        const errorStr = `Error fetching TreasuryCap: ${error instanceof Error ? error.message : String(error)}`;
-        setFetchCapError(errorStr);
-        setTreasuryCapId(null);
-      } finally {
-        setIsFetchingCap(false);
-      }
-    };
-
-    fetchTreasuryCap();
-  }, [currentAccount, suiClient, TREASURY_CAP_TYPE, TEST_COIN_TYPE]); // Depend on derived types too
+    if (currentAccount && !recipient) {
+      setRecipient(currentAccount.address);
+    }
+  }, [currentAccount]);
 
   const handleMint = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,8 +59,8 @@ const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
       return;
     }
 
-    if (!treasuryCapId) {
-      setNotification({ show: true, message: fetchCapError || 'TreasuryCap not found or failed to fetch.', type: 'error' });
+    if (!treasuryCapId) { // Check if the prop is valid (though it should be passed)
+      setNotification({ show: true, message: `TreasuryCap ID for ${coinDisplayName} is missing.`, type: 'error' });
       setIsLoading(false);
       return;
     }
@@ -114,13 +75,13 @@ const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
           throw new Error('Invalid recipient address format.');
       }
 
-      console.log(`Using TreasuryCap ID: ${treasuryCapId}`);
-      console.log('Minting test coin with:', { amount: amount, recipient });
+      console.log(`Using TreasuryCap ID: ${treasuryCapId} for ${coinDisplayName}`);
+      console.log(`Minting ${coinDisplayName} with:`, { amount: amount, recipient });
 
       const txb = new Transaction();
 
       txb.moveCall({
-        target: `${suiPackageId}::test_coin::mint`,
+        target: `${suiPackageId}::${coinModule}::mint`,
         arguments: [
           txb.object(treasuryCapId),
           txb.pure(bcs.u64().serialize(mintAmount).toBytes()),
@@ -138,7 +99,7 @@ const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
             console.log('Mint successful:', data);
             setNotification({
               show: true,
-              message: `Successfully minted ${amount} ${TEST_COIN_TYPE} to ${recipient}.`,
+              message: `Successfully minted ${amount} ${coinDisplayName} (${TEST_COIN_TYPE.split('::')[2]}) to ${recipient}.`,
               type: 'success',
               digest: data.digest,
             });
@@ -178,26 +139,21 @@ const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
         />
       )}
 
-      {/* Treasury Cap Status */}
+      {/* Treasury Cap Status - Simplified */}
       <div className="p-3 border rounded bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Treasury Cap Status:</p>
-          {isFetchingCap ? (
-              <p className="text-sm text-blue-600 dark:text-blue-400">Fetching TreasuryCap...</p>
-          ) : fetchCapError ? (
-              <p className="text-sm text-red-600 dark:text-red-400">{fetchCapError}</p>
-          ) : treasuryCapId ? (
-              <p className="text-sm text-green-600 dark:text-green-400">Found TreasuryCap: <code className="text-xs bg-gray-200 dark:bg-gray-600 p-1 rounded">{treasuryCapId}</code></p>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{coinDisplayName} Treasury Cap:</p>
+          {treasuryCapId ? (
+              <p className="text-sm text-green-600 dark:text-green-400">Using Cap ID: <code className="text-xs bg-gray-200 dark:bg-gray-600 p-1 rounded break-all">{treasuryCapId}</code></p>
           ) : (
-               <p className="text-sm text-gray-500 dark:text-gray-400">TreasuryCap status unknown (check connection).</p>
+               <p className="text-sm text-red-500 dark:text-red-400">TreasuryCap ID not provided for {coinDisplayName}.</p>
           )}
       </div>
 
-
       <div>
-        <label htmlFor="amount" className={labelClass}>Amount (raw units):</label>
+        <label htmlFor={`amount-${coinModule}`} className={labelClass}>Amount (raw units) for {coinDisplayName}:</label>
         <input
           type="number"
-          id="amount"
+          id={`amount-${coinModule}`}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="e.g., 1000000000"
@@ -206,14 +162,14 @@ const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
           step="1"
           className={inputClass}
         />
-        <p className={helpTextClass}>The amount of test coin to mint (smallest unit, e.g., MIST).</p>
+        <p className={helpTextClass}>The amount of {coinDisplayName} to mint (smallest unit).</p>
       </div>
 
       <div>
-        <label htmlFor="recipient" className={labelClass}>Recipient Address:</label>
+        <label htmlFor={`recipient-${coinModule}`} className={labelClass}>Recipient Address:</label>
         <input
           type="text"
-          id="recipient"
+          id={`recipient-${coinModule}`}
           value={recipient}
           onChange={(e) => setRecipient(e.target.value)}
           placeholder="0x..."
@@ -223,16 +179,15 @@ const MintTestCoinForm: React.FC<MintTestCoinFormProps> = ({
          <p className={helpTextClass}>The Sui address to receive the minted coins.</p>
       </div>
 
-
       <button
         type="submit"
-        disabled={isLoading || !currentAccount || !treasuryCapId || isFetchingCap}
+        disabled={isLoading || !currentAccount || !treasuryCapId} // Removed isFetchingCap
         className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Processing...' : 'Mint Test Coin'}
+        {isLoading ? 'Processing...' : `Mint ${coinDisplayName}`}
       </button>
        {!currentAccount && <p className="text-xs text-red-500 dark:text-red-400 mt-1">Connect wallet to enable minting.</p>}
-       {currentAccount && !isFetchingCap && !treasuryCapId && <p className="text-xs text-red-500 dark:text-red-400 mt-1">Cannot mint without a valid TreasuryCap.</p>}
+       {currentAccount && !treasuryCapId && <p className="text-xs text-red-500 dark:text-red-400 mt-1">Cannot mint: TreasuryCap ID for {coinDisplayName} is missing.</p>}
     </form>
   );
 };
