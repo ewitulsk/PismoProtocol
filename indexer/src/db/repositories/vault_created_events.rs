@@ -33,12 +33,12 @@ impl VaultCreatedEventRepository {
             .get_result(&mut conn)
     }
 
-    /// Finds a VaultCreatedEvent by its primary key (transaction_hash).
-    pub fn find(&self, id: String) -> Result<Option<VaultCreatedEvent>, Error> {
+    /// Finds a VaultCreatedEvent by its primary key (id).
+    pub fn find(&self, pk_id: i32) -> Result<Option<VaultCreatedEvent>, Error> {
         // Remove the explicit use alias, rely on imported dsl::*
         let mut conn = self.get_conn()?;
         vault_created_events // Use DSL directly
-            .find(id)
+            .filter(id.eq(pk_id))
             .first(&mut conn)
             .optional()
     }
@@ -60,20 +60,20 @@ impl VaultCreatedEventRepository {
     }
 
     /// Updates an existing VaultCreatedEvent identified by its primary key.
-    pub fn update(&self, id: String, changes: &VaultCreatedEvent) -> Result<VaultCreatedEvent, Error> {
+    pub fn update(&self, pk_id: i32, changes: &VaultCreatedEvent) -> Result<VaultCreatedEvent, Error> {
         // Remove the explicit use alias, rely on imported dsl::*
         let mut conn = self.get_conn()?;
-        diesel::update(vault_created_events.find(id)) // Use DSL directly
+        diesel::update(vault_created_events.filter(id.eq(pk_id))) // Use DSL directly
             .set(changes)
             .get_result(&mut conn)
     }
 
     /// Deletes a VaultCreatedEvent by its primary key.
     /// Returns the number of deleted rows (should be 0 or 1).
-    pub fn delete(&self, id: String) -> Result<usize, Error> {
+    pub fn delete(&self, pk_id: i32) -> Result<usize, Error> {
         // Remove the explicit use alias, rely on imported dsl::*
         let mut conn = self.get_conn()?;
-        diesel::delete(vault_created_events.find(id)) // Use DSL directly
+        diesel::delete(vault_created_events.filter(id.eq(pk_id))) // Use DSL directly
             .execute(&mut conn)
     }
 } 

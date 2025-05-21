@@ -5,7 +5,7 @@ import { RefreshProvider } from "@/contexts/RefreshContext"; // Import the provi
 
 interface LayoutProps {
   children: ReactNode;
-  activePage?: 'trading' | 'vault' | 'home';
+  activePage?: 'trading' | 'vault' | 'home' | 'admin';
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activePage = 'home' }) => {
