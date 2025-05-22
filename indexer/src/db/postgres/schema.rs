@@ -20,6 +20,23 @@ diesel::table! {
 }
 
 diesel::table! {
+    collateral_combine_events (id) {
+        id -> Int4,
+        transaction_hash -> Text,
+        old_collateral_id1 -> Text,
+        old_collateral_marker_id1 -> Text,
+        old_collateral_id2 -> Text,
+        old_collateral_marker_id2 -> Text,
+        new_collateral_id -> Text,
+        new_collateral_marker_id -> Text,
+        account_id -> Text,
+        token_address -> Text,
+        combined_amount -> Numeric,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
     collateral_deposit_events (transaction_hash) {
         transaction_hash -> Text,
         collateral_id -> Text,
@@ -32,7 +49,8 @@ diesel::table! {
 }
 
 diesel::table! {
-    collateral_marker_liquidated_events (transaction_hash) {
+    collateral_marker_liquidated_events (id) {
+        id -> Int4,
         transaction_hash -> Text,
         collateral_marker_id -> Text,
         account_id -> Text,
@@ -41,7 +59,8 @@ diesel::table! {
 }
 
 diesel::table! {
-    collateral_transfers (transfer_id) {
+    collateral_transfers (id) {
+        id -> Int4,
         transaction_hash -> Text,
         transfer_id -> Text,
         collateral_marker_id -> Text,
@@ -49,6 +68,21 @@ diesel::table! {
         amount -> Numeric,
         to_vault_address -> Text,
         fulfilled -> Bool,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    collateral_withdraw_events (id) {
+        id -> Int4,
+        transaction_hash -> Text,
+        collateral_id -> Text,
+        collateral_marker_id -> Text,
+        account_id -> Text,
+        token_address -> Text,
+        withdrawn_amount -> Numeric,
+        marker_destroyed -> Bool,
+        remaining_amount_in_marker -> Numeric,
         timestamp -> Timestamptz,
     }
 }
@@ -79,7 +113,8 @@ diesel::table! {
 }
 
 diesel::table! {
-    position_liquidated_events (transaction_hash) {
+    position_liquidated_events (id) {
+        id -> Int4,
         transaction_hash -> Text,
         position_id -> Text,
         timestamp -> Timestamptz,
@@ -109,7 +144,8 @@ diesel::table! {
 }
 
 diesel::table! {
-    vault_transfers (transfer_id) {
+    vault_transfers (id) {
+        id -> Int4,
         transaction_hash -> Text,
         transfer_id -> Text,
         vault_marker_id -> Text,
@@ -123,9 +159,11 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     close_position_events,
+    collateral_combine_events,
     collateral_deposit_events,
     collateral_marker_liquidated_events,
     collateral_transfers,
+    collateral_withdraw_events,
     new_account_events,
     open_position_events,
     position_liquidated_events,

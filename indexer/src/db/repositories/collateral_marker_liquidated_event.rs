@@ -1,4 +1,5 @@
 use crate::db::models::collateral_marker_liquidated_event::{CollateralMarkerLiquidatedEvent, NewCollateralMarkerLiquidatedEvent};
+use crate::db::postgres::schema::collateral_marker_liquidated_events;
 use crate::db::postgres::schema::collateral_marker_liquidated_events::dsl::*;
 use crate::db::repositories::DBPool;
 use anyhow::{Context, Result};
@@ -23,21 +24,20 @@ impl CollateralMarkerLiquidatedEventRepository {
 
     pub fn create(&self, new_event: NewCollateralMarkerLiquidatedEvent) -> Result<CollateralMarkerLiquidatedEvent> {
         let mut conn = self.get_conn()?;
+
         diesel::insert_into(collateral_marker_liquidated_events)
             .values(&new_event)
-            .on_conflict(transaction_hash)
-            .do_nothing()
             .get_result(&mut conn)
-            .map_err(|e| {
-                error!(event = ?new_event, error = ?e, "Failed to insert CollateralMarkerLiquidatedEvent");
-                anyhow::anyhow!("Failed to insert CollateralMarkerLiquidatedEvent: {}", e)
+            .map_err(|insert_err| {
+                error!(event = ?new_event, error = ?insert_err, "Failed to insert CollateralMarkerLiquidatedEvent");
+                anyhow::anyhow!("Failed to insert CollateralMarkerLiquidatedEvent: {}", insert_err)
             })
     }
 
-    #[allow(dead_code)]
     pub fn find(&self, tx_hash: &str) -> Result<Option<CollateralMarkerLiquidatedEvent>> {
         let mut conn = self.get_conn()?;
         match collateral_marker_liquidated_events
+            .select(CollateralMarkerLiquidatedEvent::as_select())
             .filter(transaction_hash.eq(tx_hash))
             .first::<CollateralMarkerLiquidatedEvent>(&mut conn)
         {
@@ -53,6 +53,7 @@ impl CollateralMarkerLiquidatedEventRepository {
     pub fn get_all(&self) -> Result<Vec<CollateralMarkerLiquidatedEvent>> {
         let mut conn = self.get_conn()?;
         collateral_marker_liquidated_events
+            .select(CollateralMarkerLiquidatedEvent::as_select())
             .load::<CollateralMarkerLiquidatedEvent>(&mut conn)
             .map_err(|e| {
                 error!(error = ?e, "Failed to get all CollateralMarkerLiquidatedEvents");

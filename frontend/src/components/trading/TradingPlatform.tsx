@@ -17,7 +17,7 @@ import {
     useCurrentWallet,
 } from "@mysten/dapp-kit";
 import { PaginatedObjectsResponse, SuiObjectData, SuiClient, getFullnodeUrl, SuiObjectResponse } from '@mysten/sui/client';
-import type { MinimalAccountInfo, SupportedCollateralToken as ExtSupportedCollateralToken, NotificationState as ExtNotificationState } from '../../lib/transactions/depositCollateral'; // Added for supportedCollateral type
+import type { MinimalAccountInfo, SupportedCollateralToken as ExtSupportedCollateralToken, NotificationState as ExtNotificationState, DepositedCollateralDetail } from '../../lib/transactions/depositCollateral'; // Added for supportedCollateral type
 import { PositionData } from '@/types'; // Import PositionData
 import type { VaultAssetData } from '../../types/index'; // Import VaultAssetData from new central types file
 import { bytesToHex } from '@noble/hashes/utils'; // Import bytesToHex
@@ -29,6 +29,15 @@ const PROGRAM_TYPE = PACKAGE_ID ? `${PACKAGE_ID}::programs::Program` : undefined
 const PUBLIC_NETWORK_NAME = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'devnet' | 'mainnet' | 'localnet'; 
 const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL; // Added for fetching accountStatsId
 const LIQUIDATION_SERVICE_URL = process.env.NEXT_PUBLIC_LIQUIDATION_SERVICE_URL; // New URL for liquidation service
+
+// Create a read-only SuiClient for fetching public program data
+let readOnlySuiClient: SuiClient;
+try {
+    readOnlySuiClient = new SuiClient({ url: getFullnodeUrl(PUBLIC_NETWORK_NAME) });
+} catch (e) {
+    console.error("Failed to create readOnlySuiClient:", e);
+    // Fallback or handle error appropriately
+}
 
 interface TokenIdentifier {
     token_info: string;
@@ -65,31 +74,8 @@ type DepositedCollateralResponse = {
     amount: number; // Backend returns u64, comes as number in JSON (potential precision loss for > 2^53) - MUST TREAT AS BIGINT
 };
 
-// New type for detailed user deposited collateral information
-interface DepositedCollateralDetail {
-    collateralId: string; // Hex string
-    markerId: string; // Hex string
-    tokenInfo: string; // Full coin type, e.g., "0x2::sui::SUI"
-    amount: string; // Formatted amount as string
-    priceFeedIdBytes?: string; // Optional: Hex string, to be added later from supportedCollateral
-    rawAmount: bigint; // Store the raw amount as bigint
-}
-
-// Create a read-only SuiClient for fetching public program data
-let readOnlySuiClient: SuiClient;
-try {
-    readOnlySuiClient = new SuiClient({ url: getFullnodeUrl(PUBLIC_NETWORK_NAME) });
-} catch (e) {
-    console.error("Failed to create readOnlySuiClient:", e);
-    // Fallback or handle error appropriately - maybe use a default client if DAppKit provides one without wallet
-}
-
-// Type matching the backend /api/supportedCollateral response structure (from ActionTabs)
-// Renaming to avoid conflict if ActionTabs also defines it, though it should be the same.
-type FetchedSupportedCollateralToken = ExtSupportedCollateralToken;
-
 // Type to store fetched collateral data along with a user-friendly name (from ActionTabs)
-type CollateralInfo = FetchedSupportedCollateralToken & {
+type CollateralInfo = ExtSupportedCollateralToken & {
     name: string; // User-friendly name like 'SUI', 'USDC'
 };
 
@@ -168,8 +154,13 @@ const TradingPlatform: React.FC = () => {
         const collateralDefinition = supportedCollateral.find(sc => sc.fields.token_info === detail.tokenInfo);
         if (!collateralDefinition) return 0;
 
-        const amount = parseFloat(detail.amount);
-        if (!amount || isNaN(amount) || amount <= 0) return 0;
+        // amount is now for individual objects, so we sum them up
+        // const amount = parseFloat(detail.amount); 
+        // if (!amount || isNaN(amount) || amount <= 0) return 0;
+        // Using rawAmount for calculation:
+        const amountAsNumber = Number(detail.rawAmount);
+        if (isNaN(amountAsNumber) || amountAsNumber <= 0) return 0;
+
 
         let priceFeedIdHex: string | undefined = collateralDefinition.fields.price_feed_id_bytes_hex;
         if (!priceFeedIdHex) {
@@ -721,7 +712,7 @@ const TradingPlatform: React.FC = () => {
     if (!accountObjectId || supportedCollateral.length === 0 || !INDEXER_URL) {
       setUserDepositedCollateralDetails([]);
       setIsLoadingDepositedCollateral(false);
-      isFirstDepositedCollateralFetch.current = true; // Reset on dependency change
+      isFirstDepositedCollateralFetch.current = true; 
       return;
     }
     let cancelled = false;
@@ -730,96 +721,85 @@ const TradingPlatform: React.FC = () => {
       let fetchErrorOccurred = false;
       const accountIdForUrl = accountObjectId.startsWith('0x') ? accountObjectId.substring(2) : accountObjectId;
 
-      // Use Promise.all to fetch all collateral in parallel
+      // This will hold all individual collateral objects from all supported token types
+      const allIndividualCollateralDetails: DepositedCollateralDetail[] = [];
+
       const fetchPromises = supportedCollateral.map(async (token) => {
         const tokenInfo = token.fields.token_info;
         const decimals = token.fields.token_decimals;
         const tokenInfoForUrl = tokenInfo.startsWith('0x') ? tokenInfo.substring(2) : tokenInfo;
         const encodedTokenInfo = encodeURIComponent(tokenInfoForUrl);
         const url = `${INDEXER_URL}/v0/${accountIdForUrl}/collateral/${encodedTokenInfo}`;
+        
         try {
           const response = await fetch(url);
           if (!response.ok) {
             if (response.status === 404) {
-              return null;
+              // 404 is not an error, just means no collateral of this type
+              return []; // Return empty array for this token type
             }
             const errorData = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
             throw new Error(errorData.error || `Failed to fetch deposited collateral for ${token.name}: ${response.status}`);
           }
           const data: DepositedCollateralResponse[] = await response.json();
-          let totalDepositedRawAmount = BigInt(0);
-          const details: DepositedCollateralDetail[] = [];
-
+          
           if (Array.isArray(data) && data.length > 0) {
-            data.forEach((deposit: DepositedCollateralResponse) => {
-                totalDepositedRawAmount += BigInt(String(deposit.amount));
-                
+            return data.map((deposit: DepositedCollateralResponse): DepositedCollateralDetail => {
                 const collateralIdHex = "0x" + bytesToHex(Uint8Array.from(deposit.collateral_id));
                 const markerIdHex = "0x" + bytesToHex(Uint8Array.from(deposit.collateral_marker_id));
                 
                 let depositTokenInfo = (deposit.token_id && deposit.token_id.token_address) 
                                         ? (deposit.token_id.token_address.startsWith('0x') ? deposit.token_id.token_address : '0x' + deposit.token_id.token_address)
-                                        : token.fields.token_info;
+                                        : token.fields.token_info; // Fallback to the supportedCollateral's tokenInfo
 
                 const priceFeedIdBytes = token.fields.price_feed_id_bytes_hex?.startsWith('0x') 
                                         ? token.fields.price_feed_id_bytes_hex 
                                         : (token.fields.price_feed_id_bytes_hex ? '0x' + token.fields.price_feed_id_bytes_hex : undefined);
+                
+                const rawAmountBigInt = BigInt(String(deposit.amount));
+                let formattedAmount = "0";
+                try {
+                    if (typeof rawAmountBigInt === "bigint" && typeof decimals === "number") {
+                        formattedAmount = (Number(rawAmountBigInt) / Math.pow(10, decimals)).toString();
+                    } else {
+                        formattedAmount = rawAmountBigInt.toString();
+                    }
+                } catch {
+                    formattedAmount = rawAmountBigInt.toString();
+                }
 
-                details.push({
+                return {
                     collateralId: collateralIdHex,
                     markerId: markerIdHex,
                     tokenInfo: depositTokenInfo,
-                    amount: "0",
+                    amount: formattedAmount, // Formatted amount for THIS specific object
                     priceFeedIdBytes: priceFeedIdBytes,
-                    rawAmount: BigInt(String(deposit.amount))
-                });
-            });
-            
-            if (details.length > 0) {
-                 const formattedTotalAmount = (() => {
-                    try {
-                        if (typeof totalDepositedRawAmount === "bigint" && typeof decimals === "number") {
-                            return (Number(totalDepositedRawAmount) / Math.pow(10, decimals)).toString();
-                        }
-                        return totalDepositedRawAmount.toString();
-                    } catch {
-                        return totalDepositedRawAmount.toString();
-                    }
-                })();
-                return {
-                    collateralId: details[0].collateralId,
-                    markerId: details[0].markerId,
-                    tokenInfo: details[0].tokenInfo,
-                    amount: formattedTotalAmount,
-                    priceFeedIdBytes: details[0].priceFeedIdBytes,
-                    rawAmount: totalDepositedRawAmount
+                    rawAmount: rawAmountBigInt // Raw amount for THIS specific object
                 };
-            } else {
-                return null;
-            }
-
+            });
           } else {
-            return null;
+            return []; // Return empty array if no collateral of this type
           }
         } catch (error) {
           console.error(`Error fetching deposited collateral for ${token.name}:`, error);
           fetchErrorOccurred = true;
-          return null;
+          return []; // Return empty on error for this token
         }
       });
 
-      const results = (await Promise.all(fetchPromises)).filter(Boolean) as DepositedCollateralDetail[];
+      const resultsByTokenType = await Promise.all(fetchPromises);
+      const combinedDetails = resultsByTokenType.flat(); // Flatten array of arrays
       
       if (!cancelled) {
-        setUserDepositedCollateralDetails(results);
+        setUserDepositedCollateralDetails(combinedDetails);
         if (fetchErrorOccurred) {
-          setDepositedCollateralError("Error fetching some deposited collateral balances. Check console.");
+          setDepositedCollateralError("Error fetching some deposited collateral objects. Check console.");
         } else {
           setDepositedCollateralError(null);
         }
         if (isFirstDepositedCollateralFetch.current) {
           setIsLoadingDepositedCollateral(false);
-          isFirstDepositedCollateralFetch.current = false; // Only set to false after first fetch
+          isFirstDepositedCollateralFetch.current = false; 
         }
       }
     };
@@ -829,7 +809,7 @@ const TradingPlatform: React.FC = () => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [accountObjectId, supportedCollateral, INDEXER_URL, bytesToHex]);
+  }, [accountObjectId, supportedCollateral, INDEXER_URL]); // Removed bytesToHex as it's imported directly
 
   const handleAssetSelect = (asset: SelectableMarketAsset) => {
     setSelectedAsset(asset);
@@ -939,10 +919,7 @@ const TradingPlatform: React.FC = () => {
                 supportedCollateral={supportedCollateral}
                 selectedMarketIndex={selectedAsset?.marketIndex}
                 selectedMarketPriceFeedId={selectedAsset?.priceFeedId}
-                userDepositedCollateral={userDepositedCollateralDetails.reduce((acc, detail) => { 
-                    acc[detail.tokenInfo] = detail.amount;
-                    return acc;
-                }, {} as Record<string, string>)}
+                userDepositedCollateral={userDepositedCollateralDetails}
                 isLoadingDepositedCollateral={isLoadingDepositedCollateral}
                 depositedCollateralError={depositedCollateralError}
               />

@@ -3,6 +3,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use hex;
+use uuid::Uuid;
 
 #[derive(Deserialize, Debug)]
 pub struct PositionLiquidatedEvent {
