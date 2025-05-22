@@ -6,8 +6,9 @@ use crate::db::postgres::schema::collateral_transfers;
 
 #[derive(Queryable, Identifiable, Selectable, Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[diesel(table_name = collateral_transfers)]
-#[diesel(primary_key(transfer_id))]
+#[diesel(primary_key(id))]
 pub struct CollateralTransfer {
+    pub id: i32, //I want this to be a UUID, but I don't have the time to fight diesel to make that happen
     pub transaction_hash: String,
     pub transfer_id: String,
     pub collateral_marker_id: String,

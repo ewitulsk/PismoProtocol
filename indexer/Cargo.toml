@@ -14,7 +14,7 @@ async-trait = "0.1"
 axum = { version = "0.7", features = ["macros"] } # Added Axum and macros feature
 
 # Database (Diesel + Postgres + Connection Pool)
-diesel = { version = "2.2", features = ["postgres", "r2d2", "chrono", "numeric"] } # Enable features
+diesel = { version = "2.2", features = ["postgres", "uuid", "r2d2", "chrono", "numeric"] } # Enable features
 diesel_migrations = { version = "2", features = ["postgres"] }
 r2d2 = "0.8"
 bigdecimal = { version = "0.4", features = ["serde"] } # For NUMERIC mapping
@@ -40,6 +40,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.5.2", features = ["cors"] } # Added Tower HTTP with CORS feature
 
 reqwest = { version = "0.11", features = ["json"] }
+uuid = { version = "1.16.0", features = ["v4", "serde"] }
 
 [workspace] # Add workspace if it doesn't exist, prevents inheriting from parent
 
