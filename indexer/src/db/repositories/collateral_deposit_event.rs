@@ -1,12 +1,14 @@
 use crate::db::models::collateral_deposit_event::{CollateralDepositEvent, NewCollateralDepositEvent};
 use crate::db::postgres::schema::collateral_deposit_events::dsl::*;
 use crate::db::postgres::schema::collateral_marker_liquidated_events;
+use crate::db::postgres::schema::collateral_combine_events;
+use crate::db::postgres::schema::collateral_withdraw_events;
 use crate::db::repositories::DBPool;
 use anyhow::{Context, Result};
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, debug};
 
 #[derive(Clone)]
 pub struct CollateralDepositEventRepository {
@@ -24,15 +26,29 @@ impl CollateralDepositEventRepository {
 
     pub fn create(&self, new_event: NewCollateralDepositEvent) -> Result<CollateralDepositEvent> {
         let mut conn = self.get_conn()?;
-        diesel::insert_into(collateral_deposit_events)
+        let result = diesel::insert_into(collateral_deposit_events)
             .values(&new_event)
             .on_conflict(transaction_hash)
             .do_nothing() // Or specify update logic if needed
-            .get_result(&mut conn)
-            .map_err(|e| {
-                error!(event = ?new_event, error = ?e, "Failed to insert CollateralDepositEvent");
-                anyhow::anyhow!("Failed to insert CollateralDepositEvent: {}", e)
-            })
+            .get_result(&mut conn);
+        
+        match result {
+            Ok(event) => Ok(event),
+            Err(DieselError::NotFound) => {
+                debug!(tx_hash = %new_event.transaction_hash, "CollateralDepositEvent with this transaction_hash already exists due to conflict, fetching existing record.");
+                collateral_deposit_events
+                    .filter(transaction_hash.eq(&new_event.transaction_hash))
+                    .first(&mut conn)
+                    .map_err(|fetch_err| {
+                        error!(original_event = ?new_event, error = ?fetch_err, "Failed to fetch existing CollateralDepositEvent after insert conflict");
+                        anyhow::anyhow!("Failed to fetch existing CollateralDepositEvent after insert conflict: {}", fetch_err)
+                    })
+            }
+            Err(insert_err) => {
+                error!(event = ?new_event, error = ?insert_err, "Failed to insert CollateralDepositEvent");
+                Err(anyhow::anyhow!("Failed to insert CollateralDepositEvent: {}", insert_err))
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -59,6 +75,18 @@ impl CollateralDepositEventRepository {
                 collateral_marker_liquidated_events::table
                     .filter(collateral_marker_liquidated_events::collateral_marker_id.eq(collateral_marker_id))
             )))
+            .filter(diesel::dsl::not(diesel::dsl::exists(
+                collateral_withdraw_events::table
+                    .filter(collateral_withdraw_events::collateral_marker_id.eq(collateral_marker_id))
+                    .filter(collateral_withdraw_events::marker_destroyed.eq(true))
+            )))
+            .filter(diesel::dsl::not(diesel::dsl::exists(
+                collateral_combine_events::table
+                    .filter(
+                        collateral_combine_events::old_collateral_marker_id1.eq(collateral_marker_id)
+                        .or(collateral_combine_events::old_collateral_marker_id2.eq(collateral_marker_id))
+                    )
+            )))
             .load::<CollateralDepositEvent>(&mut conn)
         {
             Ok(events) => Ok(events),
@@ -78,6 +106,18 @@ impl CollateralDepositEventRepository {
             .filter(diesel::dsl::not(diesel::dsl::exists(
                 collateral_marker_liquidated_events::table
                     .filter(collateral_marker_liquidated_events::collateral_marker_id.eq(collateral_marker_id))
+            )))
+            .filter(diesel::dsl::not(diesel::dsl::exists(
+                collateral_withdraw_events::table
+                    .filter(collateral_withdraw_events::collateral_marker_id.eq(collateral_marker_id))
+                    .filter(collateral_withdraw_events::marker_destroyed.eq(true))
+            )))
+            .filter(diesel::dsl::not(diesel::dsl::exists(
+                collateral_combine_events::table
+                    .filter(
+                        collateral_combine_events::old_collateral_marker_id1.eq(collateral_marker_id)
+                        .or(collateral_combine_events::old_collateral_marker_id2.eq(collateral_marker_id))
+                    )
             )))
             .load::<CollateralDepositEvent>(&mut conn)
         {

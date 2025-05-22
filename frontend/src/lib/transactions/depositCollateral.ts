@@ -63,6 +63,15 @@ export interface DepositCollateralParams {
   enableDevInspect: boolean;
 }
 
+export interface DepositedCollateralDetail {
+    collateralId: string; // Hex string object ID of the Collateral<CoinType>
+    markerId: string;     // Hex string object ID of the CollateralMarker
+    tokenInfo: string;    // Full coin type, e.g., "0x2::sui::SUI"
+    amount: string;       // Formatted amount as string for display (individual object's amount)
+    rawAmount: bigint;    // Raw amount as bigint for calculations (individual object's amount)
+    priceFeedIdBytes?: string; // Optional: Hex string of the price feed ID
+}
+
 export interface DepositCollateralCallbacks {
   setNotification: (notification: NotificationState) => void;
   setIsLoadingTx: (isLoading: boolean) => void;

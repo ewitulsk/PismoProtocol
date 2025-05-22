@@ -8,4 +8,6 @@ pub mod vault_created_events;
 pub mod collateral_transfer;
 pub mod vault_transfer;
 pub mod position_liquidated_event;
-pub mod collateral_marker_liquidated_event; 
+pub mod collateral_marker_liquidated_event;
+pub mod collateral_combine_event;
+pub mod collateral_withdraw_event; 

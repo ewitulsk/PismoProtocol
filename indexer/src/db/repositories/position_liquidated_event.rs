@@ -1,4 +1,5 @@
 use crate::db::models::position_liquidated_event::{PositionLiquidatedEvent, NewPositionLiquidatedEvent};
+use crate::db::postgres::schema::position_liquidated_events;
 use crate::db::postgres::schema::position_liquidated_events::dsl::*;
 use crate::db::repositories::DBPool;
 use anyhow::{Context, Result};
@@ -23,14 +24,13 @@ impl PositionLiquidatedEventRepository {
 
     pub fn create(&self, new_event: NewPositionLiquidatedEvent) -> Result<PositionLiquidatedEvent> {
         let mut conn = self.get_conn()?;
+
         diesel::insert_into(position_liquidated_events)
             .values(&new_event)
-            .on_conflict(transaction_hash)
-            .do_nothing()
             .get_result(&mut conn)
-            .map_err(|e| {
-                error!(event = ?new_event, error = ?e, "Failed to insert PositionLiquidatedEvent");
-                anyhow::anyhow!("Failed to insert PositionLiquidatedEvent: {}", e)
+            .map_err(|insert_err| {
+                error!(event = ?new_event, error = ?insert_err, "Failed to insert PositionLiquidatedEvent");
+                anyhow::anyhow!("Failed to insert PositionLiquidatedEvent: {}", insert_err)
             })
     }
 
@@ -38,6 +38,7 @@ impl PositionLiquidatedEventRepository {
     pub fn find(&self, tx_hash: &str) -> Result<Option<PositionLiquidatedEvent>> {
         let mut conn = self.get_conn()?;
         match position_liquidated_events
+            .select(PositionLiquidatedEvent::as_select())
             .filter(transaction_hash.eq(tx_hash))
             .first::<PositionLiquidatedEvent>(&mut conn)
         {

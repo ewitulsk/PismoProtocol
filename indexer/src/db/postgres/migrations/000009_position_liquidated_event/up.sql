@@ -1,5 +1,6 @@
 CREATE TABLE position_liquidated_events (
-    transaction_hash TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    transaction_hash TEXT NOT NULL,
     position_id TEXT NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL
 ); 

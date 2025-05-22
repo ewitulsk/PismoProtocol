@@ -4,6 +4,7 @@ use anyhow::Result;
 use bigdecimal::BigDecimal;
 use sui_types::base_types::SuiAddress;
 use hex;
+use uuid::Uuid;
 
 use crate::db::models::collateral_transfer::NewCollateralTransfer;
 use crate::events::common::convert_sui_address_to_hex_string;
