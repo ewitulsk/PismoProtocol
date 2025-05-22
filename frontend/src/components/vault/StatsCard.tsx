@@ -1,16 +1,16 @@
 "use client";
 import React, { useState } from "react";
 import TimeFilter from "./TimeFilter";
-import { VaultData, calculateTotalTVL } from "@/data/vaults";
+import { VaultData } from "@/types";
 
 interface StatsCardProps {
-  vaults: VaultData[];
-  activeVault: VaultData;
+  activeVault: VaultData | undefined;
 }
 
-const StatsCard: React.FC<StatsCardProps> = ({ vaults, activeVault }) => {
+const StatsCard: React.FC<StatsCardProps> = ({ activeVault }) => {
   const [activeTimeFilter, setActiveTimeFilter] = useState<string>("1M");
-  const totalTVL = calculateTotalTVL();
+  // Calculate TVL from the passed-in vaults
+  const totalTVL = activeVault ? activeVault.value : 0
 
   // Format the TVL as currency
   const formattedTVL = new Intl.NumberFormat('en-US', {
