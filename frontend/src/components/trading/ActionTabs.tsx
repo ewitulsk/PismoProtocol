@@ -8,9 +8,9 @@ import { PaginatedObjectsResponse, CoinBalance, SuiClient, DevInspectResults } f
 import { Transaction } from '@mysten/sui/transactions';
 import NotificationPopup from '../common/NotificationPopup';
 import { formatUnits, parseUnits } from 'viem'; 
-import { depositCollateral, DepositCollateralParams, DepositCollateralCallbacks, SupportedCollateralToken as ExtSupportedCollateralToken, NotificationState as ExtNotificationState, MinimalAccountInfo } from '../../lib/transactions/depositCollateral'; // Added import
-import { withdrawCollateral, WithdrawCollateralParams, WithdrawCollateralCallbacks } from '../../lib/transactions/withdrawCollateral'; // Added import
-import { openPosition, OpenPositionParams, OpenPositionCallbacks, PositionType as ExtPositionType } from '../../lib/transactions/openPosition'; // Added import
+import { depositCollateral, DepositCollateralParams, DepositCollateralCallbacks, SupportedCollateralToken as ExtSupportedCollateralToken, NotificationState as ExtNotificationState, MinimalAccountInfo, DepositedCollateralDetail } from '../../lib/transactions/depositCollateral';
+import { withdrawCollateral, WithdrawCollateralParams, WithdrawCollateralCallbacks } from '../../lib/transactions/withdrawCollateral';
+import { openPosition, OpenPositionParams, OpenPositionCallbacks, PositionType as ExtPositionType } from '../../lib/transactions/openPosition';
 import { SuiPythClient } from '@pythnetwork/pyth-sui-js';
 
 // --- Component Types ---
@@ -36,9 +36,9 @@ export interface ActionTabsProps {
     supportedCollateral: CollateralInfo[];
     selectedMarketIndex?: number; 
     selectedMarketPriceFeedId?: string; 
-    userDepositedCollateral: Record<string, string>; // NEW: passed from TradingPlatform
-    isLoadingDepositedCollateral: boolean;           // NEW: passed from TradingPlatform
-    depositedCollateralError: string | null;         // NEW: passed from TradingPlatform
+    userDepositedCollateral: DepositedCollateralDetail[]; // UPDATED: Now expects an array of detailed objects
+    isLoadingDepositedCollateral: boolean;           
+    depositedCollateralError: string | null;         
 }
 
 // --- Constants ---
@@ -175,9 +175,11 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   useEffect(() => {
     const availableWithdrawTokens = supportedCollateral
         .filter(token => {
-            const balanceStr = userDepositedCollateral[token.fields.token_info];
-            const balance = balanceStr && balanceStr !== "Error" ? parseFloat(balanceStr) : 0;
-            return balance > 0;
+            // Sum up balances for this token type from all individual collateral objects
+            const totalBalanceForToken = userDepositedCollateral
+                .filter(cd => cd.tokenInfo === token.fields.token_info)
+                .reduce((sum, cd) => sum + parseFloat(cd.amount), 0);
+            return totalBalanceForToken > 0;
         })
         .map(token => token.fields.token_info); 
     if (collateralAction === "Withdraw") {
@@ -320,9 +322,27 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
         setNotification({ show: true, message: "Please select a token and enter an amount to withdraw.", type: 'error' });
         return;
     }
+
+    // Find all collateral objects for the selected token type
+    const collateralObjectsForToken = userDepositedCollateral.filter(
+        cd => cd.tokenInfo === selectedWithdrawTokenInfo
+    );
+
+    if (collateralObjectsForToken.length === 0) {
+        setNotification({ show: true, message: `No deposited collateral found for token ${getSelectedTokenName(selectedWithdrawTokenInfo)}.`, type: 'error' });
+        return;
+    }
+    
+    // The `withdrawCollateral` function will now need to handle the logic for single or multiple objects.
+    // We pass all relevant collateral objects for the selected token.
     const params: WithdrawCollateralParams = {
         account, accountObjectId, accountStatsId, packageId: PACKAGE_ID, programId: PROGRAM_ID_CONST,
-        selectedWithdrawTokenInfo, withdrawAmount, supportedCollateral, suiClient: client, signAndExecuteTransaction,
+        selectedWithdrawTokenInfo, 
+        withdrawAmount, 
+        collateralObjects: collateralObjectsForToken, // Pass the array of detailed objects
+        supportedCollateral, 
+        suiClient: client, 
+        signAndExecuteTransaction,
     };
     const callbacks: WithdrawCollateralCallbacks = { setNotification, setIsLoadingTx, clearForm: () => setWithdrawAmount("") };
     await withdrawCollateral(params, callbacks);
@@ -338,15 +358,25 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   const depositTokenOptions = supportedCollateral.map(token => ({ value: token.fields.token_info, label: token.name }));
   const withdrawTokenOptions = supportedCollateral
     .filter(token => {
-        const balanceStr = userDepositedCollateral[token.fields.token_info];
-        return balanceStr && balanceStr !== "Error" && parseFloat(balanceStr) > 0;
+        const totalBalanceForToken = userDepositedCollateral
+            .filter(cd => cd.tokenInfo === token.fields.token_info)
+            .reduce((sum, cd) => sum + parseFloat(cd.amount), 0);
+        return totalBalanceForToken > 0;
     })
     .map(token => ({ value: token.fields.token_info, label: token.name }));
   const getSelectedTokenName = (tokenInfo: string): string => supportedCollateral.find(t => t.fields.token_info === tokenInfo)?.name || "Token";
-  const selectedWithdrawTokenDepositedBalanceStr = userDepositedCollateral[selectedWithdrawTokenInfo];
-  const selectedWithdrawTokenDepositedBalance = selectedWithdrawTokenDepositedBalanceStr && selectedWithdrawTokenDepositedBalanceStr !== "Error" ? parseFloat(selectedWithdrawTokenDepositedBalanceStr) : 0;
+  
+  // Calculate total deposited balance for the selected withdraw token
+  const selectedWithdrawTokenTotalDepositedBalance = userDepositedCollateral
+    .filter(cd => cd.tokenInfo === selectedWithdrawTokenInfo)
+    .reduce((sum, cd) => sum + parseFloat(cd.amount), 0);
+
+  const selectedWithdrawTokenTotalDepositedBalanceStr = selectedWithdrawTokenTotalDepositedBalance.toFixed(
+    supportedCollateral.find(t => t.fields.token_info === selectedWithdrawTokenInfo)?.fields.token_decimals || 2 // Default to 2 decimal places if not found
+  );
+
   const withdrawAmountNum = parseFloat(withdrawAmount || '0');
-  const isWithdrawAmountValid = withdrawAmountNum > 0 && withdrawAmountNum <= selectedWithdrawTokenDepositedBalance;
+  const isWithdrawAmountValid = withdrawAmountNum > 0 && withdrawAmountNum <= selectedWithdrawTokenTotalDepositedBalance;
   const depositAmountNum = parseFloat(depositAmount || '0');
   const isDepositAmountValid = depositAmountNum > 0; 
 
@@ -493,12 +523,25 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                         <h3 className="input-label text-lg font-semibold text-secondaryText mb-3">Your Deposited Collateral</h3>
                         {withdrawTokenOptions.length === 0 ? <p className="text-secondaryText">No collateral deposited.</p> : (
                             <div className="space-y-2 border-y border-gray-700 py-3 mb-4">
-                                {supportedCollateral.filter(token => { const balanceStr = userDepositedCollateral[token.fields.token_info]; return balanceStr && balanceStr !== "Error" && parseFloat(balanceStr) > 0; }).map(token => (
-                                    <div key={token.fields.token_info} className="flex items-center justify-between gap-4 px-1">
-                                        <div className="flex items-center gap-2"><span className="font-medium text-primaryText">{token.name}</span></div>
-                                        <span className="text-sm text-secondaryText">{userDepositedCollateral[token.fields.token_info] || '0.0'}</span>
-                                    </div>
-                                ))}
+                                {supportedCollateral
+                                    .filter(token => {
+                                        const totalBalance = userDepositedCollateral
+                                            .filter(cd => cd.tokenInfo === token.fields.token_info)
+                                            .reduce((sum, cd) => sum + parseFloat(cd.amount), 0);
+                                        return totalBalance > 0;
+                                    })
+                                    .map(token => {
+                                        const totalBalanceForToken = userDepositedCollateral
+                                            .filter(cd => cd.tokenInfo === token.fields.token_info)
+                                            .reduce((sum, cd) => sum + parseFloat(cd.amount), 0);
+                                        const decimals = token.fields.token_decimals || 2; // Default decimals
+                                        return (
+                                            <div key={token.fields.token_info} className="flex items-center justify-between gap-4 px-1">
+                                                <div className="flex items-center gap-2"><span className="font-medium text-primaryText">{token.name}</span></div>
+                                                <span className="text-sm text-secondaryText">{totalBalanceForToken.toFixed(decimals)}</span>
+                                            </div>
+                                        );
+                                })}
                             </div>
                         )}
                         {withdrawTokenOptions.length > 0 && (
@@ -510,10 +553,10 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="input-label block text-secondaryText mb-2" htmlFor="withdraw-amount-input">Amount {selectedWithdrawTokenInfo && <span className="text-xs text-gray-400 ml-2">Deposited: {userDepositedCollateral[selectedWithdrawTokenInfo] || '0.0'}</span>}</label>
+                                    <label className="input-label block text-secondaryText mb-2" htmlFor="withdraw-amount-input">Amount {selectedWithdrawTokenInfo && <span className="text-xs text-gray-400 ml-2">Deposited: {selectedWithdrawTokenTotalDepositedBalanceStr}</span>}</label>
                                     <div className="flex gap-5 justify-between px-4 py-3 mt-2 bg-mainBackground rounded-lg">
                                         <input id="withdraw-amount-input" type="text" className="input-field bg-transparent p-0 my-auto w-full text-primaryText focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:placeholder-transparent" value={withdrawAmount} onChange={handleWithdrawAmountInputChange} placeholder="0.00"/>
-                                        {selectedWithdrawTokenDepositedBalance > 0 && <button onClick={() => setWithdrawAmount(String(selectedWithdrawTokenDepositedBalanceStr))} className="text-accent hover:text-accentHover text-sm font-medium" type="button">Max</button>}
+                                        {selectedWithdrawTokenTotalDepositedBalance > 0 && <button onClick={() => setWithdrawAmount(String(selectedWithdrawTokenTotalDepositedBalanceStr))} className="text-accent hover:text-accentHover text-sm font-medium" type="button">Max</button>}
                                     </div>
                                 </div>
                                 <button className="btn-action w-full mt-6" onClick={handleWithdraw} disabled={!selectedWithdrawTokenInfo || !isWithdrawAmountValid || isLoadingTx || isLoadingDepositedCollateral}>

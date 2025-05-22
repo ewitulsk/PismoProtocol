@@ -5,8 +5,9 @@ use serde::Serialize;
 
 #[derive(Queryable, Selectable, Identifiable, Debug, PartialEq, Clone, Serialize)]
 #[diesel(table_name = collateral_marker_liquidated_events)]
-#[diesel(primary_key(transaction_hash))]
+#[diesel(primary_key(id))]
 pub struct CollateralMarkerLiquidatedEvent {
+    pub id: i32,
     pub transaction_hash: String,
     pub collateral_marker_id: String,
     pub account_id: String,

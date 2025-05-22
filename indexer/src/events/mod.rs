@@ -10,6 +10,8 @@ pub mod collateral_transfer_created;
 pub mod vault_transfer_created;
 pub mod position_liquidated;
 pub mod collateral_marker_liquidated;
+pub mod collateral_combine_event;
+pub mod collateral_withdraw_event;
 
 pub use position_created::PositionCreatedEvent as MovePositionCreatedEvent;
 pub use position_closed::PositionClosedEvent as MovePositionClosedEvent;
@@ -21,3 +23,5 @@ pub use collateral_transfer_created::CollateralTransferCreatedEvent as MoveColla
 pub use vault_transfer_created::VaultTransferCreatedEvent as MoveVaultTransferCreatedEvent;
 pub use position_liquidated::PositionLiquidatedEvent as MovePositionLiquidatedEvent;
 pub use collateral_marker_liquidated::CollateralMarkerLiquidatedEvent as MoveCollateralMarkerLiquidatedEvent;
+pub use collateral_combine_event::CollateralCombineEvent as MoveCollateralCombineEvent;
+pub use collateral_withdraw_event::CollateralWithdrawEvent as MoveCollateralWithdrawEvent;

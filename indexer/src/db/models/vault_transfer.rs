@@ -6,8 +6,9 @@ use crate::db::postgres::schema::vault_transfers;
 
 #[derive(Queryable, Identifiable, Selectable, Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[diesel(table_name = vault_transfers)]
-#[diesel(primary_key(transfer_id))]
+#[diesel(primary_key(id))]
 pub struct VaultTransfer {
+    pub id: i32, //I want this to be a UUID, but I don't have the time to fight diesel to make that happen
     pub transaction_hash: String,
     pub transfer_id: String,
     pub vault_marker_id: String,

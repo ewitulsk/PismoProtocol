@@ -5,8 +5,9 @@ use serde::Serialize;
 
 #[derive(Queryable, Selectable, Identifiable, Debug, PartialEq, Clone, Serialize)]
 #[diesel(table_name = position_liquidated_events)]
-#[diesel(primary_key(transaction_hash))]
+#[diesel(primary_key(id))]
 pub struct PositionLiquidatedEvent {
+    pub id: i32,
     pub transaction_hash: String,
     pub position_id: String,
     pub timestamp: DateTime<Utc>,

@@ -2,7 +2,8 @@ import { SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { SuiSignAndExecuteTransactionOutput } from '@mysten/wallet-standard';
 import { parseUnits } from 'viem';
-import type { MinimalAccountInfo, NotificationState, SupportedCollateralToken, SignAndExecuteTransactionArgs, SignAndExecuteTransactionError } from './depositCollateral'; // Re-use types
+import { bcs } from '@mysten/sui/bcs';
+import type { MinimalAccountInfo, NotificationState, SupportedCollateralToken, SignAndExecuteTransactionArgs, SignAndExecuteTransactionError, DepositedCollateralDetail } from './depositCollateral'; // Re-use types
 
 export interface WithdrawCollateralParams {
   account: MinimalAccountInfo;
@@ -12,6 +13,7 @@ export interface WithdrawCollateralParams {
   programId: string;
   selectedWithdrawTokenInfo: string;
   withdrawAmount: string;
+  collateralObjects: DepositedCollateralDetail[]; // NEW: Array of collateral objects for the token
   supportedCollateral: SupportedCollateralToken[]; // To get decimals
   suiClient: SuiClient;
   signAndExecuteTransaction: (
@@ -45,15 +47,16 @@ export const withdrawCollateral = async (
     programId,
     selectedWithdrawTokenInfo,
     withdrawAmount,
+    collateralObjects, // New param
     supportedCollateral,
-    // suiClient, // Not used in placeholder, but would be for real tx
+    suiClient, 
     signAndExecuteTransaction,
   } = params;
 
   const selectedToken = supportedCollateral.find(t => t.fields.token_info === selectedWithdrawTokenInfo);
 
-  if (!account || !accountObjectId || !accountStatsId || !packageId || !programId || !selectedWithdrawTokenInfo || !withdrawAmount || !selectedToken) {
-    callbacks.setNotification({ show: true, message: "Missing required parameters for withdrawal.", type: 'error' });
+  if (!account || !accountObjectId || !accountStatsId || !packageId || !programId || !selectedWithdrawTokenInfo || !withdrawAmount || !selectedToken || !collateralObjects || collateralObjects.length === 0) {
+    callbacks.setNotification({ show: true, message: "Missing required parameters or no collateral objects found for withdrawal.", type: 'error' });
     callbacks.setIsLoadingTx(false);
     return;
   }
@@ -65,7 +68,12 @@ export const withdrawCollateral = async (
     if (withdrawAmountBigInt <= BigInt(0)) {
       throw new Error("Withdrawal amount must be positive.");
     }
-    // TODO: Add validation against deposited balance if necessary (though UI might do this)
+    // Validate against total deposited balance for this token type
+    const totalDepositedRaw = collateralObjects.reduce((sum, obj) => sum + obj.rawAmount, BigInt(0));
+    if (withdrawAmountBigInt > totalDepositedRaw) {
+        throw new Error(`Withdrawal amount exceeds total deposited balance for ${selectedToken.name}.`);
+    }
+
   } catch (e) {
     callbacks.setNotification({ show: true, message: `Invalid withdrawal amount: ${e instanceof Error ? e.message : String(e)}`, type: 'error' });
     callbacks.setIsLoadingTx(false);
@@ -76,37 +84,83 @@ export const withdrawCollateral = async (
     account: account.address,
     tokenType: selectedWithdrawTokenInfo,
     amount: withdrawAmountBigInt.toString(),
+    numberOfCollateralObjects: collateralObjects.length,
+    collateralObjectIds: collateralObjects.map(co => ({collateral: co.collateralId, marker: co.markerId})),
   });
 
   try {
     const txb = new Transaction();
-    // Placeholder for withdraw transaction call
-    // Example: txb.moveCall({
-    // target: `${packageId}::collateral::withdraw_collateral`,
-    // typeArguments: [selectedWithdrawTokenInfo],
-    // arguments: [
-    // txb.object(accountObjectId),
-    // txb.object(accountStatsId),
-    // txb.object(programId),
-    // txb.pure(withdrawAmountBigInt.toString()), // Or however the amount is passed
-    // ],
-    // });
-    console.log("Withdrawal transaction block (placeholder) prepared for token:", selectedToken.name, "amount:", withdrawAmount);
-    
-    // Simulate a call to a placeholder transaction
-    // In a real scenario, you would build and execute the transaction here.
-    // For now, we'll just show a success message after a delay.
 
-    // This part would call signAndExecuteTransaction
-    // For the placeholder, we'll skip the actual call and directly use callbacks.
-    /*
+    if (collateralObjects.length === 1) {
+      // Case 1: Single collateral object
+      const co = collateralObjects[0];
+      txb.moveCall({
+        target: `${packageId}::collateral::withdraw_collateral`,
+        typeArguments: [selectedWithdrawTokenInfo],
+        arguments: [
+          txb.object(co.collateralId),
+          txb.object(co.markerId),
+          txb.pure(bcs.u64().serialize(withdrawAmountBigInt).toBytes()),
+          txb.object(accountStatsId),
+          // ctx is automatically passed by the wallet adapter
+        ],
+      });
+      console.log(`Withdrawal from single collateral object: ${co.collateralId}, marker: ${co.markerId}`);
+    } else if (collateralObjects.length >= 2) {
+      // Case 2 & 3: Two or more collateral objects - requires combination
+      let combinedCollateralArg = txb.moveCall({
+        target: `${packageId}::collateral::combine_collateral`,
+        typeArguments: [selectedWithdrawTokenInfo],
+        arguments: [
+          txb.object(collateralObjects[0].collateralId),
+          txb.object(collateralObjects[0].markerId),
+          txb.object(collateralObjects[1].collateralId),
+          txb.object(collateralObjects[1].markerId),
+          txb.object(accountStatsId),
+          // ctx is automatically passed
+        ],
+      });
+      console.log(`Combined first two collateral objects. IDs: ${collateralObjects[0].collateralId}, ${collateralObjects[1].collateralId}`);
+
+      for (let i = 2; i < collateralObjects.length; i++) {
+        const nextCollateral = collateralObjects[i];
+        combinedCollateralArg = txb.moveCall({
+          target: `${packageId}::collateral::combine_collateral_w_combine_collateral`,
+          typeArguments: [selectedWithdrawTokenInfo],
+          arguments: [
+            txb.object(nextCollateral.collateralId),
+            txb.object(nextCollateral.markerId),
+            combinedCollateralArg, // Result from previous combination
+            txb.object(accountStatsId),
+            // ctx
+          ],
+        });
+        console.log(`Combined with next collateral object: ${nextCollateral.collateralId}`);
+      }
+
+      // After all combinations, withdraw from the final combined object
+      txb.moveCall({
+        target: `${packageId}::collateral::withdraw_from_combined_collateral`,
+        typeArguments: [selectedWithdrawTokenInfo],
+        arguments: [
+          combinedCollateralArg, // The final combined collateral object (hot potato)
+          txb.pure(bcs.u64().serialize(withdrawAmountBigInt).toBytes()),
+          txb.object(accountStatsId),
+          // ctx
+        ],
+      });
+      console.log(`Withdrawing from final combined collateral object.`);
+    }
+    
+    console.log("Withdrawal transaction block prepared for token:", selectedToken.name, "amount:", withdrawAmount);
+
     signAndExecuteTransaction(
         { transaction: txb }, 
         {
           onSuccess: (result) => {
             callbacks.setNotification({
               show: true,
-              message: `Placeholder: Successfully withdrew ${withdrawAmount} ${selectedToken.name}.`,
+              message: `Successfully initiated withdrawal of ${withdrawAmount} ${selectedToken.name}.`,
               type: 'success',
               digest: result.digest,
             });
@@ -116,27 +170,16 @@ export const withdrawCollateral = async (
           onError: (error) => {
             callbacks.setNotification({
               show: true,
-              message: `Placeholder: Error withdrawing: ${error.message}`,
+              message: `Error withdrawing: ${error.message}`,
               type: 'error',
             });
             callbacks.setIsLoadingTx(false);
           },
         }
       );
-    */
-
-    // Simulate asynchronous operation for placeholder
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    callbacks.setNotification({
-        show: true,
-        message: `Placeholder: Would withdraw ${withdrawAmount} ${selectedToken.name}. Transaction not sent.`,
-        type: 'info',
-    });
-    if (callbacks.clearForm) callbacks.clearForm();
-    callbacks.setIsLoadingTx(false);
 
   } catch (error) {
-    console.error('Error in placeholder withdrawCollateral:', error);
+    console.error('Error in withdrawCollateral:', error);
     callbacks.setNotification({
       show: true,
       message: `Error preparing withdrawal: ${error instanceof Error ? error.message : String(error)}`,

@@ -30,6 +30,8 @@ use crate::db::repositories::{
     vault_transfer::VaultTransferRepository,
     position_liquidated_event::PositionLiquidatedEventRepository,
     collateral_marker_liquidated_event::CollateralMarkerLiquidatedEventRepository,
+    collateral_combine_event::CollateralCombineEventRepository,
+    collateral_withdraw_event::CollateralWithdrawEventRepository,
 };
 use crate::router::create_router;
 use crate::worker::PositionEventWorker;
@@ -72,6 +74,8 @@ async fn main() -> Result<()> {
     let vault_transfer_repo = Arc::new(VaultTransferRepository::new(db_pool.clone()));
     let position_liquidated_repo = Arc::new(PositionLiquidatedEventRepository::new(db_pool.clone()));
     let collateral_marker_liquidated_repo = Arc::new(CollateralMarkerLiquidatedEventRepository::new(db_pool.clone()));
+    let collateral_combine_repo = Arc::new(CollateralCombineEventRepository::new(db_pool.clone()));
+    let collateral_withdraw_repo = Arc::new(CollateralWithdrawEventRepository::new(db_pool.clone()));
     info!("Repositories initialized.");
 
     // Worker
@@ -86,6 +90,8 @@ async fn main() -> Result<()> {
         vault_transfer_repo.clone(),
         position_liquidated_repo.clone(),
         collateral_marker_liquidated_repo.clone(),
+        collateral_combine_repo.clone(),
+        collateral_withdraw_repo.clone(),
         &config
     );
     info!("PositionEventWorker initialized.");
