@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import { getIconPath, getCoinImageKeyVault } from "@/utils/coinIcons";
 
 // Define props based on backend data passed from Sidebar
 interface VaultItemProps {
@@ -13,7 +15,7 @@ interface VaultItemProps {
 // Helper to extract a symbol from coin_type
 const getSymbol = (coinType: string): string => {
   const parts = coinType.split('::');
-  return parts[parts.length - 1] || "Unknown"; // Return last part (e.g., BTC, ETH)
+  return parts[parts.length - 1] || "Unknown"; // Return last part (e.g., TEST_BTC_COIN)
 };
 
 // Helper to format currency (simplified)
@@ -43,6 +45,7 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
 
   // Derive display name and symbol from coin_type
   const symbol = getSymbol(coin_type);
+  const iconSymbol = getCoinImageKeyVault(symbol);
 
   return (
     <div
@@ -59,8 +62,15 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
         }
       }}
     >
-      {/* Placeholder Icon */}
-      <div className="w-8 h-8 rounded-full bg-zinc-300" />
+      {/* Coin Icon */}
+      <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden">
+        <Image
+          src={getIconPath(iconSymbol)}
+          alt={iconSymbol}
+          width={50}
+          height={50}
+        />
+      </div>
       <div className="flex flex-col flex-grow">
         <div className="flex justify-between items-center">
           {/* Display derived name */}
