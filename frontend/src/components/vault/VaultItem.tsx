@@ -10,8 +10,8 @@ interface VaultItemProps {
   onSelect: (vaultId: string) => void;
 }
 
-// Helper to extract a display name/symbol from coin_type
-const getDisplayName = (coinType: string): string => {
+// Helper to extract a symbol from coin_type
+const getSymbol = (coinType: string): string => {
   const parts = coinType.split('::');
   return parts[parts.length - 1] || "Unknown"; // Return last part (e.g., BTC, ETH)
 };
@@ -42,8 +42,7 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
   };
 
   // Derive display name and symbol from coin_type
-  const displayName = getDisplayName(coin_type);
-  const symbol = displayName; // Use derived name as symbol for now
+  const symbol = getSymbol(coin_type);
 
   return (
     <div
@@ -70,17 +69,16 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
               isActive ? "text-black" : "text-white"
             }`}
           >
-            {displayName} Vault {/* Add " Vault" for clarity */}
+            {symbol}
           </h3>
         </div>
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col items-start">
           {/* Display derived symbol */}
           <p
             className={`text-sm font-bold ${
               isActive ? "text-black" : "text-primary"
             }`}
           >
-            {symbol}
           </p>
           {/* Display formatted value (TVL) - Render only when formattedTvl is ready */}
           <span
@@ -88,7 +86,7 @@ const VaultItem: React.FC<VaultItemProps> = ({ id, coin_type, value, isActive, o
               isActive ? "text-black" : "text-gray-400"
             }`}
           >
-            {formattedTvl} {/* Render the state variable */}
+            TVL:&nbsp;&nbsp;{formattedTvl} {/* Render the state variable */}
           </span>
         </div>
       </div>
