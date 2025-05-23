@@ -12,6 +12,7 @@ import {
     ClosePositionCallbacks 
 } from '@/lib/transactions/closePosition'; // Added
 import type { MinimalAccountInfo, NotificationState, SupportedCollateralToken } from '@/lib/transactions/depositCollateral'; // Added
+import { getIconPath, getCoinImageKeyPosition } from "@/utils/coinIcons"; // Added
 
 const INDEXER_URL_CONST = process.env.NEXT_PUBLIC_INDEXER_URL || "http://localhost:3001"; // Fallback for safety, renamed
 const PACKAGE_ID_CONST = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID; // Added
@@ -570,6 +571,8 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accoun
                         // Find the asset name using supported_positions_token_i
                         const asset = availableAssets[position.supported_positions_token_i];
                         const assetName = asset ? asset.displayName : `Token Index ${position.supported_positions_token_i}`;
+                        // --- Add icon logic ---
+                        const iconSymbol = getCoinImageKeyPosition(assetName);
 
                         // Calculate P/L display string and color
                         let plDisplayString = "N/A";
@@ -618,7 +621,16 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accoun
                         return (
                             <div key={position.position_id} className="card bg-backgroundOffset p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap">
                                 <div className="flex items-center gap-3 flex-shrink-0">
-                                    <div className='w-6 h-6 bg-gray-600 rounded-full'></div>
+                                    <div className='w-6 h-6 bg-white rounded-full flex items-center justify-center overflow-hidden'>
+                                        {iconSymbol && (
+                                            <img
+                                                src={getIconPath(iconSymbol)}
+                                                alt={iconSymbol}
+                                                width={24}
+                                                height={24}
+                                            />
+                                        )}
+                                    </div>
                                     <span className="font-semibold text-primaryText text-lg">
                                         {assetName}
                                     </span>
@@ -675,10 +687,23 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accoun
                         {(() => {
                             const asset = availableAssets[positionToClose.supported_positions_token_i];
                             const assetName = asset ? asset.displayName : `Token Index ${positionToClose.supported_positions_token_i}`;
+                            const iconSymbol = getCoinImageKeyPosition(assetName);
                             return (
-                                <h3 className="text-lg font-semibold text-primaryText mb-4">
-                                    Close {assetName} {positionToClose.position_type} Position
-                                </h3>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center overflow-hidden">
+                                        {iconSymbol && (
+                                            <img
+                                                src={getIconPath(iconSymbol)}
+                                                alt={iconSymbol}
+                                                width={24}
+                                                height={24}
+                                            />
+                                        )}
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-primaryText">
+                                        Close {assetName} {positionToClose.position_type} Position
+                                    </h3>
+                                </div>
                             );
                         })()}
 
