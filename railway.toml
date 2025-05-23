@@ -1,6 +1,0 @@
-[build.dockerfile]
-path = "Dockerfile"
-
-[variables]
-PORT = "8765"
-API_PORT = "8080" 

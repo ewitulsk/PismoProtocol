@@ -1,1 +1,0 @@
-web: python -m price-feed-aggregator.src.main --host 0.0.0.0 --port $PORT --api-host 0.0.0.0 --api-port ${API_PORT:-8080} 
