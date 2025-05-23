@@ -18,7 +18,7 @@ const ChartContainer: React.FC<ChartContainerProps> = ({
   onAssetSelect 
 }) => {
   // State for timeframe selector - restored
-  const [selectedInterval, setSelectedInterval] = useState<string>("60"); // Default to 1h (or your previous default)
+  const [selectedInterval, setSelectedInterval] = useState<string>("10"); // Default to 10s (or your previous default)
 
   const handleTimeFrameChange = (interval: string) => {
     setSelectedInterval(interval);

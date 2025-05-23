@@ -141,6 +141,8 @@ const TradingPlatform: React.FC = () => {
 
   const isFirstDepositedCollateralFetch = useRef(true);
 
+  const client = useSuiClient(); // Add this line to get SuiClient instance
+
   useEffect(() => {
     let cancelled = false;
     async function calculateAndLogTotalCollateralValue() {
@@ -744,7 +746,28 @@ const TradingPlatform: React.FC = () => {
           const data: DepositedCollateralResponse[] = await response.json();
           
           if (Array.isArray(data) && data.length > 0) {
-            return data.map((deposit: DepositedCollateralResponse): DepositedCollateralDetail => {
+            // Extract marker IDs and query them on-chain
+            const markerIds = data.map((deposit: DepositedCollateralResponse) => {
+              return "0x" + bytesToHex(Uint8Array.from(deposit.collateral_marker_id));
+            });
+
+            // Query marker objects on-chain to get remaining_collateral amounts
+            let markerObjects: SuiObjectResponse[] = [];
+            try {
+              console.log(`[TradingPlatform] Querying ${markerIds.length} marker objects for ${token.name}:`, markerIds);
+              const markerQueryResponse = await client.multiGetObjects({
+                ids: markerIds,
+                options: { showContent: true, showType: true }
+              });
+              markerObjects = markerQueryResponse;
+              console.log(`[TradingPlatform] Successfully queried marker objects for ${token.name}`);
+            } catch (error) {
+              console.error(`Error querying marker objects for ${token.name}:`, error);
+              fetchErrorOccurred = true;
+              return []; // Return empty on error
+            }
+
+            return data.map((deposit: DepositedCollateralResponse, index): DepositedCollateralDetail | null => {
                 const collateralIdHex = "0x" + bytesToHex(Uint8Array.from(deposit.collateral_id));
                 const markerIdHex = "0x" + bytesToHex(Uint8Array.from(deposit.collateral_marker_id));
                 
@@ -756,7 +779,34 @@ const TradingPlatform: React.FC = () => {
                                         ? token.fields.price_feed_id_bytes_hex 
                                         : (token.fields.price_feed_id_bytes_hex ? '0x' + token.fields.price_feed_id_bytes_hex : undefined);
                 
-                const rawAmountBigInt = BigInt(String(deposit.amount));
+                // Get remaining_collateral from the on-chain marker object
+                const markerObject = markerObjects[index];
+                if (markerObject.error) {
+                  console.error(`Error fetching marker object ${markerIdHex}:`, markerObject.error);
+                  return null; // Skip this collateral if marker query failed
+                }
+
+                if (!markerObject.data || !markerObject.data.content || markerObject.data.content.dataType !== 'moveObject') {
+                  console.error(`Marker object ${markerIdHex} is not a valid Move object`);
+                  return null; // Skip this collateral if marker is invalid
+                }
+
+                const markerFields = (markerObject.data.content as any).fields;
+                if (!markerFields || typeof markerFields.remaining_collateral !== 'string') {
+                  console.error(`Marker object ${markerIdHex} does not have valid remaining_collateral field. Fields:`, markerFields);
+                  return null; // Skip this collateral if remaining_collateral is missing
+                }
+
+                // Use remaining_collateral from the on-chain marker object
+                const rawAmountBigInt = BigInt(markerFields.remaining_collateral);
+                console.log(`[TradingPlatform] Marker ${markerIdHex} remaining_collateral: ${rawAmountBigInt.toString()} (vs indexer amount: ${deposit.amount})`);
+                
+                // Skip if remaining collateral is 0
+                if (rawAmountBigInt === BigInt(0)) {
+                  console.log(`[TradingPlatform] Skipping marker ${markerIdHex} with 0 remaining collateral`);
+                  return null;
+                }
+
                 let formattedAmount = "0";
                 try {
                     if (typeof rawAmountBigInt === "bigint" && typeof decimals === "number") {
@@ -772,11 +822,11 @@ const TradingPlatform: React.FC = () => {
                     collateralId: collateralIdHex,
                     markerId: markerIdHex,
                     tokenInfo: depositTokenInfo,
-                    amount: formattedAmount, // Formatted amount for THIS specific object
+                    amount: formattedAmount, // Now uses on-chain remaining_collateral
                     priceFeedIdBytes: priceFeedIdBytes,
-                    rawAmount: rawAmountBigInt // Raw amount for THIS specific object
+                    rawAmount: rawAmountBigInt // Now uses on-chain remaining_collateral
                 };
-            });
+            }).filter(Boolean) as DepositedCollateralDetail[]; // Filter out any nulls
           } else {
             return []; // Return empty array if no collateral of this type
           }
@@ -809,7 +859,7 @@ const TradingPlatform: React.FC = () => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [accountObjectId, supportedCollateral, INDEXER_URL]); // Removed bytesToHex as it's imported directly
+  }, [accountObjectId, supportedCollateral, INDEXER_URL, client]); // Added client to dependencies
 
   const handleAssetSelect = (asset: SelectableMarketAsset) => {
     setSelectedAsset(asset);
