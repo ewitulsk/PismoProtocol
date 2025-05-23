@@ -9,7 +9,7 @@ const HomePage: React.FC = () => {
       <div className="flex flex-col items-center justify-center py-16">
         <h1 className="home-title">Pismo Protocol</h1>
         <p className="home-subtitle">
-          Decentralized synthetic assets on Sui blockchain. Trade, earn, and build with Pismo.
+          Decentralized perpetuals exchange on the Sui blockchain. Trade, earn, and build with Pismo.
         </p>
         
         <div className="home-buttons">
@@ -27,10 +27,29 @@ const HomePage: React.FC = () => {
           </Link>
         </div>
         
+        <div className="home-buttons mt-4">
+          <Link 
+            href="https://placeholder-jira-link.com" 
+            className="bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors duration-200 text-sm px-4 py-2"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Jira
+          </Link>
+          <Link 
+            href="https://github.com/ewitulsk/PismoProtocol" 
+            className="bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors duration-200 text-sm px-4 py-2"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </Link>
+        </div>
+        
         <div className="feature-grid">
           <FeatureCard 
-            title="Trade Synthetic Assets" 
-            description="Access a wide range of synthetic assets backed by collateral in the Pismo vaults."
+            title="Trade Any Asset" 
+            description="Open long or short positions with up to 100x leverage."
           />
           <FeatureCard 
             title="Earn Yield" 
@@ -38,7 +57,7 @@ const HomePage: React.FC = () => {
           />
           <FeatureCard 
             title="Manage Risk" 
-            description="Advanced risk management tools to monitor and adjust your positions."
+            description="Using our unified account model, offset your losses with your gains."
           />
         </div>
         
