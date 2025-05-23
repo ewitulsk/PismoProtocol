@@ -13,6 +13,7 @@ import { withdrawCollateral, WithdrawCollateralParams, WithdrawCollateralCallbac
 import { openPosition, OpenPositionParams, OpenPositionCallbacks, PositionType as ExtPositionType } from '../../lib/transactions/openPosition';
 import { SuiPythClient } from '@pythnetwork/pyth-sui-js';
 import { SelectableMarketAsset } from "./AssetSelector"; // Added this line
+import { pythPriceFeedService } from '@/utils/pythPriceFeed'; // Add this import
 
 // --- Component Types ---
 type TabType = "Positions" | "Collateral";
@@ -41,6 +42,9 @@ export interface ActionTabsProps {
     isLoadingDepositedCollateral: boolean;           
     depositedCollateralError: string | null;        // NEW: passed from TradingPlatform
     availableAssets: SelectableMarketAsset[]; // Added this line
+    totalCollateralValue?: number; // NEW: Total value of deposited collateral
+    totalPositionDelta?: number; // NEW: Total unrealized P&L (UPNL)
+    currentPositionsData?: any[]; // NEW: Current positions data for calculating initial value
 }
 
 // --- Constants ---
@@ -112,7 +116,10 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   userDepositedCollateral,
   isLoadingDepositedCollateral,
   depositedCollateralError,
-  availableAssets
+  availableAssets,
+  totalCollateralValue,
+  totalPositionDelta,
+  currentPositionsData
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("Positions");
   const [positionType, setPositionType] = useState<PositionType>("Long");
@@ -130,11 +137,57 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
   const [optimisticHasAccount, setOptimisticHasAccount] = useState<boolean>(false);
   const [hasWalletBalancesLoadedOnce, setHasWalletBalancesLoadedOnce] = useState(false);
 
+  // Calculate max position size
+  const [maxPositionSize, setMaxPositionSize] = useState<number>(0);
+
   const client = useSuiClient(); 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
   // Use isLoadingAccount prop directly for core data loading indication
   const isLoadingCoreData = isLoadingAccount; 
+
+  // Calculate max position size whenever relevant data changes
+  useEffect(() => {
+    if (totalCollateralValue === undefined || totalPositionDelta === undefined || !currentPositionsData) {
+      setMaxPositionSize(0);
+      return;
+    }
+
+    // Calculate total initial value of all positions (sum of amount * entry_price)
+    let totalPositionInitialValue = 0;
+    
+    if (currentPositionsData && Array.isArray(currentPositionsData)) {
+      currentPositionsData.forEach(position => {
+        // Parse amount and entry_price from string format
+        const amount = position.amount ? parseFloat(position.amount) : 0;
+        const entryPrice = position.entry_price ? parseFloat(position.entry_price) : 0;
+        const entryPriceDecimals = position.entry_price_decimals || 0;
+        
+        // Find the asset info to get token decimals
+        const priceFeedId = position.price_feed_id_bytes?.startsWith('0x') 
+          ? position.price_feed_id_bytes 
+          : '0x' + position.price_feed_id_bytes;
+        const asset = availableAssets.find(a => a.priceFeedId === priceFeedId);
+        const tokenDecimals = asset?.decimals || 9; // Default to 9 if not found
+        
+        // Convert raw amount to actual amount using token decimals
+        const actualAmount = amount / Math.pow(10, tokenDecimals);
+        
+        // Convert entry price using its decimals
+        const actualEntryPrice = entryPrice / Math.pow(10, entryPriceDecimals);
+        
+        const positionValue = actualAmount * actualEntryPrice;
+        
+        totalPositionInitialValue += positionValue;
+      });
+    }
+
+    // Calculate max position size: collateral_value - initial_position_value + upnl
+    const calculatedMaxSize = totalCollateralValue - totalPositionInitialValue + totalPositionDelta;
+    
+    // Ensure it's not negative
+    setMaxPositionSize(Math.max(0, calculatedMaxSize));
+  }, [totalCollateralValue, totalPositionDelta, currentPositionsData, availableAssets]);
 
   // Initialize selectedDepositTokenInfo based on the passed `supportedCollateral` prop
   useEffect(() => {
@@ -263,13 +316,40 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
     }
     const positionMarketIndex = selectedAsset.marketIndex;
 
-    // TODO: Determine the correct decimals based on selectedMarketIndex or the asset being traded
-    // For now, using decimals from the first supported collateral as a placeholder. THIS NEEDS TO BE CORRECTED.
-    const assetDecimals = supportedCollateral.length > 0 ? supportedCollateral[0].fields.token_decimals : 9; // Default to 9 if no supported collateral loaded
+    // Fetch current price for the selected asset
+    if (!selectedMarketPriceFeedId) {
+        setNotification({ show: true, message: "No market price feed selected.", type: 'error' });
+        return;
+    }
+
+    let currentPrice: number;
+    try {
+        const priceData = await pythPriceFeedService.getLatestPrice(selectedMarketPriceFeedId);
+        if (!priceData || typeof priceData.price !== "number" || isNaN(priceData.price) || priceData.price <= 0) {
+            setNotification({ show: true, message: "Failed to fetch current market price. Please try again.", type: 'error' });
+            return;
+        }
+        currentPrice = priceData.price;
+        console.log(`[ActionTabs] Current price for ${selectedAsset.displayName}: $${currentPrice}`);
+    } catch (error) {
+        console.error("[ActionTabs] Error fetching price:", error);
+        setNotification({ show: true, message: "Failed to fetch current market price. Please try again.", type: 'error' });
+        return;
+    }
+
+    // Convert USD amount to asset amount
+    const assetAmount = amountNumber / currentPrice;
+    console.log(`[ActionTabs] Converting $${amountNumber} USD to ${assetAmount} ${selectedAsset.baseAsset}`);
+
+    // Get decimals for the asset
+    const assetDecimals = selectedAsset.decimals || 9; // Use asset's decimals or default to 9
 
     let amountBigInt;
     try {
-        amountBigInt = parseUnits(amount, assetDecimals);
+        // Convert the asset amount to a string with appropriate precision
+        const assetAmountStr = assetAmount.toFixed(assetDecimals);
+        amountBigInt = parseUnits(assetAmountStr, assetDecimals);
+        console.log(`[ActionTabs] Converted to raw amount: ${amountBigInt.toString()}`);
     } catch (e) {
         console.error("Error parsing amount with decimals:", e);
         setNotification({ show: true, message: "Failed to parse amount. Please check input.", type: 'error' });
@@ -489,9 +569,27 @@ const ActionTabs: React.FC<ActionTabsProps> = ({
                   <Slider value={leverage} onChange={handleLeverageChange} />
                 </div>
                 <div className="mb-6">
-                  <label className="input-label block text-secondaryText mb-2" htmlFor="amount-input">Amount</label>
+                  <label className="input-label block text-secondaryText mb-2" htmlFor="amount-input">Amount (USD)</label>
                     <div className="flex gap-5 justify-between px-4 py-3 mt-2 bg-mainBackground rounded-lg">
-                    <input id="amount-input" type="text" className="input-field bg-transparent p-0 my-auto w-full text-primaryText focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:placeholder-transparent" value={amount} onChange={handleAmountChange} placeholder="0.00"/>
+                    <input id="amount-input" type="text" className="input-field bg-transparent p-0 my-auto w-full text-primaryText focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:placeholder-transparent" value={amount} onChange={handleAmountChange} placeholder="$0.00"/>
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-400">
+                        Max position size: {
+                          totalCollateralValue === undefined || isLoadingDepositedCollateral 
+                            ? "Loading..." 
+                            : `$${maxPositionSize.toFixed(2)}`
+                        }
+                      </span>
+                      {maxPositionSize > 0 && !isLoadingDepositedCollateral && (
+                        <button 
+                          onClick={() => setAmount(maxPositionSize.toFixed(2))} 
+                          className="text-accent hover:text-accentHover text-xs font-medium"
+                          type="button"
+                        >
+                          Max
+                        </button>
+                      )}
                     </div>
                 </div>
                 <button className="btn-action w-full mt-6" onClick={handleOpenPosition} disabled={!amount || isLoadingTx || !accountObjectId || !accountStatsId || !(selectedDepositTokenInfo || (supportedCollateral.length > 0))}>
