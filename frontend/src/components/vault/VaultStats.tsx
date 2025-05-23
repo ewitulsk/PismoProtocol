@@ -2,6 +2,8 @@
 import React from "react";
 // Import the backend VaultData type
 import { VaultData } from "@/types"; // Renamed to avoid conflict
+import { getIconPath, getCoinImageKeyVault } from "@/utils/coinIcons";
+import Image from "next/image";
 
 // Helper to extract a display name/symbol from coin_type
 const getDisplayName = (coinType: string): string => {
@@ -31,12 +33,21 @@ const VaultStats: React.FC<VaultStatsProps> = ({ vault }) => {
   const formattedUserDeposit = "-"; // Not available in backend data
   const formattedAPY = "-"; // Not available in backend data
 
+  const iconSymbol = getCoinImageKeyVault(symbol);
+
   return (
     <section className="card flex justify-between border border-secondary max-md:flex-col max-md:gap-6 max-sm:p-4">
       <div className="flex flex-col gap-2">
         <h3 className="text-label">Vault</h3>
         <div className="flex gap-2 items-center text-2xl font-bold max-sm:text-xl">
-          <div className="w-6 h-6 rounded-full bg-zinc-300" />
+          <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center overflow-hidden">
+            <Image
+              src={getIconPath(iconSymbol)}
+              alt={symbol}
+              width={24}
+              height={24}
+            />
+          </div>
           {/* Display symbol derived from backend data */}
           <span>{symbol}</span>
         </div>
