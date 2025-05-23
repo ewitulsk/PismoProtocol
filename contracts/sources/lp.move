@@ -259,6 +259,10 @@ public(package) fun remove_amount(marker: &mut VaultMarker, amount: u64) {
     marker.vault_amount = marker.vault_amount - amount;
 }
 
+public(package) fun amount(marker: &mut VaultMarker): u64 {
+    marker.vault_amount
+}
+
 public(package) fun create_vault_transfer(marker: &mut VaultMarker, amount: u64, to_user_address: address, ctx: &mut TxContext){
     let transfer_id_object = object::new(ctx);
     let transfer_id_address = object::uid_to_address(&transfer_id_object);
