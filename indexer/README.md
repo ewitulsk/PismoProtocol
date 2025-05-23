@@ -1,6 +1,6 @@
 # Pismo Protocol Indexer
 
-This service indexes specific events emitted by the `pismo_protocol::positions` Sui Move module and stores them in a PostgreSQL database.
+This service indexes specific events emitted by the Pismo Protocol Sui Move modules and stores them in a PostgreSQL database.
 
 ## Features
 
@@ -10,13 +10,31 @@ This service indexes specific events emitted by the `pismo_protocol::positions` 
 *   Uses Diesel ORM with r2d2 connection pooling.
 *   Configurable start checkpoint, concurrency, and target package ID.
 *   Uses `tracing` for logging.
+*   Supports liquidation transfer callbacks to external services.
 
 ## Supported Events
 
-Currently, the indexer listens for and stores the following events from the `pismo_protocol::positions` module:
+Currently, the indexer listens for and stores the following events from the Pismo Protocol modules:
 
+### Position Events (`pismo_protocol::positions`)
 *   `PositionCreatedEvent`
 *   `PositionClosedEvent`
+*   `PositionLiquidatedEvent`
+
+### Vault Events (`pismo_protocol::lp`)
+*   `VaultCreatedEvent`
+*   `VaultTransferCreated`
+
+### Account Events (`pismo_protocol::accounts`)
+*   `NewAccountEvent`
+
+### Collateral Events (`pismo_protocol::collateral`)
+*   `CollateralDepositEvent`
+*   `StartCollateralValueAssertionEvent`
+*   `CollateralTransferCreated`
+*   `CollateralMarkerLiquidatedEvent`
+*   `CollateralCombineEvent`
+*   `CollateralWithdrawEvent`
 
 ## Prerequisites
 
@@ -66,6 +84,13 @@ start_checkpoint = 0
 # Number of concurrent checkpoint processing tasks
 # Adjust based on your machine resources and workload
 concurrency = 5
+
+# URL for the liquidation transfer service
+# Used for callbacks when transfer events are processed
+liquidation_transfer_service_url = "http://localhost:8080"
+
+# API server listen address (default: "0.0.0.0:3000")
+listen_addr = "0.0.0.0:3000"
 ```
 
 ## Running the Service
