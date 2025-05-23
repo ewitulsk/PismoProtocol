@@ -33,7 +33,7 @@ const TimeFrameSelector: React.FC<TimeFrameSelectorProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Find the currently selected timeframe label
-  const selectedLabel = timeframes.find(tf => tf.value === selectedTimeFrame)?.label || "1H";
+  const selectedLabel = timeframes.find(tf => tf.value === selectedTimeFrame)?.label || "10s";
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
