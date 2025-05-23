@@ -1,13 +1,13 @@
 # Pismo Protocol - DeFi Perpetuals Trading DEX
 
-A decentralized exchange for trading synthetic perpetual contracts on the Sui blockchain.
+A decentralized exchange for trading perpetual contracts on the Sui blockchain.
 
 ## Overview
 
-Pismo Protocol is a DeFi platform that allows users to trade synthetic assets, manage vaults, and earn yield. The platform consists of three main pages:
+Pismo Protocol is a DeFi platform that allows users to trade perpetuals, manage vaults, and earn yield. The platform consists of three main pages:
 
 1. **Home Page**: Landing page with links to the Trading Platform and Vault Management
-2. **Trading Page**: Interface for trading synthetic assets with a price chart
+2. **Trading Page**: Interface for trading perpetuals with a price chart
 3. **Vault Page**: Interface for managing collateral and positions
 
 ## Prerequisites
@@ -97,25 +97,25 @@ NEXT_PUBLIC_SUI_EXPLORER_BASE_URL="https://your_sui_explorer_url/tx/"
 NEXT_PUBLIC_INDEXER_URL="http://localhost:3001"
 ```
 
-**Note:** Remember to replace placeholder values with your actual configuration details.
+**Note:** Remember to replace the example values with your actual configuration details.
 
 ## Pages Overview
 
 ### Home Page
 The landing page provides an introduction to Pismo Protocol with links to the Trading Platform and Vault Management. It showcases the key features of the platform:
-- Trade Synthetic Assets
+- Trade Perpetuals
 - Earn Yield
 - Manage Risk
 
 ### Trading Page
 The trading interface allows users to:
-- View price charts for different synthetic assets
+- View price charts for different perpetual markets
 - Select different timeframes for the chart
 - Monitor account health
 - Manage collateral positions
 - Execute trades
 
-The trading chart is currently implemented as a placeholder using TradingView widget integration with Pyth Network price feeds.
+The trading chart is implemented using TradingView widget integration with Pyth Network price feeds.
 
 ### Vault Page
 The vault management interface allows users to:
