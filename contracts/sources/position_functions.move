@@ -231,11 +231,27 @@ public fun close_position_pyth(
         //For right now, this is just going to transfer value from each of the vaults equally, ideally this still happens, but a swap takes place.
         //This means that the user will get paid out in each vault token equally.
         //...That could just happen in the execute transfer... this might work out extremely easily.
-        let num_vaults = all_vault_markers.length();
-        let target_value_per_vault = transfer_value / (num_vaults as u128); //We need to validate that we're handling this div correctly.
+        let num_vaults_total = all_vault_markers.length();
+
+        let mut num_vaults_w_money = 0;
+        let mut j = 0;
+        while(j < num_vaults_total) {
+            let vault_marker = all_vault_markers.borrow_mut(j);
+            if(vault_marker.amount() > 0) {
+                num_vaults_w_money = num_vaults_w_money + 1;
+            };
+            j = j + 1;
+        };
+
+        
+        let target_value_per_vault = transfer_value / (num_vaults_w_money as u128); //We need to validate that we're handling this div correctly.
         let mut i = 0;
-        while(i < num_vaults) {
+        while(i < num_vaults_total) {
             let vault_marker = all_vault_markers.borrow_mut(i);
+            if(vault_marker.amount() == 0) {
+                i = i + 1;
+                continue;
+            };
             let vault_token_id = vault_marker.token_id();
             let vault_price_info_i = *all_vault_price_info_is.borrow(i);
             let vault_price_info = all_price_info_objects.borrow(vault_price_info_i);
@@ -260,7 +276,7 @@ public fun close_position_pyth(
             exit_price_decimal: exit_price_decimal,
             profit_amount_raw: transfer_data.transfer_amount(),
             profit_value_raw: initial_event_pnl_value, // This is the total profit value intended for the user
-            payout_vaults_count: num_vaults,
+            payout_vaults_count: num_vaults_total,
             total_value_paid_to_user: initial_event_pnl_value, // Assuming the full profit value is paid out
         });
     } else {
