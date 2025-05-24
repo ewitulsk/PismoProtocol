@@ -77,10 +77,10 @@ class PythPriceFeedService:
             port=port
         )
         
-        self.rest_api = PriceFeedAPI(
-            pyth_client=self.pyth_client,
-            websocket_server_status=self.get_websocket_status,
-        )
+        # self.rest_api = PriceFeedAPI(
+        #     pyth_client=self.pyth_client,
+        #     websocket_server_status=self.get_websocket_status,
+        # )
         
         # API server and thread
         self.api_process: Optional[threading.Thread] = None
@@ -108,18 +108,18 @@ class PythPriceFeedService:
         # Start REST API in a separate process
         # This is a non-blocking call that runs uvicorn in its own thread
         self.api_server = None  # Reset server if it exists
-        self.api_process = threading.Thread(
-            target=uvicorn.run,
-            kwargs={
-                "app": self.rest_api.app,
-                "host": self.api_host,
-                "port": self.api_port,
-                "log_level": "info",
-            },
-            daemon=True,
-        )
-        self.api_process.start()
-        self.logger.info(f"REST API started on http://{self.api_host}:{self.api_port}")
+        # self.api_process = threading.Thread(
+        #     target=uvicorn.run,
+        #     kwargs={
+        #         "app": self.rest_api.app,
+        #         "host": self.api_host,
+        #         "port": self.api_port,
+        #         "log_level": "info",
+        #     },
+        #     daemon=True,
+        # )
+        # self.api_process.start()
+        # self.logger.info(f"REST API started on http://{self.api_host}:{self.api_port}")
         
         # Wait for shutdown signal
         await self.shutdown_event.wait()
@@ -130,7 +130,7 @@ class PythPriceFeedService:
         
         # Stop components in reverse order
         # Note: The API thread is a daemon thread so it will exit when the main process exits
-        self.logger.info("REST API will shut down with the main process")
+        # self.logger.info("REST API will shut down with the main process")
             
         await self.websocket_server.stop()
         self.logger.info("Websocket server stopped")

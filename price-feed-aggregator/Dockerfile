@@ -32,15 +32,11 @@ RUN useradd --create-home --shell /bin/bash appuser && \
 USER appuser
 
 # Expose ports for WebSocket and REST API
-EXPOSE 8765 8080
+EXPOSE 8765
 
 # Set default environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8080/health')" || exit 1
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
