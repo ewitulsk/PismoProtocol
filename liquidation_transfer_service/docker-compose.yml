@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  liquidation-transfer-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - LIQUIDATION_SERVICE_PORT=3002
+    volumes:
+      # Mount config directory if you want to override configurations
+      - ./config:/app/config:ro
+      # Mount .env file for environment variables
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - liquidation-network
+
+networks:
+  liquidation-network:
+    driver: bridge
+    name: liquidation-transfer-network

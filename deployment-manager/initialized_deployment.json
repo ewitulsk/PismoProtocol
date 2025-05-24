@@ -1,13 +1,13 @@
 {
-  "packageId": "0x4ccbc5f1897ae7f970c5d7436c4b578106ce9b89afd7006fa717aa19cefd037b",
-  "globalObjectId": "0xa737a805b18ae8eae12832db6df2813209c8ada4493771cfd8ddf4f18b16982d",
-  "programObjectId": "0xa5a948c16581c52a34d1a006dd6e541b33425a1cd00cb6e11b0a2a5c61f77b8a",
-  "initializationCheckpoint": "199227262",
+  "packageId": "0x7e208c44f50cc18625e3bc9fdf724791c0fc31f1f5e61e140b5a9bac0cfeb1eb",
+  "globalObjectId": "0x593c2a87e45df9d0c6eef1d8e1815e07aa5cbab9f457dcf63c242d01675c0d78",
+  "programObjectId": "0x242e7e7e3c975535bba8b39958c5b90b06500f8660e09ad2f25c15a9a4994369",
+  "initializationCheckpoint": "199638004",
   "network": "testnet",
-  "btc_tcap": "0xcbec971b6c5f3107140684cafd704c205056523a46cc4a26ca536e6e95cb400a",
-  "eth_tcap": "0xb8c2e1258e6adf6ff249bdbcd364a8234b1867de322e635593e8e18daa6e6a31",
-  "sui_tcap": "0x2e6bd5a9c2ea656d26a06d713c86990f06007206c01ca6d4c3387ed715373a95",
-  "usdc_tcap": "0x2f2ad99ffa8204ec60c55e36ba8bd6639c194410988366d5ccff4b92b69d9144",
-  "apt_tcap": "0xe5dbcb3a3c4d9cfadca1348c9e2b6cbd29b6b235858e348c016813510bc63c39",
-  "sol_tcap": "0xbdd3861aed97c159f89c491d18ccf5345d71a68414a0b3344c65bb8e5f373c5d"
+  "btc_tcap": "0xee340193ca4d07707c0c8004ba5d0e0290b5bc349d0e3ce0939c91916ec505aa",
+  "eth_tcap": "0xad654b670bc7bb4d3531fef8fabeb35ecc805af0d331426e50b241892609f9d1",
+  "sui_tcap": "0x18913763feccfbc75512b9b1432f212aa9a01e176ae459a1b4c67081107a55fd",
+  "usdc_tcap": "0xdc586726a557b68c988ae76d38caf33eb2d91852206817015979a3dca67ae58a",
+  "apt_tcap": "0xbf88f5828f285baa4abf44d7eab3d21048f69e15a834bb0e0c18ddfa9f025add",
+  "sol_tcap": "0xb9cb18370aa7028fb91ccbffae80e000807fcebdd281616b48627c91c4af7faf"
 }
