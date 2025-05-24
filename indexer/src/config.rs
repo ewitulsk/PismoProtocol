@@ -11,6 +11,14 @@ pub struct Config {
     pub concurrency: usize,
     pub listen_addr: String,
     pub liquidation_transfer_service_url: String,
+    
+    // SSL/TLS configuration
+    #[serde(default)]
+    pub ssl_enabled: bool,
+    #[serde(default)]
+    pub ssl_cert_path: Option<String>,
+    #[serde(default)]
+    pub ssl_key_path: Option<String>,
 }
 
 impl Config {
