@@ -4,7 +4,7 @@
   "program_id": "0x7fd0c9763e6af16cfe16173037bd98d138eaa96c8b03a0167781383087f4e361",
   "pyth_price_feed_url": "https://hermes-beta.pyth.network/v2/updates/price/latest?",
   "sui_api_url": "https://fullnode.testnet.sui.io:443",
-  "indexer_url": "http://104.154.237.214:3001",
+  "indexer_url": "https://indexer.pismo-protocol.com:3001",
   "host": "0.0.0.0",
   "port": 5080
 }

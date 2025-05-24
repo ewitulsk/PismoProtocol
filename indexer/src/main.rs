@@ -7,6 +7,7 @@ use std::sync::Arc;
 use sui_data_ingestion_core::setup_single_workflow;
 use tokio::net::TcpListener;
 use tracing::{error, info};
+use axum_server::tls_rustls::RustlsConfig;
 
 // Ensure modules are declared
 mod config;
@@ -38,6 +39,10 @@ use crate::worker::PositionEventWorker;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Install default crypto provider for rustls
+    rustls::crypto::ring::default_provider().install_default()
+        .expect("Failed to install rustls crypto provider");
+
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -119,28 +124,63 @@ async fn main() -> Result<()> {
     let addr: SocketAddr = addr_str
         .parse()
         .with_context(|| format!("Invalid listen_addr format in config: {}", addr_str))?;
-    println!("API server listening on {}", addr);
-    let listener = TcpListener::bind(addr)
-        .await
-        .context("Failed to bind TCP listener")?;
-    let server = axum::serve(listener, app.into_make_service());
-
+    
     // --- Run Concurrently --- //
     info!("Starting server and indexer concurrently...");
 
-    tokio::select! {
-        res = server => {
-            match res {
-                Ok(_) => info!("Axum server finished gracefully."),
-                Err(e) => error!(error = %e, "Axum server failed."),
+    // Check if SSL is enabled
+    if config.ssl_enabled {
+        if let (Some(cert_path), Some(key_path)) = (&config.ssl_cert_path, &config.ssl_key_path) {
+            info!("SSL enabled. Loading certificates from: cert={}, key={}", cert_path, key_path);
+            
+            // Load SSL configuration
+            let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+                .await
+                .context("Failed to load SSL certificates")?;
+            
+            println!("API server listening on https://{}", addr);
+            
+            // Start HTTPS server
+            tokio::select! {
+                res = axum_server::bind_rustls(addr, tls_config)
+                    .serve(app.into_make_service()) => {
+                    match res {
+                        Ok(_) => info!("Axum HTTPS server finished gracefully."),
+                        Err(e) => error!(error = %e, "Axum HTTPS server failed."),
+                    }
+                },
+                res = indexer_executor => {
+                    match res {
+                        Ok(_) => info!("Indexer executor finished gracefully."),
+                        Err(e) => error!(error = %e, "Indexer executor failed."),
+                    }
+                },
             }
-        },
-        res = indexer_executor => {
-             match res {
-                Ok(_) => info!("Indexer executor finished gracefully."),
-                Err(e) => error!(error = %e, "Indexer executor failed."),
-            }
-        },
+        } else {
+            return Err(anyhow::anyhow!("SSL enabled but certificate or key path not provided"));
+        }
+    } else {
+        // HTTP mode (existing code)
+        println!("API server listening on http://{}", addr);
+        let listener = TcpListener::bind(addr)
+            .await
+            .context("Failed to bind TCP listener")?;
+        let server = axum::serve(listener, app.into_make_service());
+        
+        tokio::select! {
+            res = server => {
+                match res {
+                    Ok(_) => info!("Axum HTTP server finished gracefully."),
+                    Err(e) => error!(error = %e, "Axum HTTP server failed."),
+                }
+            },
+            res = indexer_executor => {
+                match res {
+                    Ok(_) => info!("Indexer executor finished gracefully."),
+                    Err(e) => error!(error = %e, "Indexer executor failed."),
+                }
+            },
+        }
     }
 
     info!("Application shut down.");

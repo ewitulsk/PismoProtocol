@@ -93,6 +93,39 @@ liquidation_transfer_service_url = "http://localhost:8080"
 listen_addr = "0.0.0.0:3000"
 ```
 
+### SSL/TLS Configuration (Optional)
+
+To enable SSL/TLS for the API server, add the following configuration options:
+
+```toml
+# Enable SSL/TLS (default: false)
+ssl_enabled = true
+
+# Path to the SSL certificate file (PEM format)
+ssl_cert_path = "/path/to/certificate.pem"
+
+# Path to the SSL private key file (PEM format)
+ssl_key_path = "/path/to/private_key.pem"
+```
+
+When `ssl_enabled` is set to `true`, the server will use HTTPS instead of HTTP. Both `ssl_cert_path` and `ssl_key_path` must be provided when SSL is enabled.
+
+Example configuration with SSL enabled:
+```toml
+database_url = "postgres://user:password@host:port/database"
+package_id = "0xYOUR_PACKAGE_ID"
+remote_store_url = "https://checkpoints.testnet.sui.io"
+start_checkpoint = 0
+concurrency = 5
+liquidation_transfer_service_url = "http://localhost:8080"
+listen_addr = "0.0.0.0:3001"
+
+# SSL Configuration
+ssl_enabled = true
+ssl_cert_path = "/etc/ssl/certs/server.crt"
+ssl_key_path = "/etc/ssl/private/server.key"
+```
+
 ## Running the Service
 
 1.  **Set Environment Variables:**

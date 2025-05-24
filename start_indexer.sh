@@ -11,7 +11,9 @@ docker rm -f indexer || true
 # Run database migrations
 echo "Running database migrations..."
 DATABASE_URL="postgresql://postgres:postgres@localhost:7654/indexer"
-(cd indexer/src/db/postgres/migrations && DATABASE_URL=$DATABASE_URL diesel migration run)
+
+# Create a local config file with SSL enabled
+echo "Creating local config with SSL enabled..."
 
 (cd indexer && CONFIG_PATH=config/testnet.toml cargo run)
 echo "Indexer startup script finished successfully."
