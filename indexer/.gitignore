@@ -1,1 +1,12 @@
 target/
+
+# SSL certificates
+/certs/
+*.pem
+*.crt
+*.key
+*.p12
+*.pfx
+
+# Auto-generated local config
+config/local-ssl.toml

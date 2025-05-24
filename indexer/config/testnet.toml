@@ -5,3 +5,8 @@ start_checkpoint = 199_886_444
 concurrency = 5
 listen_addr = "0.0.0.0:3001"
 liquidation_transfer_service_url = "https://liquidation-635170759133.us-east1.run.app"
+
+# SSL/TLS Configuration
+ssl_enabled = true
+ssl_cert_path = "./certs/fullchain.pem"
+ssl_key_path = "./certs/privkey.pem" 

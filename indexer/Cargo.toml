@@ -12,6 +12,10 @@ sui-types = { git = "https://github.com/mystenlabs/sui", package = "sui-types" }
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 axum = { version = "0.7", features = ["macros"] } # Added Axum and macros feature
+axum-server = { version = "0.7", features = ["tls-rustls"] } # Added for TLS support
+
+# Cryptography Provider for Rustls
+rustls = { version = "0.23", features = ["ring"] }
 
 # Database (Diesel + Postgres + Connection Pool)
 diesel = { version = "2.2", features = ["postgres", "uuid", "r2d2", "chrono", "numeric"] } # Enable features
