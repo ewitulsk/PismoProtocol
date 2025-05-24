@@ -1,0 +1,33 @@
+# Debug Dockerfile to test the build process
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install all dependencies
+RUN npm ci && npm cache clean --force
+
+# Debug: List what's installed
+RUN echo "=== Checking installed packages ===" && \
+    ls -la node_modules/@types/ && \
+    echo "=== TypeScript version ===" && \
+    npx tsc --version && \
+    echo "=== Package.json devDependencies ===" && \
+    cat package.json | grep -A 10 '"devDependencies"'
+
+# Copy source code
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Debug: Show file structure and attempt compilation
+RUN echo "=== File structure ===" && \
+    find . -name "*.ts" && \
+    echo "=== TSConfig ===" && \
+    cat tsconfig.json && \
+    echo "=== Attempting TypeScript compilation ===" && \
+    npx tsc --noEmit --listFiles | head -20
+
+CMD ["sh"]

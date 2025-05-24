@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  price-feed-aggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: price-feed-aggregator
+    ports:
+      - "8765:8765"  # WebSocket server
+      - "8080:8080"  # REST API
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    networks:
+      - price-feed-network
+    volumes:
+      # Mount logs directory for persistence
+      - ./logs:/app/logs
+      # Mount certificates if needed
+      - ./certificates:/app/certificates:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  price-feed-network:
+    driver: bridge
+
+volumes:
+  price-feed-logs:
+    driver: local

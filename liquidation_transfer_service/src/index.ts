@@ -16,6 +16,16 @@ app.use(cors());
 
 const PORT = LIQUIDATION_SERVICE_PORT || 3000;
 
+// Health check endpoint for Docker
+app.get('/health', (req: Request, res: Response) => {
+    res.json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        service: 'liquidation-transfer-service',
+        version: '1.0.0'
+    });
+});
+
 // Helper to extract type arguments from a full type string
 // Example: "0xPKG::module::Struct<0xTYPEA, 0xTYPEB>" -> ["0xTYPEA", "0xTYPEB"]
 function extractTypeArguments(typeString: string): string[] {
@@ -325,6 +335,15 @@ app.post('/liquidate_account', async (req: Request, res: Response) => {
     }
 });
 
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+    res.status(200).json({ 
+        status: 'healthy', 
+        service: 'liquidation-transfer-service',
+        timestamp: new Date().toISOString()
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`Liquidation Transfer Service listening on port ${PORT}`);
     console.log(`Package ID: ${PACKAGE_ID}`);
@@ -335,4 +354,4 @@ app.listen(PORT, () => {
 process.on('SIGINT', () => {
     console.log('SIGINT signal received: closing HTTP server');
     process.exit(0);
-}); 
+});

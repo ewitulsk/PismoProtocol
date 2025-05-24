@@ -1,0 +1,50 @@
+# Rust build artifacts
+target/
+# Note: Cargo.lock is included for reproducible builds in applications
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Logs
+*.log
+
+# Environment and secrets
+.env
+.env.*
+
+# Database files
+*.db
+*.sqlite
+
+# Temporary files
+tmp/
+temp/
+
+# Development files
+.cargo/
+.rustup/
+
+# Test files
+test_*
+*_test.rs

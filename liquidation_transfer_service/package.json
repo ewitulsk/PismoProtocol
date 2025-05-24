@@ -15,18 +15,18 @@
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@mysten/sui": "^1.2.1",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
     "@pythnetwork/hermes-client": "^2.0.0",
     "@pythnetwork/price-service-client": "^1.9.0",
-    "@pythnetwork/pyth-sui-js": "^2.1.0"
+    "@pythnetwork/pyth-sui-js": "^2.1.0",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^4.17.22",
+    "@types/iarna__toml": "^2.0.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.18",
-    "@types/express": "^4.17.21",
-    "@types/iarna__toml": "^2.0.5",
-    "@types/node": "^20.12.12",
+    "@types/node": "^20.17.50",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"
   }

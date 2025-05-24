@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5080:5080"
+    environment:
+      - FLASK_ENV=production
+      - CONFIG_FILE_PATH=/app/config/backend_config.json
+    volumes:
+      # Mount config directory if you want to override configurations
+      - ./config:/app/config:ro
+      # Uncomment the line below if you have a .env file for environment variables
+      # - ./.env:/app/.env:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5080/api/supportedCollateral')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    name: pismo-backend
