@@ -14,6 +14,7 @@ if (!SUI_PRIVATE_KEY) {
 let decodedKey;
 try {
     decodedKey = decodeSuiPrivateKey(SUI_PRIVATE_KEY);
+    console.log("Key: ", decodedKey)
 } catch (error) {
     console.error("Failed to decode SUI_PRIVATE_KEY. Ensure it's a valid Sui private key string (Base64, potentially with 'suiprivkey' prefix). Error:", error);
     // Fallback for raw hex private key if that was the user's intention for "HEX_WITHOUT_0x"

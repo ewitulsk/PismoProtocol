@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5080:5080"
+    environment:
+      - FLASK_ENV=production
+      - CONFIG_FILE_PATH=/app/config/backend_config.json
+    volumes:
+      # Mount config directory for production configuration
+      - ./config:/app/config:ro
+      # Mount logs directory for persistent logging
+      - ./logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5080/api/supportedCollateral')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  default:
+    name: pismo-backend-prod

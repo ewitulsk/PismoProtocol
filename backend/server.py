@@ -9,7 +9,8 @@ from async_backend import (
     calc_total_account_value,
     calc_total_vault_values,
     get_lp_balance,
-    get_program_supported_collateral
+    get_program_supported_collateral,
+    load_config
 )
 
 app = Flask(__name__)
@@ -111,9 +112,8 @@ async def lp_balance():
     
 
 if __name__ == "__main__":
-    # Load configuration
-    with open('config/backend_config.json', 'r') as f:
-        config = json.load(f)
+    # Load configuration using the same function as the backend
+    config = load_config()
 
     host = config.get('host', '0.0.0.0')  # Default host if not in config
     port = config.get('port', 5000)      # Default port if not in config

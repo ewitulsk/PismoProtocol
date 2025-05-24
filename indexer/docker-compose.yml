@@ -1,0 +1,36 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:latest
+    container_name: indexer_db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: indexer
+    ports:
+      - "7654:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d indexer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: indexer_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001" # Assuming your indexer listens on port 3001 as per config
+    environment:
+      CONFIG_PATH: config/testnet.toml 
+      DATABASE_URL: postgresql://postgres:postgres@indexer_db:5432/indexer
+    # command: "/usr/local/bin/indexer" # Removed as entrypoint.sh handles this
+
+volumes:
+  postgres_data: 

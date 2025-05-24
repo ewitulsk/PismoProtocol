@@ -51,6 +51,115 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+## Docker Deployment
+
+The service can be easily deployed using Docker for both development and production environments.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Git (to clone the repository)
+
+### Quick Start with Docker
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd price-feed-aggregator
+   ```
+
+2. **Development Environment**
+   ```bash
+   # Using Docker Compose
+   docker-compose up
+
+   # Or using the Makefile
+   make dev
+   ```
+
+3. **Production Environment**
+   ```bash
+   # Using Docker Compose with production config
+   docker-compose -f docker-compose.prod.yml up -d
+
+   # Or using the Makefile
+   make prod
+   ```
+
+### Docker Commands
+
+The project includes a Makefile with convenient commands:
+
+```bash
+# Build the Docker image
+make build
+
+# Start development environment (with logs)
+make dev
+
+# Start production environment (detached)
+make prod
+
+# View logs
+make logs
+
+# Stop services
+make down
+
+# Clean up all Docker resources
+make clean
+
+# Run tests in container
+make test
+
+# Open shell in running container
+make shell
+```
+
+### Environment Variables
+
+You can customize the service behavior using environment variables:
+
+- `LOG_LEVEL`: Logging level (default: INFO)
+- `PYTH_SSE_URL`: Pyth Hermes SSE stream URL
+- `WS_HOST`: WebSocket server host (default: 0.0.0.0)
+- `WS_PORT`: WebSocket server port (default: 8765)
+- `API_HOST`: REST API host (default: 0.0.0.0)
+- `API_PORT`: REST API port (default: 8080)
+
+Create a `.env` file in the project root to set these variables:
+
+```env
+LOG_LEVEL=DEBUG
+PYTH_SSE_URL=https://hermes.pyth.network/v2/updates/price/stream
+```
+
+### Production Deployment
+
+For production deployments, the service includes:
+
+- **Resource limits**: Memory and CPU constraints
+- **Health checks**: Automatic container health monitoring
+- **Restart policies**: Automatic restart on failure
+- **Log persistence**: Logs are saved to Docker volumes
+- **Security**: Non-root user execution
+- **Nginx proxy**: Optional reverse proxy configuration
+
+To deploy with Nginx reverse proxy:
+
+```bash
+docker-compose -f docker-compose.prod.yml --profile with-proxy up -d
+```
+
+### Accessing the Service
+
+Once running, the service will be available at:
+
+- **WebSocket**: `ws://localhost:8765`
+- **REST API**: `http://localhost:8080`
+- **API Documentation**: `http://localhost:8080/docs`
+- **Health Check**: `http://localhost:8080/health`
+
 ## Usage
 
 ### Running the Service
