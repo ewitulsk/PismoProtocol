@@ -1,10 +1,10 @@
 {
-  "contract_address": "0x7e208c44f50cc18625e3bc9fdf724791c0fc31f1f5e61e140b5a9bac0cfeb1eb",
-  "contract_global": "0x593c2a87e45df9d0c6eef1d8e1815e07aa5cbab9f457dcf63c242d01675c0d78",
-  "program_id": "0x242e7e7e3c975535bba8b39958c5b90b06500f8660e09ad2f25c15a9a4994369",
+  "contract_address": "0xd105f0c8294b7a93414ed4547bf6782dad0ab012370d01fa36fdb95d40cfcd37",
+  "contract_global": "0x7ebe114dc94d1826c69f7a09834989459ec74816b0c74ddb58f5cb01d06ad9e6",
+  "program_id": "0xcdac89cb165de013b4b05682517e7f928034310e1e53a8c0fce2b4026ac62449",
   "pyth_price_feed_url": "https://hermes-beta.pyth.network/v2/updates/price/latest?",
   "sui_api_url": "https://fullnode.testnet.sui.io:443",
-  "indexer_url": "https://pismoprotocol-635170759133.us-west2.run.app",
+  "indexer_url": "http://104.154.237.214:3001",
   "host": "0.0.0.0",
   "port": 5080
 }
