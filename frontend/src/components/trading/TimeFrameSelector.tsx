@@ -5,16 +5,11 @@ import React, { useState, useRef, useEffect } from "react";
 export const timeframes = [
   { label: "1s", value: "1S" },
   { label: "10s", value: "10S" },
-  { label: "30s", value: "30S" },
   { label: "1m", value: "1" },
   { label: "5m", value: "5" },
   { label: "15m", value: "15" },
   { label: "30m", value: "30" },
   { label: "1H", value: "60" },
-  { label: "4H", value: "240" },
-  { label: "1D", value: "1D" },
-  { label: "1W", value: "1W" },
-  { label: "1M", value: "1M" }
 ];
 
 export type TimeFrameValue = typeof timeframes[number]['value'];
