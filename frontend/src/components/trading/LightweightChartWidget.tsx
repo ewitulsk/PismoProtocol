@@ -405,22 +405,21 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     // Initialize with empty data
     candleSeries.setData([]);
 
-    // Configure time scale for optimal viewing
-    if (interval === '60') {
-      // For 1-minute charts, show more recent data with some visible history
-      chart.timeScale().applyOptions({
-        rightOffset: 5,  // Space on the right side of the chart
-        barSpacing: 6,   // Space between bars (adjust based on screen size)
-        minBarSpacing: 4, // Minimum space between bars
-        fixLeftEdge: true, // Don't allow scrolling too far into the past
-        lockVisibleTimeRangeOnResize: true, // Keep the visible time range on resize
-        rightBarStaysOnScroll: true, // Keep the latest bar visible
-        visible: true,
-      });
-    } else {
-      // For other intervals, fit all content
-      chart.timeScale().fitContent();
-    }
+    // Configure time scale to prevent scrolling/zooming outside data limits
+    chart.timeScale().applyOptions({
+      rightOffset: 5,  // Small space on the right side of the chart
+      barSpacing: 6,   // Space between bars (adjust based on screen size)
+      minBarSpacing: 2, // Minimum space between bars to prevent over-zooming
+      fixLeftEdge: true,  // Don't allow scrolling past the first bar
+      fixRightEdge: true, // Don't allow scrolling past the last bar
+      lockVisibleTimeRangeOnResize: true, // Keep the visible time range on resize
+      rightBarStaysOnScroll: true, // Keep the latest bar visible when scrolling
+      shiftVisibleRangeOnNewBar: true, // Shift the visible range when new bars arrive
+      visible: true,
+    });
+    
+    // Fit content initially to show all available data
+    chart.timeScale().fitContent();
     
     // If we have historical data already, set it now
     const cachedData = historicalDataRef.current;
