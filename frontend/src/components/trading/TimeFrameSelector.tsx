@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect } from "react";
 
 // Define available timeframes with their display names and values
 export const timeframes = [
-  { label: "1s", value: "1S" },
   { label: "10s", value: "10S" },
   { label: "1m", value: "1" },
   { label: "5m", value: "5" },
