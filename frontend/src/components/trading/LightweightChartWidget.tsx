@@ -26,7 +26,7 @@ interface LightweightChartWidgetProps {
 }
 
 // Valid time intervals supported by the price feed service
-const VALID_INTERVALS = ["1s", "10s", "1m", "5m", "15m", "30m", "1h"];
+const VALID_INTERVALS = ["10s", "1m", "5m", "15m", "30m", "1h"];
 
 // Example: Define a type for your price data points
 interface PriceDataPoint {
@@ -64,8 +64,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   const convertToOhlcInterval = useCallback((timeframeValue: string): string => {
     switch (timeframeValue) {
       // Second-based intervals
-      case '1S':
-        return '1s';
       case '10S':
         return '10s';  
       
@@ -86,7 +84,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       // Day/Week/Month intervals
         
       // If the provided value is already in the correct format, return it
-      case '1s': case '10s': case '1m': case '5m': 
+      case '10s': case '1m': case '5m': 
       case '15m': case '30m': case '1h':
         return timeframeValue;
         
@@ -477,7 +475,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
   useEffect(() => {
     if (chartRef.current) {
       const ohlcInterval = convertToOhlcInterval(interval);
-      const secondsVisible = ['1s', '10s'].includes(ohlcInterval);
+      const secondsVisible = ['10s'].includes(ohlcInterval);
       
       chartRef.current.timeScale().applyOptions({
         secondsVisible: secondsVisible
