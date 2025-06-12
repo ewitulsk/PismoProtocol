@@ -26,7 +26,7 @@ interface LightweightChartWidgetProps {
 }
 
 // Valid time intervals supported by the price feed service
-const VALID_INTERVALS = ["1s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"];
+const VALID_INTERVALS = ["1s", "10s", "1m", "5m", "15m", "30m", "1h"];
 
 // Example: Define a type for your price data points
 interface PriceDataPoint {
@@ -68,8 +68,6 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
         return '1s';
       case '10S':
         return '10s';  
-      case '30S':
-        return '30s';
       
       // Minute-based intervals
       case '1':     // 1 minute
@@ -84,25 +82,16 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       // Hour-based intervals
       case '60':    // 1 hour (not 1 minute!)
         return '1h';
-      case '240':   // 4 hours
-        return '4h';
       
       // Day/Week/Month intervals
-      case '1D':    // 1 day
-        return '1d';
-      case '1W':    // 1 week
-        return '1w';
-      case '1M':    // 1 month
-        return '1M';
         
       // If the provided value is already in the correct format, return it
-      case '1s': case '10s': case '30s': case '1m': case '5m': 
-      case '15m': case '30m': case '1h': case '4h': case '1d': 
-      case '1w': case '1M':
+      case '1s': case '10s': case '1m': case '5m': 
+      case '15m': case '30m': case '1h':
         return timeframeValue;
         
       default:
-        console.warn(`Unknown interval: ${timeframeValue}, defaulting to 1-minute`);
+        console.warn(`Unknown interval: ${timeframeValue}, defaulting to 1m`);
         return '1m';
     }
   }, []);
@@ -137,14 +126,27 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       return timeA - timeB;
     });
     
+    // Filter out bars with duplicate timestamps to prevent chart errors.
+    const uniqueBars = sortedBars.filter((bar, index, self) => {
+      if (index === 0) return true;
+      const prevBar = self[index - 1];
+      const time = typeof bar.time === 'number' ? bar.time : Number(bar.time);
+      const prevTime = typeof prevBar.time === 'number' ? prevBar.time : Number(prevBar.time);
+      return time > prevTime;
+    });
+
+    if (uniqueBars.length < sortedBars.length) {
+      console.warn(`[LightweightChartWidget] Removed ${sortedBars.length - uniqueBars.length} bars with duplicate timestamps to prevent chart error.`);
+    }
+    
     // Update state and ref
-    setHistoricalData(sortedBars);
-    historicalDataRef.current = sortedBars;
+    setHistoricalData(uniqueBars);
+    historicalDataRef.current = uniqueBars;
     
     // Set data on the chart
     try {
       // Replace all existing data with the historical data
-      candleSeriesRef.current.setData(sortedBars);
+      candleSeriesRef.current.setData(uniqueBars);
       
       // Fit content after loading historical data
       if (chartRef.current) {
@@ -152,16 +154,16 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       }
       
       // Update last bar
-      if (sortedBars.length > 0) {
-        setLastBar(sortedBars[sortedBars.length - 1]);
+      if (uniqueBars.length > 0) {
+        setLastBar(uniqueBars[uniqueBars.length - 1]);
         
         // Update last price
-        if (sortedBars[sortedBars.length - 1]?.close) {
-          setLastPrice(sortedBars[sortedBars.length - 1].close);
+        if (uniqueBars[uniqueBars.length - 1]?.close) {
+          setLastPrice(uniqueBars[uniqueBars.length - 1].close);
         }
       }
       
-      console.log(`[LightweightChartWidget] Successfully loaded ${sortedBars.length} historical bars`);
+      console.log(`[LightweightChartWidget] Successfully loaded ${uniqueBars.length} historical bars`);
     } catch (error) {
       console.error('[LightweightChartWidget] Error setting historical bars on chart:', error);
     }
@@ -339,19 +341,12 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       height: chartContainerRef.current.clientHeight || 500,
       timeScale: {
         timeVisible: true,
-        secondsVisible: parseInt(interval) < 300, // Show seconds for intervals less than 5 minutes
+        secondsVisible: false, // Will be updated based on interval
         borderColor: 'rgba(197, 203, 206, 0.8)',
         tickMarkFormatter: (time: any) => {
           const date = new Date(time * 1000);
           const hours = date.getHours().toString().padStart(2, '0');
           const minutes = date.getMinutes().toString().padStart(2, '0');
-          
-          // For 1-minute chart, use HH:MM format
-          if (interval === '60') {
-            return `${hours}:${minutes}`;
-          }
-          
-          // For other intervals, include date if needed
           return `${hours}:${minutes}`;
         },
       },
@@ -441,7 +436,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       
       console.log('[LightweightChartWidget] Successfully set cached historical bars on chart');
     }
-  }, [interval]);
+  }, []);
 
   // Handle resize
   const handleResize = useCallback(() => {
@@ -478,6 +473,18 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     };
   }, [handleResize, initializeChart]);
   
+  // Effect to update chart options when interval changes
+  useEffect(() => {
+    if (chartRef.current) {
+      const ohlcInterval = convertToOhlcInterval(interval);
+      const secondsVisible = ['1s', '10s'].includes(ohlcInterval);
+      
+      chartRef.current.timeScale().applyOptions({
+        secondsVisible: secondsVisible
+      });
+    }
+  }, [interval, convertToOhlcInterval]);
+
   // Effect for subscription management - run only after chart is initialized
   useEffect(() => {
     if (!chartContainerRef.current || !candleSeriesRef.current) {
