@@ -27,15 +27,7 @@ const HomePage: React.FC = () => {
           </Link>
         </div>
         
-        <div className="home-buttons mt-4">
-          <Link 
-            href="https://placeholder-jira-link.com" 
-            className="bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors duration-200 text-sm px-4 py-2"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Jira
-          </Link>
+        <div className="flex justify-center mt-4">
           <Link 
             href="https://github.com/ewitulsk/PismoProtocol" 
             className="bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors duration-200 text-sm px-4 py-2"
