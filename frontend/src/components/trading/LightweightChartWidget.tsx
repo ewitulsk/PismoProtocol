@@ -146,9 +146,21 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       // Replace all existing data with the historical data
       candleSeriesRef.current.setData(uniqueBars);
       
-      // Fit content after loading historical data
-      if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
+      // Show only about 25% of the data initially (most recent quarter)
+      if (chartRef.current && uniqueBars.length > 0) {
+        const totalBars = uniqueBars.length;
+        const visibleBars = Math.max(Math.floor(totalBars * 0.40), 10); // Show 25% or at least 10 bars
+        const startIndex = Math.max(0, totalBars - visibleBars);
+        
+        if (startIndex < totalBars - 1) {
+          const startTime = uniqueBars[startIndex].time;
+          const endTime = uniqueBars[totalBars - 1].time;
+          
+          chartRef.current.timeScale().setVisibleRange({
+            from: startTime as Time,
+            to: endTime as Time
+          });
+        }
       }
       
       // Update last bar
@@ -429,8 +441,22 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
       // Set the data on the chart
       candleSeries.setData(sortedData);
       
-      // Fit content to show all data
-      chart.timeScale().fitContent();
+      // Show only about 25% of the data initially (most recent quarter)
+      if (sortedData.length > 0) {
+        const totalBars = sortedData.length;
+        const visibleBars = Math.max(Math.floor(totalBars * 0.40), 10); // Show 25% or at least 10 bars
+        const startIndex = Math.max(0, totalBars - visibleBars);
+        
+        if (startIndex < totalBars - 1) {
+          const startTime = sortedData[startIndex].time;
+          const endTime = sortedData[totalBars - 1].time;
+          
+          chart.timeScale().setVisibleRange({
+            from: startTime as Time,
+            to: endTime as Time
+          });
+        }
+      }
       
       console.log('[LightweightChartWidget] Successfully set cached historical bars on chart');
     }
