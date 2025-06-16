@@ -1,7 +1,7 @@
 {
-  "contract_address": "0x3c3b841ed6e774b95f6fcdf0b7df6296f31564506c89970653764721a7b3b5a6",
-  "contract_global": "0x52cec99d35d95fcc0ef66e078bdf70ad758983056658ca476b5739b5dcbc7d36",
-  "program_id": "0x7fd0c9763e6af16cfe16173037bd98d138eaa96c8b03a0167781383087f4e361",
+  "contract_address": "0x9584b7c2890c52fc0f4c678cd96a219df8081dfa04d78428bf6c29213fb3f090",
+  "contract_global": "0x7acd3c1c4bdd7eb03e33edc435250a315baf4af6a21b9bc633eebb2b17f1b00c",
+  "program_id": "0x9cfbfe5c2802efe68fe8096ad45d99210d5a169fd4890cf30b36ec89878dee35",
   "pyth_price_feed_url": "https://hermes-beta.pyth.network/v2/updates/price/latest?",
   "sui_api_url": "https://fullnode.testnet.sui.io:443",
   "indexer_url": "https://indexer.pismo-protocol.com:3001",
