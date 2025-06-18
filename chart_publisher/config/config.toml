@@ -1,0 +1,2 @@
+[pyth]
+websocket_url = "wss://hermes-beta.pyth.network/ws" 
