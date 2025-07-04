@@ -1,0 +1,47 @@
+# Example GitHub Repository Watcher Configuration
+# Copy this file to config.yaml and customize for your needs
+
+github:
+  # Repository URL (https://github.com/owner/repo)
+  repository: "https://github.com/your-org/your-repo"
+  # Branch to watch for changes
+  branch: "main"
+  # GitHub personal access token (set via GITHUB_TOKEN env var)
+  token: "${GITHUB_TOKEN}"
+
+# Local repository settings
+local:
+  # Directory where the repository will be cloned
+  clone_directory: "./workspace"
+  # Specific folder within the repo to run commands in
+  working_directory: "."
+  # Command to execute when changes are detected
+  command: "npm run build"
+  # Additional environment variables to set when running the command
+  env:
+    NODE_ENV: "production"
+    CI: "true"
+
+# Service settings
+service:
+  # Port for webhook server (if using webhooks)
+  port: 3000
+  # Polling interval in minutes (if using polling instead of webhooks)
+  polling_interval: 5
+  # Whether to use webhooks or polling
+  use_webhooks: true
+  # Webhook secret for GitHub (set via WEBHOOK_SECRET env var)
+  webhook_secret: "${WEBHOOK_SECRET}"
+
+# Logging settings
+logging:
+  level: "info" # debug, info, warn, error
+  file: "./logs/watcher.log"
+
+# Common command examples:
+# - Build a Node.js project: "npm run build"
+# - Run tests: "npm test"
+# - Deploy with Docker: "docker build -t myapp . && docker run myapp"
+# - Run a Python script: "python deploy.py"
+# - Execute a shell script: "./deploy.sh"
+# - Build and deploy: "npm run build && npm run deploy"

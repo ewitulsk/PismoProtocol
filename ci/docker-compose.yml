@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  github-watcher:
+    build: .
+    container_name: github-repo-watcher
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    volumes:
+      - ./workspace:/app/workspace
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - github-watcher-network
+
+networks:
+  github-watcher-network:
+    driver: bridge
+
+volumes:
+  workspace-data:
+  logs-data:

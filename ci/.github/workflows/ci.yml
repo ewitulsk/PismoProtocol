@@ -1,0 +1,97 @@
+name: GitHub Repository Watcher CI
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run even if no changes detected'
+        required: false
+        default: false
+        type: boolean
+  
+  # Scheduled runs (every 30 minutes)
+  schedule:
+    - cron: '*/30 * * * *'
+  
+  # Trigger on push to main branch of this repository
+  push:
+    branches: [ main ]
+    paths:
+      - 'ci/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'ci/package-lock.json'
+    
+    - name: Install dependencies
+      run: |
+        cd ci
+        npm ci
+    
+    - name: Build TypeScript
+      run: |
+        cd ci
+        npm run build
+    
+    - name: Setup environment
+      run: |
+        cd ci
+        cp .env.example .env
+        echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> .env
+        echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
+    
+    - name: Start service in background
+      run: |
+        cd ci
+        npm start &
+        sleep 5
+        
+    - name: Health check
+      run: |
+        curl -f http://localhost:3000/health || exit 1
+        
+    - name: Stop service
+      if: always()
+      run: |
+        pkill -f "node dist/index.js" || true
+
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'ci/package-lock.json'
+    
+    - name: Install dependencies
+      run: |
+        cd ci
+        npm ci
+    
+    - name: Run linter
+      run: |
+        cd ci
+        npm run lint
+    
+    - name: Run tests
+      run: |
+        cd ci
+        npm test

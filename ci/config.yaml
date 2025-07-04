@@ -1,0 +1,36 @@
+# GitHub Repository Watcher Configuration
+github:
+  # Repository URL (https://github.com/owner/repo)
+  repository: "https://github.com/your-org/your-repo"
+  # Branch to watch for changes
+  branch: "main"
+  # GitHub personal access token (can also be set via GITHUB_TOKEN env var)
+  token: "${GITHUB_TOKEN}"
+
+# Local repository settings
+local:
+  # Directory where the repository will be cloned
+  clone_directory: "./workspace"
+  # Specific folder within the repo to run commands in
+  working_directory: "."
+  # Command to execute when changes are detected
+  command: "npm run build"
+  # Additional environment variables to set when running the command
+  env:
+    NODE_ENV: "production"
+
+# Service settings
+service:
+  # Port for webhook server (if using webhooks)
+  port: 3000
+  # Polling interval in minutes (if using polling instead of webhooks)
+  polling_interval: 5
+  # Whether to use webhooks or polling
+  use_webhooks: true
+  # Webhook secret for GitHub (can also be set via WEBHOOK_SECRET env var)
+  webhook_secret: "${WEBHOOK_SECRET}"
+
+# Logging settings
+logging:
+  level: "info" # debug, info, warn, error
+  file: "./logs/watcher.log"
