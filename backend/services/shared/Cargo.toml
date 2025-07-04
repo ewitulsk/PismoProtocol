@@ -1,0 +1,30 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Database (SQLx)
+sqlx = { workspace = true }
+
+# Serialization / Deserialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bcs = { workspace = true }
+hex = { workspace = true }
+
+# Utilities & Error Handling
+anyhow = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+bigdecimal = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# HTTP Client
+reqwest = { workspace = true }

@@ -1,0 +1,54 @@
+[package]
+name = "indexer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Shared library
+shared = { path = "../shared" }
+
+# Sui Indexer Framework
+sui-data-ingestion-core = { workspace = true }
+sui-types = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+axum-server = { workspace = true }
+
+# Cryptography Provider for Rustls
+rustls = { workspace = true }
+
+# Database (Diesel + Postgres + Connection Pool)
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
+r2d2 = { workspace = true }
+bigdecimal = { workspace = true }
+chrono = { workspace = true }
+
+# Database (SQLx for async)
+sqlx = { workspace = true }
+
+# Serialization / Deserialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bcs = { workspace = true }
+hex = { workspace = true }
+
+# Utilities & Error Handling
+anyhow = { workspace = true }
+dotenvy = { workspace = true }
+lazy_static = { workspace = true }
+config = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Middleware
+tower-http = { workspace = true }
+
+# HTTP Client
+reqwest = { workspace = true }
+uuid = { workspace = true }
