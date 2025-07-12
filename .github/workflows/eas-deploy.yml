@@ -1,0 +1,66 @@
+name: Deploy to EAS
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'pismo_mobile/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'pismo_mobile/**'
+  workflow_dispatch:
+
+env:
+  EAS_PROJECT_ID: c88c6c5a-f5c2-4d16-8a50-39debf19bf82
+  EAS_PROJECT_OWNER: ewitulsk
+
+jobs:
+  deploy:
+    name: Deploy to EAS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: pismo_mobile/package-lock.json
+
+      - name: Install Expo CLI
+        run: npm install -g @expo/cli eas-cli
+
+      - name: Install dependencies
+        working-directory: ./pismo_mobile
+        run: npm ci
+
+      - name: Setup EAS
+        working-directory: ./pismo_mobile
+        run: |
+          echo ${{ secrets.EXPO_TOKEN }} | eas login --non-interactive
+          eas project:init --id ${{ env.EAS_PROJECT_ID }} --owner ${{ env.EAS_PROJECT_OWNER }} || true
+
+      - name: Build and submit to EAS
+        working-directory: ./pismo_mobile
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For pull requests, build for internal testing
+            eas build --platform all --profile preview --non-interactive
+          else
+            # For pushes to main/master, build for production
+            eas build --platform all --profile production --non-interactive
+          fi
+
+      - name: Submit to stores (only on main/master push)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        working-directory: ./pismo_mobile
+        run: |
+          # Submit to App Store (iOS)
+          eas submit --platform ios --latest
+          
+          # Submit to Google Play Store (Android)
+          eas submit --platform android --latest
