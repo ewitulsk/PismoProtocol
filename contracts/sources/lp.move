@@ -45,7 +45,7 @@ public struct VaultTransferCreated has copy, drop, store {
 public struct VaultTransfer has key, store {
     id: UID,
     amount: u64,
-    fufilled: bool,
+    fulfilled: bool,
     to_user_address: address
 }
 
@@ -197,13 +197,13 @@ public fun execute_vault_transfer<CoinType, LPType>(
     transfer: &mut VaultTransfer,
     ctx: &mut TxContext
 ){
-    assert!(!transfer.fufilled, E_VAULT_TRANSFER_ALREADY_FILLED);
+    assert!(!transfer.fulfilled, E_VAULT_TRANSFER_ALREADY_FILLED);
     let amount = transfer.amount;
     assert!(vault.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = vault.coin.split(amount);
     let coin = balance_out.into_coin(ctx);
     transfer::public_transfer(coin, transfer.to_user_address);
-    transfer.fufilled = true;
+    transfer.fulfilled = true;
 }
 
 public fun lp_value<CoinType, LPType>(vault: &Vault<CoinType, LPType>): u64 {
@@ -269,7 +269,7 @@ public(package) fun create_vault_transfer(marker: &mut VaultMarker, amount: u64,
     let transfer = VaultTransfer {
         id: transfer_id_object,
         amount,
-        fufilled: false,
+        fulfilled: false,
         to_user_address,
     };
 

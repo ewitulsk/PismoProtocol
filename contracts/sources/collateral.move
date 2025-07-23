@@ -123,7 +123,7 @@ public struct Collateral<phantom CoinType> has key, store {
 public struct CollateralTransfer has key, store {
     id: UID,
     amount: u64,
-    fufilled: bool,
+    fulfilled: bool,
     to_vault_address: address
 }
 
@@ -333,7 +333,7 @@ public(package) fun create_collateral_transfer(marker: &mut CollateralMarker, am
     let transfer = CollateralTransfer {
         id: transfer_id_object,
         amount,
-        fufilled: false,
+        fulfilled: false,
         to_vault_address: vault_address,
     };
 
@@ -402,7 +402,7 @@ public fun execute_collateral_transfer<CoinType, LPType>(
     vault_marker: &mut VaultMarker,
     ctx: &mut TxContext
 ){
-    assert!(!transfer.fufilled, E_COLLATERAL_TRANSFER_ALREADY_FILLED);
+    assert!(!transfer.fulfilled, E_COLLATERAL_TRANSFER_ALREADY_FILLED);
     let amount = transfer.amount;
     assert!(collateral.coin.value() >= amount, 0); // Insufficient balance
     let balance_out = collateral.coin.split(amount);
@@ -410,7 +410,7 @@ public fun execute_collateral_transfer<CoinType, LPType>(
     
     lp::deposit_coin(vault, vault_marker, coin);
 
-    transfer.fufilled = true;
+    transfer.fulfilled = true;
 }
 
 public(package) fun ensure_collateral_vector_length<T: drop + copy>(program: &Program, vec: &mut vector<T>, default: T){
