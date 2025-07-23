@@ -960,6 +960,7 @@ const TradingPlatform: React.FC = () => {
             <aside className="trading-sidebar lg:col-span-1 flex flex-col gap-4">
               <AccountHealth
                 accountHealthPercentage={accountHealthPercentage}
+                hasAccountInfo={connectionStatus === 'connected' && !!account && !!accountObjectId}
               />
               <ActionTabs
                 account={account}
