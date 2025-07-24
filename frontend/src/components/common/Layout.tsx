@@ -5,12 +5,12 @@ import { RefreshProvider } from "@/contexts/RefreshContext"; // Import the provi
 
 interface LayoutProps {
   children: ReactNode;
-  activePage?: 'trading' | 'vault' | 'home' | 'admin';
+  activePage?: 'trading' | 'vault' | 'home' | 'admin' | 'oracle-builder';
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activePage = 'home' }) => {
   return (
-    <RefreshProvider> {/* Wrap with RefreshProvider */}
+    <RefreshProvider>
       <div className="container-main">
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
