@@ -17,7 +17,7 @@ const RefreshIcon = () => (
 );
 
 interface HeaderProps {
-  activePage?: 'trading' | 'vault' | 'home' | 'admin';
+activePage?: 'trading' | 'vault' | 'home' | 'admin' | 'oracle-builder';
 }
 
 const Header: React.FC<HeaderProps> = ({ activePage = 'home' }) => {
@@ -57,6 +57,12 @@ const Header: React.FC<HeaderProps> = ({ activePage = 'home' }) => {
             className={activePage === 'vault' ? "nav-link-active" : "nav-link"}
           >
             Earn
+          </Link>
+          <Link 
+            href="/oracle-builder/dashboard" 
+            className={activePage === 'oracle-builder' ? "nav-link-active" : "nav-link"}
+          >
+            Oracle Builder
           </Link>
           <Link 
             href="/admin/mint-test-coins" 
