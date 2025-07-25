@@ -1,0 +1,32 @@
+[package]
+name = "oracle_builder_indexer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Sui Indexer Framework
+sui-data-ingestion-core = { git = "https://github.com/mystenlabs/sui", package = "sui-data-ingestion-core" }
+sui-types = { git = "https://github.com/mystenlabs/sui", package = "sui-types" }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization / Deserialization
+serde = { version = "1.0", features = ["derive"] }
+bcs = "0.1"
+
+# Utilities & Error Handling
+anyhow = "1.0"
+config = { version = "0.14", features = ["toml"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Database (Async Diesel + Postgres + Connection Pool)
+diesel = { version = "2.1", features = ["postgres", "uuid", "chrono", "numeric"] }
+diesel-async = { version = "0.4", features = ["postgres", "deadpool"] }
+diesel_migrations = { version = "2", features = ["postgres"] }
+deadpool = { version = "0.10", features = ["managed"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

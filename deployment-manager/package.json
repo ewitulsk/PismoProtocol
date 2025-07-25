@@ -1,26 +1,31 @@
 {
   "name": "deployment-manager",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "description": "Deployment management scripts for PismoSynthetics protocols",
+  "main": "src/initialize.ts",
   "scripts": {
     "build": "tsc",
-    "initialize": "ts-node src/initialize.ts",
-    "copydata": "ts-node src/copyConfig.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start:perps": "node dist/initialize.js --protocol perps",
+    "start:oracle-builder": "node dist/initialize.js --protocol oracle_builder",
+    "copy-config:perps": "node dist/copyConfig.js --protocol perps",
+    "copy-config:oracle-builder": "node dist/copyConfig.js --protocol oracle_builder",
+    "dev:perps": "ts-node src/initialize.ts --protocol perps",
+    "dev:oracle-builder": "ts-node src/initialize.ts --protocol oracle_builder",
+    "dev-copy:perps": "ts-node src/copyConfig.ts --protocol perps",
+    "dev-copy:oracle-builder": "ts-node src/copyConfig.ts --protocol oracle_builder"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "@types/node": "^20.14.9",
-    "@types/iarna__toml": "^2.0.5",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.5.2"
-  },
   "dependencies": {
-    "@iarna/toml": "^2.2.5",
-    "@mysten/sui": "^1.28.2",
-    "dotenv": "^16.5.0"
+    "@iarna/toml": "^2.0.0",
+    "@mysten/sui": "^1.15.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
   }
 }
