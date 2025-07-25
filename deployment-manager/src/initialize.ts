@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import dotenv from 'dotenv';
+import { Command } from 'commander';
 import {
   SuiClient,
   getFullnodeUrl,
@@ -15,13 +16,15 @@ import { bcs } from '@mysten/sui/bcs';
 dotenv.config();
 
 // --- Configuration ---
-const DEPLOYMENT_JSON_PATH = path.resolve(__dirname, '../../contracts/deployment.json');
-const OUTPUT_JSON_PATH = path.resolve(__dirname, '../initialized_deployment.json');
+const PERPS_DEPLOYMENT_JSON_PATH = path.resolve(__dirname, '../../contracts/deployment.json');
+const ORACLE_BUILDER_DEPLOYMENT_JSON_PATH = path.resolve(__dirname, '../../oracle_builder_contracts/deployment.json');
+const PERPS_OUTPUT_JSON_PATH = path.resolve(__dirname, '../initialized_deployment.json');
+const ORACLE_BUILDER_OUTPUT_JSON_PATH = path.resolve(__dirname, '../initialized_oracle_builder_deployment.json');
 const SUI_NETWORK: 'mainnet' | 'testnet' | 'devnet' | 'localnet' = 'testnet'; // Or dynamically set via ENV
 const MINT_AMOUNT = 100000000000000000n; // 10,000 (assuming 6 decimals, adjust if needed)
 const RECIPIENT_ADDRESS = () => getSigner().toSuiAddress(); // Mint to self initially
 
-// Default and Specific Configuration Constants
+// Default and Specific Configuration Constants for Perps
 const DEFAULT_ORACLE_FEED_ID = 0; // 0 for Pyth
 const DEFAULT_SHARED_PRICE_DECIMALS = 8;
 const DEFAULT_MAX_LEVERAGE = 100;
@@ -80,92 +83,16 @@ function findTreasuryCap(objectChanges: any[], coinType: string): string | null 
     return change?.objectId || null;
 }
 
-// async function findCoinMetadata(
-//     client: SuiClient,
-//     objectChanges: any[],
-//     coinType: string
-// ): Promise<{ id: string; decimals: number } | null> {
-//     const metadataType = `0x2::coin::CoinMetadata<${coinType}>`;
-//     const change = findObjectChange(objectChanges, 'created', (c) => c.objectType === metadataType);
-
-//     if (!change || !change.objectId) {
-//         console.warn(`Could not find CoinMetadata object for ${coinType} in deployment changes.`);
-//         return null;
-//     }
-
-//     const metadataObjectId = change.objectId;
-
-//     try {
-//         // **** ADD DELAY HERE ****
-//         const WAIT_MS = 5000; // Wait for 2 seconds for metadata object
-//         console.log(`  Waiting ${WAIT_MS / 1000} seconds for metadata object ${metadataObjectId} to be indexed...`);
-//         await sleep(WAIT_MS);
-//         // *************************
-
-//         // Define options to fetch content
-//         const options: SuiObjectDataOptions = { showContent: true };
-//         const metadataObject = await client.getObject({
-//             id: metadataObjectId,
-//             options: options,
-//         });
-
-//         // Type guards and checks
-//         if (metadataObject.error) {
-//             // Updated error handling based on SDK structure
-//             let errorDetails = `Code: ${metadataObject.error.code}`; 
-//             if ('object_id' in metadataObject.error) {
-//                 errorDetails += `, ObjectId: ${metadataObject.error.object_id}`;
-//             }
-//             if ('error' in metadataObject.error && typeof metadataObject.error.error === 'string') {
-//                 errorDetails += `, Details: ${metadataObject.error.error}`;
-//             }
-//             console.warn(`Error fetching object ${metadataObjectId}: ${errorDetails}`);
-//             return null;
-//         }
-//         if (!metadataObject.data) {
-//              console.warn(`No data found for CoinMetadata object ${metadataObjectId}`);
-//              return null;
-//         }
-//          if (metadataObject.data.content?.dataType !== 'moveObject') {
-//              console.warn(`Fetched object ${metadataObjectId} is not a Move object.`);
-//              return null;
-//         }
-
-//         // Ensure the type matches what we expect (handle potential package ID variations)
-//         const expectedTypeSuffix = `::coin::CoinMetadata<${coinType}>`;
-//          if (!metadataObject.data.content.type.endsWith(expectedTypeSuffix)) {
-//              console.warn(`Fetched object ${metadataObjectId} type mismatch. Expected suffix ${expectedTypeSuffix}, got ${metadataObject.data.content.type}`);
-//              return null;
-//         }
-
-//         // Access fields safely
-//         const fields = metadataObject.data.content.fields as { decimals?: number; [key: string]: any };
-//         const decimals = fields?.decimals;
-
-//         if (typeof decimals !== 'number') {
-//             console.warn(`Could not extract 'decimals' (number) field from CoinMetadata object ${metadataObjectId}. Found:`, decimals);
-//             return null;
-//         }
-
-//         return { id: metadataObjectId, decimals: decimals };
-
-//     } catch (error) {
-//         console.error(`Error fetching or processing CoinMetadata object ${metadataObjectId}:`, error);
-//         return null; // Or rethrow if this should be a fatal error
-//     }
-// }
-
 // Add a simple sleep function
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Define a default gas budget (adjust as needed)
 const DEFAULT_GAS_BUDGET = 100000000; // Example: 0.1 SUI 
 
+// --- Perps Protocol Deployment Logic ---
 
-// --- Main Script Logic ---
-
-async function main() {
-    console.log('Starting deployment manager script...');
+async function deployPerpsProtocol() {
+    console.log('Starting perps protocol deployment...');
 
     // 1. Initialize Sui Client & Signer
     const signer = getSigner();
@@ -175,13 +102,13 @@ async function main() {
     console.log(`Signer address: ${signerAddress}`);
 
     // 2. Read and Parse Deployment Data
-    console.log(`Reading deployment data from ${DEPLOYMENT_JSON_PATH}...`);
+    console.log(`Reading deployment data from ${PERPS_DEPLOYMENT_JSON_PATH}...`);
     let deploymentData: any;
     try {
-        const fileContent = fs.readFileSync(DEPLOYMENT_JSON_PATH, 'utf-8');
+        const fileContent = fs.readFileSync(PERPS_DEPLOYMENT_JSON_PATH, 'utf-8');
         deploymentData = JSON.parse(fileContent);
     } catch (error) {
-        console.error(`Failed to read or parse ${DEPLOYMENT_JSON_PATH}:`, error);
+        console.error(`Failed to read or parse ${PERPS_DEPLOYMENT_JSON_PATH}:`, error);
         process.exit(1);
     }
 
@@ -209,9 +136,6 @@ async function main() {
     const btcLpCoinType = `${packageId}::btc_lp_coin::BTC_LP_COIN`;
     const ethLpCoinType = `${packageId}::eth_lp_coin::ETH_LP_COIN`;
     const usdcLpCoinType = `${packageId}::usdc_lp_coin::USDC_LP_COIN`;
-
-    // NOTE: TEST_COIN related variables (testCoinType, testCoinTreasuryCapId, testCoinDecimals, testCoinMetadata)
-    // have been removed as TEST_COIN is no longer minted or used for LP/Program initialization.
 
     // --- Build Single Programmable Transaction Block ---
     console.log('\nBuilding Programmable Transaction Block...');
@@ -435,10 +359,10 @@ async function main() {
             sol_tcap,
         };
         try {
-            fs.writeFileSync(OUTPUT_JSON_PATH, JSON.stringify(outputData, null, 2));
-            console.log(`\nSuccessfully wrote initialized deployment info to ${OUTPUT_JSON_PATH}`);
+            fs.writeFileSync(PERPS_OUTPUT_JSON_PATH, JSON.stringify(outputData, null, 2));
+            console.log(`\nSuccessfully wrote initialized deployment info to ${PERPS_OUTPUT_JSON_PATH}`);
         } catch (error) {
-            console.error(`Failed to write output file ${OUTPUT_JSON_PATH}:`, error);
+            console.error(`Failed to write output file ${PERPS_OUTPUT_JSON_PATH}:`, error);
         }
 
     } catch (error) {
@@ -446,10 +370,71 @@ async function main() {
          throw error; // Re-throw to halt the script
     }
 
-    console.log('\nDeployment manager script finished.');
+    console.log('\nPerps protocol deployment finished.');
 }
 
-// --- Refactored Helper Functions ---
+// --- Oracle Builder Deployment Logic ---
+
+async function deployOracleBuilder() {
+    console.log('Starting oracle builder deployment...');
+
+    // 1. Initialize Sui Client & Signer
+    const signer = getSigner();
+    const client = new SuiClient({ url: getFullnodeUrl(SUI_NETWORK) });
+    const signerAddress = signer.toSuiAddress();
+    console.log(`Using network: ${SUI_NETWORK}`);
+    console.log(`Signer address: ${signerAddress}`);
+
+    // 2. Read and Parse Deployment Data
+    console.log(`Reading deployment data from ${ORACLE_BUILDER_DEPLOYMENT_JSON_PATH}...`);
+    let deploymentData: any;
+    try {
+        const fileContent = fs.readFileSync(ORACLE_BUILDER_DEPLOYMENT_JSON_PATH, 'utf-8');
+        deploymentData = JSON.parse(fileContent);
+    } catch (error) {
+        console.error(`Failed to read or parse ${ORACLE_BUILDER_DEPLOYMENT_JSON_PATH}:`, error);
+        process.exit(1);
+    }
+
+    const objectChanges = deploymentData.objectChanges || [];
+
+    // 3. Extract Key Information
+    const publishedChange = findObjectChange(objectChanges, 'published', () => true);
+    const packageId = publishedChange?.packageId;
+    if (!packageId) throw new Error('Could not find published package ID in deployment data.');
+
+    const adminCapId = findCreatedObjectIdByTypePrefix(objectChanges, `${packageId}::oracle_builder::AdminCap`);
+    if (!adminCapId) throw new Error('Could not find AdminCap object ID in deployment data.');
+
+    console.log(`Package ID: ${packageId}`);
+    console.log(`AdminCap ID: ${adminCapId}`);
+
+    // Get transaction checkpoint for indexer configuration
+    const txDetails = await client.getTransactionBlock({ digest: deploymentData.digest || deploymentData.txDigest });
+    const checkpoint = txDetails.checkpoint;
+    if (!checkpoint) {
+        throw new Error(`Failed to retrieve checkpoint for oracle builder deployment`);
+    }
+
+    // 4. Write Output File
+    const outputData = {
+        packageId,
+        adminCapId,
+        initializationCheckpoint: checkpoint,
+        network: SUI_NETWORK,
+    };
+
+    try {
+        fs.writeFileSync(ORACLE_BUILDER_OUTPUT_JSON_PATH, JSON.stringify(outputData, null, 2));
+        console.log(`\nSuccessfully wrote oracle builder deployment info to ${ORACLE_BUILDER_OUTPUT_JSON_PATH}`);
+    } catch (error) {
+        console.error(`Failed to write output file ${ORACLE_BUILDER_OUTPUT_JSON_PATH}:`, error);
+    }
+
+    console.log('\nOracle builder deployment finished.');
+}
+
+// --- Helper Functions for Perps Protocol ---
 
 async function addSupportedLpToken(
     txb: Transaction,
@@ -542,6 +527,39 @@ async function addSupportedPositionToken(
     });
 }
 
+// --- Main Script Logic ---
+
+async function main() {
+    const program = new Command();
+    
+    program
+        .name('deployment-manager')
+        .description('Deployment management scripts for PismoSynthetics protocols')
+        .version('1.0.0')
+        .requiredOption('--protocol <type>', 'Protocol to deploy: perps or oracle_builder')
+        .parse();
+
+    const options = program.opts();
+    const protocol = options.protocol;
+
+    if (!['perps', 'oracle_builder'].includes(protocol)) {
+        console.error('Error: Protocol must be either "perps" or "oracle_builder"');
+        process.exit(1);
+    }
+
+    console.log(`Starting deployment manager for ${protocol} protocol...`);
+
+    try {
+        if (protocol === 'perps') {
+            await deployPerpsProtocol();
+        } else if (protocol === 'oracle_builder') {
+            await deployOracleBuilder();
+        }
+    } catch (error) {
+        console.error(`\n${protocol} deployment encountered an error:`, error);
+        process.exit(1);
+    }
+}
 
 main().catch((error) => {
     console.error('\nScript encountered an error:', error);
