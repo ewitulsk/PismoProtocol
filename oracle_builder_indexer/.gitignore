@@ -1,0 +1,41 @@
+# Rust compiled artifacts
+/target/
+**/*.rs.bk
+
+# Cargo
+# Note: Cargo.lock is committed for applications to ensure reproducible builds
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Coverage reports
+tarpaulin-report.html
+cobertura.xml
+
+# Rust-specific
+*.pdb 

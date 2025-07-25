@@ -1,8 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { Command } from 'commander';
 import TOML from '@iarna/toml';
 
-interface DeploymentInfo {
+// --- Interface Definitions ---
+
+interface PerpsDeploymentInfo {
   packageId: string;
   globalObjectId: string;
   programObjectId: string;
@@ -17,13 +20,26 @@ interface DeploymentInfo {
   cmg_tcap?: string;
 }
 
-const deploymentInfoPath = path.resolve(__dirname, '../initialized_deployment.json');
+interface OracleBuilderDeploymentInfo {
+  packageId: string;
+  adminCapId: string;
+  initializationCheckpoint: string;
+  network: 'testnet' | 'mainnet' | string;
+}
+
+// --- Configuration Paths ---
+
+const perpsDeploymentInfoPath = path.resolve(__dirname, '../initialized_deployment.json');
+const oracleBuilderDeploymentInfoPath = path.resolve(__dirname, '../initialized_oracle_builder_deployment.json');
+
+// Perps Protocol Config Paths
 const backendConfigPath = path.resolve(__dirname, '../../backend/config/backend_config.json');
 const frontendConfigPath = path.resolve(__dirname, '../../frontend/config.toml');
-// Assuming indexer config filename might change based on network, but for now updates testnet.toml
-// TODO: Potentially adjust logic if indexer needs dynamic filename (e.g., mainnet.toml)
 const indexerConfigPath = path.resolve(__dirname, '../../indexer/config/testnet.toml');
 const liquidationServiceConfigPath = path.resolve(__dirname, '../../liquidation_transfer_service/config/config.toml');
+
+// Oracle Builder Config Paths
+const oracleBuilderIndexerConfigPath = path.resolve(__dirname, '../../oracle_builder_indexer/config/testnet.toml');
 
 // URL templates - add more networks if needed
 const urlTemplates = {
@@ -37,7 +53,9 @@ function formatUrl(template: string, network: string): string {
   return template.replace('{network}', network);
 }
 
-async function updateBackendConfig(info: DeploymentInfo) {
+// --- Perps Protocol Configuration Updates ---
+
+async function updateBackendConfig(info: PerpsDeploymentInfo) {
   try {
     const backendConfigFile = await fs.readFile(backendConfigPath, 'utf-8');
     const backendConfig = JSON.parse(backendConfigFile);
@@ -54,7 +72,7 @@ async function updateBackendConfig(info: DeploymentInfo) {
   }
 }
 
-async function updateFrontendConfig(info: DeploymentInfo) {
+async function updateFrontendConfig(info: PerpsDeploymentInfo) {
   try {
     const suiExplorerUrl = formatUrl(urlTemplates.suiExplorerBase, info.network);
     let configContent = {};
@@ -98,7 +116,7 @@ async function updateFrontendConfig(info: DeploymentInfo) {
   }
 }
 
-async function updateIndexerConfig(info: DeploymentInfo) {
+async function updateIndexerConfig(info: PerpsDeploymentInfo) {
   try {
     const indexerConfigFile = await fs.readFile(indexerConfigPath, 'utf-8');
     const indexerConfig = TOML.parse(indexerConfigFile) as any; // Use 'any' for simplicity
@@ -118,7 +136,7 @@ async function updateIndexerConfig(info: DeploymentInfo) {
   }
 }
 
-async function updateLiquidationServiceConfig(info: DeploymentInfo) {
+async function updateLiquidationServiceConfig(info: PerpsDeploymentInfo) {
   try {
     const suiApiUrl = formatUrl(urlTemplates.suiApi, info.network);
     let configContent: TOML.JsonMap = {};
@@ -156,13 +174,43 @@ async function updateLiquidationServiceConfig(info: DeploymentInfo) {
   }
 }
 
-async function main() {
-  console.log('Starting configuration copy process...');
-  try {
-    const deploymentInfoFile = await fs.readFile(deploymentInfoPath, 'utf-8');
-    const deploymentInfo: DeploymentInfo = JSON.parse(deploymentInfoFile);
+// --- Oracle Builder Configuration Updates ---
 
-    console.log(`Read deployment info for network: ${deploymentInfo.network}`);
+async function updateOracleBuilderIndexerConfig(info: OracleBuilderDeploymentInfo) {
+  try {
+    const configFile = await fs.readFile(oracleBuilderIndexerConfigPath, 'utf-8');
+    const config = TOML.parse(configFile) as any;
+
+    // Update the indexer section
+    if (!config.indexer) {
+      config.indexer = {};
+    }
+
+    config.indexer.package_id = info.packageId;
+    config.indexer.remote_store_url = formatUrl(urlTemplates.suiCheckpoints, info.network);
+    config.indexer.start_checkpoint = parseInt(info.initializationCheckpoint, 10);
+
+    // Preserve other existing values like concurrency
+    if (!config.indexer.concurrency) {
+      config.indexer.concurrency = 5; // Default value
+    }
+
+    await fs.writeFile(oracleBuilderIndexerConfigPath, TOML.stringify(config));
+    console.log(`Successfully updated ${path.basename(oracleBuilderIndexerConfigPath)}`);
+  } catch (error) {
+    console.error(`Error updating ${path.basename(oracleBuilderIndexerConfigPath)}:`, error);
+  }
+}
+
+// --- Main Protocol Functions ---
+
+async function copyPerpsConfig() {
+  console.log('Starting perps protocol configuration copy process...');
+  try {
+    const deploymentInfoFile = await fs.readFile(perpsDeploymentInfoPath, 'utf-8');
+    const deploymentInfo: PerpsDeploymentInfo = JSON.parse(deploymentInfoFile);
+
+    console.log(`Read perps deployment info for network: ${deploymentInfo.network}`);
     console.log(`  Package ID: ${deploymentInfo.packageId}`);
 
     await Promise.all([
@@ -172,10 +220,63 @@ async function main() {
       updateLiquidationServiceConfig(deploymentInfo),
     ]);
 
-    console.log('Configuration copy process finished.');
+    console.log('Perps protocol configuration copy process finished.');
 
   } catch (error) {
-    console.error('Failed to read deployment info or run update process:', error);
+    console.error('Failed to read perps deployment info or run update process:', error);
+    throw error;
+  }
+}
+
+async function copyOracleBuilderConfig() {
+  console.log('Starting oracle builder configuration copy process...');
+  try {
+    const deploymentInfoFile = await fs.readFile(oracleBuilderDeploymentInfoPath, 'utf-8');
+    const deploymentInfo: OracleBuilderDeploymentInfo = JSON.parse(deploymentInfoFile);
+
+    console.log(`Read oracle builder deployment info for network: ${deploymentInfo.network}`);
+    console.log(`  Package ID: ${deploymentInfo.packageId}`);
+
+    await updateOracleBuilderIndexerConfig(deploymentInfo);
+
+    console.log('Oracle builder configuration copy process finished.');
+
+  } catch (error) {
+    console.error('Failed to read oracle builder deployment info or run update process:', error);
+    throw error;
+  }
+}
+
+// --- Main Script Logic ---
+
+async function main() {
+  const program = new Command();
+  
+  program
+    .name('copyConfig')
+    .description('Copy deployment configuration for PismoSynthetics protocols')
+    .version('1.0.0')
+    .requiredOption('--protocol <type>', 'Protocol to copy config for: perps or oracle_builder')
+    .parse();
+
+  const options = program.opts();
+  const protocol = options.protocol;
+
+  if (!['perps', 'oracle_builder'].includes(protocol)) {
+    console.error('Error: Protocol must be either "perps" or "oracle_builder"');
+    process.exit(1);
+  }
+
+  console.log(`Starting configuration copy for ${protocol} protocol...`);
+
+  try {
+    if (protocol === 'perps') {
+      await copyPerpsConfig();
+    } else if (protocol === 'oracle_builder') {
+      await copyOracleBuilderConfig();
+    }
+  } catch (error) {
+    console.error(`\n${protocol} configuration copy encountered an error:`, error);
     process.exit(1);
   }
 }
