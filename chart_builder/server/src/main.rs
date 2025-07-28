@@ -65,9 +65,7 @@ fn send_bar_update_to_subscribed_clients(
         bar: bar.clone(),
     };
     
-    if let Ok(response_json) = serde_json::to_string(&response) {
-        let mut sent_to_clients = false;
-        
+    if let Ok(response_json) = serde_json::to_string(&response) {        
         for client_entry in subscriptions.iter() {
             let client_id = client_entry.key();
             let client_subs = client_entry.value();
@@ -77,7 +75,6 @@ fn send_bar_update_to_subscribed_clients(
                 if time_scales.contains(&time_scale.to_string()) {
                     if let Some(writer) = writers.get(client_id) {
                         let _ = writer.send(Message::Text(response_json.clone()));
-                        sent_to_clients = true;
                     }
                 }
             }
@@ -430,9 +427,14 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Chart Builder Service");
 
-    // Load configuration
-    let config = Config::load_or_default("config.toml");
-    info!("Loaded configuration: {:?}", config);
+    // Load configuration from CONFIG_PATH environment variable
+    let config_path = std::env::var("CONFIG_PATH")
+        .map_err(|_| anyhow::anyhow!("CONFIG_PATH environment variable is not set"))?;
+    
+    let config = chart_builder_server::config::load_config(&config_path)
+        .map_err(|e| anyhow::anyhow!("Failed to load config from '{}': {}", config_path, e))?;
+    
+    info!("Loaded configuration from '{}': {:?}", config_path, config);
 
     // Create the service and price update receiver
     let (mut service, mut price_rx) = ChartBuilderService::new(config);
@@ -469,18 +471,17 @@ async fn main() -> anyhow::Result<()> {
     sleep(Duration::from_secs(5)).await;
     info!("Continuing Main...");
 
-    // Subscribe to some assets (hardcoded for now)
-    // SOL/USD feed ID
-    match service.subscribe_to_asset("fe650f0367d4a7ef9815a593ea15d36593f0643aaaf0149bb04be67ab851decd").await {
-        Ok(_) => {info!("Successfully Subscribed to SOL")},
-        Err(e) => {error!("Error Subscribing to SOL: {}", e)}
-    };
-    
-    // BTC/USD feed ID
-    // match service.subscribe_to_asset("f9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b").await {
-    //     Ok(_) => {info!("Successfully Subscribed to BTC")},
-    //     Err(e) => {error!("Error Subscribing to BTC: {}", e)}
-    // };
+    // Subscribe to all enabled assets from config
+    for asset in &service.config.pyth_assets {
+        if asset.enabled {
+            match service.subscribe_to_asset(&asset.feed_id).await {
+                Ok(_) => {info!("Successfully subscribed to {}", asset.name)},
+                Err(e) => {error!("Error subscribing to {}: {}", asset.name, e)}
+            };
+        } else {
+            info!("Skipping disabled asset: {}", asset.name);
+        }
+    }
 
     // Start the chart server with client tracking
     let chart_server_handler = start_chart_server(service.clone(), client_subscriptions, client_writers);

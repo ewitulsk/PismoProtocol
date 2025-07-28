@@ -6,6 +6,9 @@ use tokio::sync::mpsc;
 pub mod config;
 pub mod websockets;
 
+// Re-export commonly used config types
+pub use config::{Config, AssetConfig};
+
 // Message type for price updates
 #[derive(Debug, Clone)]
 pub struct PriceUpdate {
