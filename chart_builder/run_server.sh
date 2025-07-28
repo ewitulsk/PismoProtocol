@@ -28,4 +28,4 @@ echo ""
 echo "Press Ctrl+C to stop the server"
 echo ""
 
-RUST_LOG="info" cargo run --package chart-builder-server -- --nocapture
+RUST_LOG="info" CONFIG_PATH=config/config.toml cargo run --package chart-builder-server -- --nocapture
