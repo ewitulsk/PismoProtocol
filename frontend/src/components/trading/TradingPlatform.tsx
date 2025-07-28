@@ -591,7 +591,7 @@ const TradingPlatform: React.FC = () => {
               console.log(`[TradingPlatform] Token index ${index}, marketInfo resolved:`, JSON.stringify(marketInfo));
 
               const selectableAsset: SelectableMarketAsset = {
-                id: priceFeedIdHex,
+                id: marketInfo.baseAsset, // May need to change later, not sure why this is what it is.
                 displayName: marketInfo.displayName,
                 baseAsset: marketInfo.baseAsset,
                 priceFeedId: priceFeedIdHex,

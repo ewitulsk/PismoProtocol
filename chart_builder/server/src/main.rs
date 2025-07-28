@@ -83,10 +83,10 @@ fn send_bar_update_to_subscribed_clients(
             }
         }
         
-        if sent_to_clients {
-            info!("Sent bar update for {} {}: timestamp={}", 
-                  asset_id, time_scale, bar.timestamp);
-        }
+        // if sent_to_clients {
+        //     info!("Sent bar update for {} {}: timestamp={}", 
+        //           asset_id, time_scale, bar.timestamp);
+        // }
     }
 }
 
@@ -353,45 +353,53 @@ async fn handle_client_connection(
     while let Some(message) = read.next().await {
         match message {
             Ok(Message::Text(text)) => {
-                if let Ok(chart_message) = serde_json::from_str::<ChartMessage>(&text) {
-                    let response = match chart_message {
-                        ChartMessage::GetAssets => {
-                            let assets = service.get_assets();
-                            ChartResponse::Assets { assets }
-                        }
-                        ChartMessage::Subscribe { asset_id, time_scale } => {
-                            // Track client subscription
-                            if let Some(mut client_subs) = subscriptions.get_mut(&client_id) {
-                                client_subs.entry(asset_id.clone()).or_insert_with(Vec::new).push(time_scale.clone());
+                // tracing::info!("[Server] Raw message from client {}: {}", client_id, text);
+                match serde_json::from_str::<ChartMessage>(&text) {
+                    Ok(chart_message) => {
+                        // tracing::info!("[Server] Parsed ChartMessage from client {}: {:?}", client_id, chart_message);
+                        let response = match chart_message {
+                            ChartMessage::GetAssets => {
+                                let assets = service.get_assets();
+                                ChartResponse::Assets { assets }
                             }
-                            
-                            // Send existing bars to the newly subscribed client
-                            if let Some(time_scale_enum) = parse_time_scale(&time_scale) {
-                                if let Some(bars) = service.get_bars(&asset_id, time_scale_enum) {
-                                    send_bars_to_client(&writers, &client_id, &asset_id, &time_scale, &bars);
+                            ChartMessage::Subscribe { asset_id, time_scale } => {
+                                tracing::info!("[Server] Client {} subscribing to asset: {}, time_scale: {}", client_id, asset_id, time_scale);
+                                // Track client subscription
+                                if let Some(mut client_subs) = subscriptions.get_mut(&client_id) {
+                                    client_subs.entry(asset_id.clone()).or_insert_with(Vec::new).push(time_scale.clone());
                                 }
-                            }
-                            
-                            ChartResponse::SubscriptionConfirmed { asset_id, time_scale }
-                        }
-                        ChartMessage::Unsubscribe { asset_id, time_scale } => {
-                            // Remove client subscription
-                            if let Some(mut client_subs) = subscriptions.get_mut(&client_id) {
-                                if let Some(time_scales) = client_subs.get_mut(&asset_id) {
-                                    time_scales.retain(|ts| ts != &time_scale);
-                                    if time_scales.is_empty() {
-                                        client_subs.remove(&asset_id);
+                                // Send existing bars to the newly subscribed client
+                                if let Some(time_scale_enum) = parse_time_scale(&time_scale) {
+                                    if let Some(bars) = service.get_bars(&asset_id, time_scale_enum) {
+                                        tracing::info!("[Server] Sending {} bars to client {} for asset {} time_scale {}", bars.len(), client_id, asset_id, time_scale);
+                                        send_bars_to_client(&writers, &client_id, &asset_id, &time_scale, &bars);
                                     }
                                 }
+                                ChartResponse::SubscriptionConfirmed { asset_id, time_scale }
                             }
-                            ChartResponse::SubscriptionConfirmed { asset_id, time_scale }
+                            ChartMessage::Unsubscribe { asset_id, time_scale } => {
+                                tracing::info!("[Server] Client {} unsubscribing from asset: {}, time_scale: {}", client_id, asset_id, time_scale);
+                                // Remove client subscription
+                                if let Some(mut client_subs) = subscriptions.get_mut(&client_id) {
+                                    if let Some(time_scales) = client_subs.get_mut(&asset_id) {
+                                        time_scales.retain(|ts| ts != &time_scale);
+                                        if time_scales.is_empty() {
+                                            client_subs.remove(&asset_id);
+                                        }
+                                    }
+                                }
+                                ChartResponse::SubscriptionConfirmed { asset_id, time_scale }
+                            }
+                        };
+                        if let Ok(response_json) = serde_json::to_string(&response) {
+                            tracing::info!("[Server] Sending response to client {}: {}", client_id, response_json);
+                            if let Some(writer) = writers.get(&client_id) {
+                                let _ = writer.send(Message::Text(response_json));
+                            }
                         }
-                    };
-
-                    if let Ok(response_json) = serde_json::to_string(&response) {
-                        if let Some(writer) = writers.get(&client_id) {
-                            let _ = writer.send(Message::Text(response_json));
-                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("[Server] Failed to parse ChartMessage from client {}: {} | Raw: {}", client_id, e, text);
                     }
                 }
             }
