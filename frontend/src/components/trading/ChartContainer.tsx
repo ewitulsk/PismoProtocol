@@ -48,8 +48,8 @@ const ChartContainer: React.FC<ChartContainerProps> = ({
         
         {selectedAsset ? (
           <LightweightChartWidget 
-            assetId={selectedAsset.id} // We should address what field names to use, not sure why copilot changed.
-            interval={selectedInterval} // Pass the selected interval
+            priceFeedIdBytes={selectedAsset.priceFeedId}
+            interval={selectedInterval}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

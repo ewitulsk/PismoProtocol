@@ -169,7 +169,7 @@ const TradingPlatform: React.FC = () => {
             if (Array.isArray(collateralDefinition.fields.price_feed_id_bytes)) {
                 try {
                     const bytes = Uint8Array.from(collateralDefinition.fields.price_feed_id_bytes);
-                    priceFeedIdHex = "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+                    priceFeedIdHex = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
                 } catch { priceFeedIdHex = undefined; }
             }
         }
@@ -571,7 +571,7 @@ const TradingPlatform: React.FC = () => {
                 if (!tokenIdentifierFields.price_feed_id_bytes.every(item => typeof item === 'number')) {
                     throw new Error('price_feed_id_bytes contains non-numeric elements');
                 }
-                priceFeedIdHex = "0x" + bytesToHex(Uint8Array.from(tokenIdentifierFields.price_feed_id_bytes));
+                priceFeedIdHex = bytesToHex(Uint8Array.from(tokenIdentifierFields.price_feed_id_bytes));
                 console.log(`[TradingPlatform] Token index ${index}, price_feed_id_bytes processed. Generated priceFeedIdHex:`, priceFeedIdHex);
               } catch (e: any) {
                 console.error(`[TradingPlatform] Error converting price_feed_id_bytes for token at index ${index}:`, e.message, "Full wrapper:", JSON.stringify(tokenWrapper));
@@ -637,7 +637,7 @@ const TradingPlatform: React.FC = () => {
                 if (!tokenIdentifierFields.price_feed_id_bytes.every(item => typeof item === 'number')) {
                     throw new Error('price_feed_id_bytes contains non-numeric elements for collateral');
                 }
-                priceFeedIdHex = "0x" + bytesToHex(Uint8Array.from(tokenIdentifierFields.price_feed_id_bytes));
+                priceFeedIdHex = bytesToHex(Uint8Array.from(tokenIdentifierFields.price_feed_id_bytes));
               } catch (e: any) {
                 console.error(`[TradingPlatform] Error converting price_feed_id_bytes for supported_collateral at index ${index}:`, e.message);
                 return null;
