@@ -7,6 +7,7 @@ module oracle_builder::oracle_builder {
     use sui::transfer;
     use sui::event;
     use std::string::String;
+    use std::option::Option;
 
     public struct AdminCap has key, store {
         id: UID,
@@ -22,7 +23,8 @@ module oracle_builder::oracle_builder {
         id: UID,
         oracle_id: address,
         is_valid: bool,
-        api_key: String, // temporary
+        api_key: Option<String>,
+        api_key_config: Option<String>,
         underlying_url: String,
         response_field: String,
         live_url: String,
@@ -41,7 +43,8 @@ module oracle_builder::oracle_builder {
         oracle_id: address,
         owner: address,
         is_valid: bool,
-        api_key: String,
+        api_key: Option<String>,
+        api_key_config: Option<String>,
         underlying_url: String,
         response_field: String,
         live_url: String,
@@ -90,7 +93,8 @@ module oracle_builder::oracle_builder {
 
     public fun new_price_feed(
         oracle: &Oracle,
-        api_key: String, // temporary
+        api_key: Option<String>,
+        api_key_config: Option<String>,
         underlying_url: String,
         response_field: String,
         live_url: String,
@@ -111,6 +115,7 @@ module oracle_builder::oracle_builder {
             oracle_id: oracle_address,
             is_valid: true,
             api_key,
+            api_key_config,
             underlying_url,
             response_field,
             live_url,
@@ -122,6 +127,7 @@ module oracle_builder::oracle_builder {
             owner: caller,
             is_valid: true,
             api_key,
+            api_key_config,
             underlying_url,
             response_field,
             live_url,
