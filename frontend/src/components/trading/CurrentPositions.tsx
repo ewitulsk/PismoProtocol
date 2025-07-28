@@ -287,7 +287,7 @@ const CurrentPositions: React.FC<CurrentPositionsProps> = ({ /*account,*/ accoun
         let tpd = 0;
         if (!positions || positions.length === 0) {
             if (onTPDChange) onTPDChange(0);
-            console.log("[CurrentPositions] Total Position Delta (TPD): 0");
+            // console.log("[CurrentPositions] Total Position Delta (TPD): 0");
             return;
         }
         positions.forEach(position => {

@@ -48,7 +48,7 @@ const ChartContainer: React.FC<ChartContainerProps> = ({
         
         {selectedAsset ? (
           <LightweightChartWidget 
-            priceFeedId={selectedAsset.priceFeedId} 
+            assetId={selectedAsset.id} // We should address what field names to use, not sure why copilot changed.
             interval={selectedInterval} // Pass the selected interval
           />
         ) : (
