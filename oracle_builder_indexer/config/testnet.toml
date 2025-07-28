@@ -1,13 +1,17 @@
 [indexer]
-package_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+package_id = "0x147952da3ce20a26434235f66aa22a5057347b56f679b9e003845f1e2d16722b"
 remote_store_url = "https://checkpoints.testnet.sui.io"
-start_checkpoint = 0
+start_checkpoint = 223511169
 concurrency = 4
 
 [database]
 host = "localhost"
-port = 5432
+port = 7655
 user = "postgres"
-password = "password"
+password = "postgres"
 dbname = "oracle_builder"
 pool_size = 10
+
+[api]
+host = "0.0.0.0"
+port = 3001

@@ -21,9 +21,16 @@ pub struct Database {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+pub struct Api {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     pub indexer: Indexer,
     pub database: Database,
+    pub api: Api,
 }
 
 impl Config {
