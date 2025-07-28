@@ -367,16 +367,17 @@ export class ChartBuilderService {
   private isFirstHandler(assetId: string, timeScale: string): boolean {
     const barUpdateCount = this.barUpdateHandlers.get(assetId)?.get(timeScale)?.size || 0;
     const historicalCount = this.historicalBarsHandlers.get(assetId)?.get(timeScale)?.size || 0;
-    return (barUpdateCount + historicalCount) === 1;
+    return (barUpdateCount + historicalCount) === 2;
   }
 
   // Subscribe to bar updates for a specific asset and time scale
   public async subscribeToBarUpdates(
     assetId: string,
     timeScale: string,
-    callback: BarUpdateCallback
+    barUpdateCallback: BarUpdateCallback,
+    historicalCallback: HistoricalBarsCallback
   ): Promise<boolean> {
-    // Initialize nested maps if they don't exist
+    // Register bar update callback
     if (!this.barUpdateHandlers.has(assetId)) {
       this.barUpdateHandlers.set(assetId, new Map());
     }
@@ -384,33 +385,20 @@ export class ChartBuilderService {
     if (!assetHandlers.has(timeScale)) {
       assetHandlers.set(timeScale, new Set());
     }
-    // Add the callback
     const timeScaleHandlers = assetHandlers.get(timeScale)!;
-    timeScaleHandlers.add(callback);
-    // Only subscribe if this is the first handler for this asset/timeScale
-    if (this.isFirstHandler(assetId, timeScale)) {
-      return await this.subscribeToAsset(assetId, timeScale);
-    }
-    return true;
-  }
+    timeScaleHandlers.add(barUpdateCallback);
 
-  // Subscribe to historical bars for a specific asset and time scale
-  public async subscribeToHistoricalBars(
-    assetId: string,
-    timeScale: string,
-    callback: HistoricalBarsCallback
-  ): Promise<boolean> {
-    // Initialize nested maps if they don't exist
+    // Register historical bars callback
     if (!this.historicalBarsHandlers.has(assetId)) {
       this.historicalBarsHandlers.set(assetId, new Map());
     }
-    const assetHandlers = this.historicalBarsHandlers.get(assetId)!;
-    if (!assetHandlers.has(timeScale)) {
-      assetHandlers.set(timeScale, new Set());
+    const historicalAssetHandlers = this.historicalBarsHandlers.get(assetId)!;
+    if (!historicalAssetHandlers.has(timeScale)) {
+      historicalAssetHandlers.set(timeScale, new Set());
     }
-    // Add the callback
-    const timeScaleHandlers = assetHandlers.get(timeScale)!;
-    timeScaleHandlers.add(callback);
+    const historicalTimeScaleHandlers = historicalAssetHandlers.get(timeScale)!;
+    historicalTimeScaleHandlers.add(historicalCallback);
+
     // Only subscribe if this is the first handler for this asset/timeScale
     if (this.isFirstHandler(assetId, timeScale)) {
       return await this.subscribeToAsset(assetId, timeScale);
@@ -422,70 +410,45 @@ export class ChartBuilderService {
   public unsubscribeFromBarUpdates(
     assetId: string,
     timeScale: string,
-    callback?: BarUpdateCallback
+    barUpdateCallback: BarUpdateCallback,
+    historicalCallback: HistoricalBarsCallback
   ): boolean {
     console.log(`[ChartBuilder] unsubscribeFromBarUpdates called for ${assetId}/${timeScale}.`);
+    
+    // Unregister bar update callback
     const assetHandlers = this.barUpdateHandlers.get(assetId);
-    if (!assetHandlers) return true;
-
-    const timeScaleHandlers = assetHandlers.get(timeScale);
-    if (!timeScaleHandlers) return true;
-
-    if (callback) {
-      timeScaleHandlers.delete(callback);
-    } else {
-      timeScaleHandlers.clear();
+    if (assetHandlers) {
+      const timeScaleHandlers = assetHandlers.get(timeScale);
+      if (timeScaleHandlers) {
+        timeScaleHandlers.delete(barUpdateCallback);
+        if (timeScaleHandlers.size === 0) {
+          assetHandlers.delete(timeScale);
+        }
+      }
+      if (assetHandlers.size === 0) {
+        this.barUpdateHandlers.delete(assetId);
+      }
     }
 
-    // Clean up empty maps
-    if (timeScaleHandlers.size === 0) {
-      assetHandlers.delete(timeScale);
-    }
-
-    if (assetHandlers.size === 0) {
-      this.barUpdateHandlers.delete(assetId);
-    }
-
-    // Unsubscribe from asset if no handlers left
-    const hasHistoricalHandlers = this.historicalBarsHandlers.get(assetId)?.has(timeScale);
-    if (!hasHistoricalHandlers && timeScaleHandlers.size === 0) {
-      this.unsubscribeFromAsset(assetId, timeScale);
-    }
-
-    return true;
-  }
-
-  // Unsubscribe from historical bars
-  public unsubscribeFromHistoricalBars(
-    assetId: string,
-    timeScale: string,
-    callback?: HistoricalBarsCallback
-  ): boolean {
-    console.log(`[ChartBuilder] unsubscribeFromHistoricalBars called for ${assetId}/${timeScale}.`);
-    const assetHandlers = this.historicalBarsHandlers.get(assetId);
-    if (!assetHandlers) return true;
-
-    const timeScaleHandlers = assetHandlers.get(timeScale);
-    if (!timeScaleHandlers) return true;
-
-    if (callback) {
-      timeScaleHandlers.delete(callback);
-    } else {
-      timeScaleHandlers.clear();
-    }
-
-    // Clean up empty maps
-    if (timeScaleHandlers.size === 0) {
-      assetHandlers.delete(timeScale);
-    }
-
-    if (assetHandlers.size === 0) {
-      this.historicalBarsHandlers.delete(assetId);
+    // Unregister historical bars callback
+    const historicalAssetHandlers = this.historicalBarsHandlers.get(assetId);
+    if (historicalAssetHandlers) {
+      const historicalTimeScaleHandlers = historicalAssetHandlers.get(timeScale);
+      if (historicalTimeScaleHandlers) {
+        historicalTimeScaleHandlers.delete(historicalCallback);
+        if (historicalTimeScaleHandlers.size === 0) {
+          historicalAssetHandlers.delete(timeScale);
+        }
+      }
+      if (historicalAssetHandlers.size === 0) {
+        this.historicalBarsHandlers.delete(assetId);
+      }
     }
 
     // Unsubscribe from asset if no handlers left
     const hasBarUpdateHandlers = this.barUpdateHandlers.get(assetId)?.has(timeScale);
-    if (!hasBarUpdateHandlers && timeScaleHandlers.size === 0) {
+    const hasHistoricalHandlers = this.historicalBarsHandlers.get(assetId)?.has(timeScale);
+    if (!hasBarUpdateHandlers && !hasHistoricalHandlers) {
       this.unsubscribeFromAsset(assetId, timeScale);
     }
 

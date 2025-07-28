@@ -15,12 +15,12 @@ import {
 } from '../../utils/chartBuilderService';
 
 interface LightweightChartWidgetProps {
-  assetId: string;
+  priceFeedIdBytes: string;
   interval?: string;
 }
 
 const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
-  assetId,
+  priceFeedIdBytes,
   interval = '1m', // Default to 1-minute interval
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -103,7 +103,7 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     } else {
       console.log('[ChartWidget] No unique historical bars to apply.');
     }
-  }, [assetId]);
+  }, [priceFeedIdBytes]);
 
   const handleBarUpdate = useCallback((update: ChartBarUpdate) => {
     // console.log(`[ChartWidget] handleBarUpdate called for asset: ${update.asset_id}, time_scale: ${update.time_scale}`, update);
@@ -181,20 +181,20 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     };
   }, []);
 
-  // Hardcoded SOL Pyth feed ID for all chart requests
-  const SOL_FEED_ID = "fe650f0367d4a7ef9815a593ea15d36593f0643aaaf0149bb04be67ab851decd";
-  const effectiveAssetId = SOL_FEED_ID;
-
   useEffect(() => {
-    console.log('[ChartWidget] Subscription effect fired. assetId:', assetId, 'interval:', interval);
+    console.log('[ChartWidget] Subscription effect fired. assetId:', priceFeedIdBytes, 'interval:', interval);
     const ohlcInterval = convertToOhlcInterval(interval || '1m');
     console.log('[ChartWidget] Subscription effect ohlcInterval:', ohlcInterval);
     let isSubscribed = true;
     chartBuilderService.connect().then(connected => {
       if (connected && isSubscribed) {
-        console.log(`[ChartWidget] Connection successful. Subscribing to ${effectiveAssetId}/${ohlcInterval}`);
-        chartBuilderService.subscribeToHistoricalBars(effectiveAssetId, ohlcInterval, handleHistoricalBars);
-        chartBuilderService.subscribeToBarUpdates(effectiveAssetId, ohlcInterval, handleBarUpdate);
+        console.log(`[ChartWidget] Connection successful. Subscribing to ${priceFeedIdBytes}/${ohlcInterval}`);
+        chartBuilderService.subscribeToBarUpdates(
+          priceFeedIdBytes,
+          ohlcInterval,
+          handleBarUpdate,
+          handleHistoricalBars
+        );
       } else if (!isSubscribed) {
         console.log('[ChartWidget] Component unmounted before connection was established.');
       } else {
@@ -203,11 +203,15 @@ const LightweightChartWidget: React.FC<LightweightChartWidgetProps> = ({
     });
 
     return () => {
-      console.log(`[ChartWidget] Subscription effect cleanup (unmount). assetId:`, assetId, 'interval:', interval);
-      chartBuilderService.unsubscribeFromHistoricalBars(effectiveAssetId, ohlcInterval, handleHistoricalBars);
-      chartBuilderService.unsubscribeFromBarUpdates(effectiveAssetId, ohlcInterval, handleBarUpdate);
+      console.log(`[ChartWidget] Subscription effect cleanup (unmount). assetId:`, priceFeedIdBytes, 'interval:', interval);
+      chartBuilderService.unsubscribeFromBarUpdates(
+        priceFeedIdBytes,
+        ohlcInterval,
+        handleBarUpdate,
+        handleHistoricalBars
+      );
     };
-  }, [assetId, interval, convertToOhlcInterval, handleHistoricalBars, handleBarUpdate]);
+  }, [priceFeedIdBytes, interval, convertToOhlcInterval, handleHistoricalBars, handleBarUpdate]);
 
   return (
     <div ref={chartContainerRef} className="w-full h-full relative">
