@@ -5,6 +5,8 @@ diesel::table! {
         oracle_id -> Text,
         owner -> Text,
         is_valid -> Bool,
+        name -> Text,
+        description -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }
@@ -20,6 +22,8 @@ diesel::table! {
         underlying_url -> Text,
         response_field -> Text,
         live_url -> Text,
+        name -> Text,
+        description -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

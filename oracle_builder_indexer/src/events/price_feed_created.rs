@@ -8,6 +8,8 @@ pub struct PriceFeedCreatedEvent {
     pub price_feed_id: SuiAddress,
     pub oracle_id: SuiAddress,
     pub owner: SuiAddress,
+    pub name: String,
+    pub description: String,
     pub is_valid: bool,
     pub api_key: Option<String>,
     pub api_key_config: Option<String>,
@@ -22,6 +24,8 @@ impl PriceFeedCreatedEvent {
         debug!("Price Feed ID: {}", self.price_feed_id);
         debug!("Oracle ID: {}", self.oracle_id);
         debug!("Owner: {}", self.owner);
+        debug!("Name: {}", self.name);
+        debug!("Description: {}", self.description);
         debug!("Is Valid: {}", self.is_valid);
         debug!("API Key: {:?}", self.api_key);
         debug!("API Key Config: {:?}", self.api_key_config);
@@ -37,6 +41,8 @@ impl From<PriceFeedCreatedEvent> for NewPriceFeed {
         NewPriceFeed {
             price_feed_id: event.price_feed_id.to_string(),
             oracle_id: event.oracle_id.to_string(),
+            name: event.name,
+            description: event.description,
             is_valid: event.is_valid,
             api_key: event.api_key,
             api_key_config: event.api_key_config,

@@ -144,8 +144,11 @@ impl BaseRepository<PriceFeed, NewPriceFeed> for PriceFeedRepository {
         diesel::update(price_feeds.filter(price_feed_id.eq(id)))
             .set((
                 oracle_id.eq(&updated_price_feed.oracle_id),
+                name.eq(&updated_price_feed.name),
+                description.eq(&updated_price_feed.description),
                 is_valid.eq(&updated_price_feed.is_valid),
                 api_key.eq(&updated_price_feed.api_key),
+                api_key_config.eq(&updated_price_feed.api_key_config),
                 underlying_url.eq(&updated_price_feed.underlying_url),
                 response_field.eq(&updated_price_feed.response_field),
                 live_url.eq(&updated_price_feed.live_url),
