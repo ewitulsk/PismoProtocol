@@ -1,11 +1,16 @@
 "use client"
 
 import React, { useState } from "react"
-import { mockOracles, Oracle, PriceFeed } from "./mockOracles"
+import { useCurrentAccount } from '@mysten/dapp-kit'
+import { useMyOracles } from "@/hooks/useOracleBuilderData"
+import { useOracleBuilder } from "@/hooks/useOracleBuilder"
+import { PriceFeedFormData } from "@/types/oracleBuilder"
+import { UIOracle, UIPriceFeed } from "@/types/oracleBuilder"
 import OracleNav from "./OracleNav"
 import OverviewStep from "./steps/OverviewStep"
 import CreateStep from "./steps/CreateStep"
 import ConfigureStep from "./steps/ConfigureStep"
+import { Loader2, AlertCircle } from "lucide-react"
 
 type Step = "overview" | "create" | "configure"
 type ConfigureSource = "overview" | "create"
@@ -21,13 +26,20 @@ interface OracleFormData {
     id: string
     name: string
     feedId: string
-    underlyingUrl: string
-    responseField: string
-    liveUrl: string
+    api_key: string
+    underlying_url: string
+    response_field: string
+    live_url: string
   }>
 }
 
 export default function BuildOracle({ onNavigate }: BuildOracleProps) {
+  const currentAccount = useCurrentAccount();
+  const oracleBuilder = useOracleBuilder();
+  
+  // Fetch oracle data - only user's own oracles (empty if no wallet)
+  const { data: oracles, isLoading, error } = useMyOracles();
+  
   // State for create/configure steps (unaffected by overview selectors)
   const [oracleFormData, setOracleFormData] = useState<OracleFormData>({
     name: "",
@@ -40,39 +52,42 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
     id: string
     name: string
     feedId: string
-    underlyingUrl: string
-    responseField: string
-    liveUrl: string
-  }>>([
-    {
-      id: "new_feed_1",
-      name: "Custom ETH Feed",
-      feedId: "custom_eth_feed",
-      underlyingUrl: "https://api.custom.com/eth",
-      responseField: "price",
-      liveUrl: "https://oracle.example.com/custom-eth",
-    },
-    {
-      id: "new_feed_2",
-      name: "Backup ETH Feed",
-      feedId: "backup_eth_feed",
-      underlyingUrl: "https://api.backup.com/eth",
-      responseField: "data.price",
-      liveUrl: "https://oracle.example.com/backup-eth",
-    },
-  ])
+    api_key: string
+    underlying_url: string
+    response_field: string
+    live_url: string
+  }>>([])
   const [currentStep, setCurrentStep] = useState<Step>("overview")
   const [configureSource, setConfigureSource] = useState<ConfigureSource>("overview")
+  
   // Oracle selection
-  const [selectedOracleId, setSelectedOracleId] = useState(mockOracles[0]?.id || "")
-  const selectedOracle = mockOracles.find((oracle) => oracle.id === selectedOracleId)
+  const [selectedOracleId, setSelectedOracleId] = useState("")
+  
+  // Set default selected oracle when data loads
+  React.useEffect(() => {
+    if (oracles && oracles.length > 0 && !selectedOracleId) {
+      setSelectedOracleId(oracles[0].id);
+    }
+  }, [oracles, selectedOracleId]);
+  
+  const selectedOracle = oracles?.find((oracle: UIOracle) => oracle.id === selectedOracleId);
 
   // Price feed selection
-  const [selectedPriceFeedId, setSelectedPriceFeedId] = useState(selectedOracle?.priceFeeds[0]?.id || "")
+  const [selectedPriceFeedId, setSelectedPriceFeedId] = useState("")
+  
   React.useEffect(() => {
-    setSelectedPriceFeedId(selectedOracle?.priceFeeds[0]?.id || "")
-  }, [selectedOracle])
-  const selectedFeed = selectedOracle?.priceFeeds.find((feed) => feed.id === selectedPriceFeedId)
+    if (selectedOracle?.priceFeeds && selectedOracle.priceFeeds.length > 0) {
+      // Only set default if no price feed is selected or if the current selection doesn't belong to this oracle
+      const currentSelectionExists = selectedOracle.priceFeeds.some(feed => feed.id === selectedPriceFeedId);
+      if (!selectedPriceFeedId || !currentSelectionExists) {
+        setSelectedPriceFeedId(selectedOracle.priceFeeds[0].id);
+      }
+    } else {
+      setSelectedPriceFeedId("");
+    }
+  }, [selectedOracle]);
+  
+  const selectedFeed = selectedOracle?.priceFeeds.find((feed: UIPriceFeed) => feed.id === selectedPriceFeedId);
 
   const handleFormChange = (field: keyof OracleFormData, value: string) => {
     setOracleFormData((prev) => ({
@@ -113,7 +128,7 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
         {/* Render Current Step */}
         {currentStep === "overview" && (
           <OverviewStep
-            oracles={mockOracles}
+            oracles={oracles || []}
             selectedOracleId={selectedOracleId}
             setSelectedOracleId={setSelectedOracleId}
             selectedOracle={selectedOracle}
@@ -138,6 +153,7 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
             onBack={handleBackFromConfigure}
             onAddFeed={handleAddFeed}
             backLabel={configureSource === "create" ? "Back to New Oracle" : "Back to Your Oracles"}
+            oracleId={selectedOracleId}
           />
         )}
       </div>
