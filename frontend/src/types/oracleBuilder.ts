@@ -62,6 +62,7 @@ export interface CreatePriceFeedParams {
   name: string;
   description: string;
   api_key: string;
+  api_key_config: string;
   underlying_url: string;
   response_field: string;
   live_url: string;
@@ -93,6 +94,7 @@ export interface PriceFeedFormData {
   description: string;
   feedId: string;
   api_key: string;
+  api_key_config: string;
   underlying_url: string;
   response_field: string;
   live_url: string;
