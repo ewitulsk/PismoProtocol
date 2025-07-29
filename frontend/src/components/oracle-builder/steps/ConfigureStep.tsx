@@ -28,7 +28,6 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
     id: '',
     name: '',
     description: '',
-    feedId: '',
     api_key: '',
     api_key_config: '',
     underlying_url: 'https://api.example.com/price',

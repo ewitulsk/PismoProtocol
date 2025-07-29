@@ -2,7 +2,7 @@ import React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Plus, Database } from "lucide-react"
+import { Plus, Database, Copy, Check } from "lucide-react"
 import { UIOracle, UIPriceFeed } from "@/types/oracleBuilder"
 
 interface ManagePriceFeedProps {
@@ -18,7 +18,28 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
   setSelectedPriceFeedId,
   handleNavigateToConfigure,
 }) => {
+  const [copiedFeedId, setCopiedFeedId] = React.useState<boolean>(false);
   const selectedFeed = oracle?.priceFeeds.find((feed) => feed.id === selectedPriceFeedId)
+
+  // Reset copied state when selected price feed changes
+  React.useEffect(() => {
+    setCopiedFeedId(false);
+  }, [selectedPriceFeedId]);
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedFeedId(true);
+      setTimeout(() => setCopiedFeedId(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const abbreviateFeedId = (feedId: string) => {
+    if (feedId.length <= 30) return feedId;
+    return `${feedId.slice(0, 24)}...`;
+  };
 
   return (
     <Card className="bg-gray-900 border-gray-800">
@@ -77,11 +98,25 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-gray-400">Price Feed ID:</label>
-                  <Input
-                    className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.feedId}
-                    disabled
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      className="bg-gray-800 border-gray-700 text-gray-300 pr-10 cursor-not-allowed"
+                      value={abbreviateFeedId(selectedFeed.id)}
+                      disabled
+                      title={selectedFeed.id}
+                    />
+                    <button
+                      onClick={() => copyToClipboard(selectedFeed.id)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-700 rounded transition-colors"
+                      title="Copy full ID to clipboard"
+                    >
+                      {copiedFeedId ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-gray-400 hover:text-gray-300" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-400">Underlying URL:</label>

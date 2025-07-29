@@ -135,7 +135,7 @@ const CreateStep: React.FC<CreateStepProps> = ({
               {configuredPriceFeeds.map((feed) => (
                 <div key={feed.id} className="p-3 rounded-lg border bg-gray-800 border-gray-700">
                   <div className="font-medium text-sm text-gray-100">{feed.name}</div>
-                  <div className="text-xs text-gray-400 mt-1">{feed.feedId}</div>
+                  <div className="text-xs text-gray-400 mt-1">{feed.id}</div>
                 </div>
               ))}
             </div>
