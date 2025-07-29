@@ -176,6 +176,33 @@ async function updateLiquidationServiceConfig(info: PerpsDeploymentInfo) {
 
 // --- Oracle Builder Configuration Updates ---
 
+async function updateFrontendConfigForOracleBuilder(info: OracleBuilderDeploymentInfo) {
+  try {
+    let configContent = {};
+
+    try {
+      const configFile = await fs.readFile(frontendConfigPath, 'utf-8');
+      configContent = TOML.parse(configFile);
+    } catch (error: any) {
+      // If the file doesn't exist or is invalid TOML, start with an empty object
+      // but log a warning if it's not a "file not found" error.
+      if (error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not read or parse existing ${path.basename(frontendConfigPath)}. A new one will be created. Error: ${error.message}`);
+      }
+    }
+
+    const updatedConfig = {
+      ...configContent, // Preserve existing values
+      NEXT_PUBLIC_ORACLE_BUILDER_PACKAGE_ID: info.packageId,
+    };
+
+    await fs.writeFile(frontendConfigPath, TOML.stringify(updatedConfig as TOML.JsonMap));
+    console.log(`Successfully updated ${path.basename(frontendConfigPath)} with oracle builder package ID`);
+  } catch (error) {
+    console.error(`Error updating ${path.basename(frontendConfigPath)} for oracle builder:`, error);
+  }
+}
+
 async function updateOracleBuilderIndexerConfig(info: OracleBuilderDeploymentInfo) {
   try {
     const configFile = await fs.readFile(oracleBuilderIndexerConfigPath, 'utf-8');
@@ -237,7 +264,10 @@ async function copyOracleBuilderConfig() {
     console.log(`Read oracle builder deployment info for network: ${deploymentInfo.network}`);
     console.log(`  Package ID: ${deploymentInfo.packageId}`);
 
-    await updateOracleBuilderIndexerConfig(deploymentInfo);
+    await Promise.all([
+      updateFrontendConfigForOracleBuilder(deploymentInfo),
+      updateOracleBuilderIndexerConfig(deploymentInfo),
+    ]);
 
     console.log('Oracle builder configuration copy process finished.');
 
