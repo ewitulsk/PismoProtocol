@@ -26,7 +26,6 @@ interface OracleFormData {
     id: string
     name: string
     description: string
-    feedId: string
     api_key: string
     underlying_url: string
     response_field: string
@@ -52,7 +51,6 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
     id: string
     name: string
     description: string
-    feedId: string
     api_key: string
     underlying_url: string
     response_field: string

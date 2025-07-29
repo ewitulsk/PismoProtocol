@@ -28,7 +28,6 @@ export const transformPriceFeedFromApi = (apiPriceFeed: IndexerPriceFeed): UIPri
     live_url: apiPriceFeed.live_url,
     name: apiPriceFeed.name,
     description: apiPriceFeed.description,
-    feedId: apiPriceFeed.price_feed_id.slice(0, 16),
     isProtected: false, // Default - could be derived from other data
   };
 };

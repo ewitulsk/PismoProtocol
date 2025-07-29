@@ -92,7 +92,6 @@ export interface PriceFeedFormData {
   id: string;
   name: string;
   description: string;
-  feedId: string;
   api_key: string;
   api_key_config: string;
   underlying_url: string;
@@ -115,7 +114,6 @@ export interface UIOracle extends Oracle {
 export interface UIPriceFeed extends PriceFeed {
   name?: string;
   description?: string;
-  feedId?: string;
   isProtected?: boolean;
 }
 
