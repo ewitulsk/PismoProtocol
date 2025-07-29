@@ -54,7 +54,7 @@ const CreateStep: React.FC<CreateStepProps> = ({
     setErrorMessage('');
 
     try {
-      const result = await oracleBuilder.createNewOracle();
+      const result = await oracleBuilder.createNewOracle(formData.name, formData.description);
       
       if (result.success) {
         setCreationStatus('success');

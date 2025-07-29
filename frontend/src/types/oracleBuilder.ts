@@ -52,11 +52,15 @@ export interface PriceFeedInvalidatedEvent {
 
 export interface CreateOracleParams {
   packageId: string;
+  name: string;
+  description: string;
 }
 
 export interface CreatePriceFeedParams {
   packageId: string;
   oracle: SuiObjectRef;
+  name: string;
+  description: string;
   api_key: string;
   underlying_url: string;
   response_field: string;
@@ -86,6 +90,7 @@ export interface OracleFormData {
 export interface PriceFeedFormData {
   id: string;
   name: string;
+  description: string;
   feedId: string;
   api_key: string;
   underlying_url: string;
@@ -107,6 +112,7 @@ export interface UIOracle extends Oracle {
 
 export interface UIPriceFeed extends PriceFeed {
   name?: string;
+  description?: string;
   feedId?: string;
   isProtected?: boolean;
 }

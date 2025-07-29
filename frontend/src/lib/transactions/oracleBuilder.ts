@@ -41,10 +41,10 @@ export async function createOracle(
   signAndExecuteTransaction: (args: SignAndExecuteTransactionArgs) => Promise<SuiSignAndExecuteTransactionOutput>
 ): Promise<OracleCreationResult> {
   try {
-    const { packageId } = params;
+    const { packageId, name, description } = params;
 
-    if (!packageId) {
-      throw new Error('Package ID is required');
+    if (!packageId || !name || !description) {
+      throw new Error('Package ID, name, and description are required');
     }
 
     // Create transaction block
@@ -53,7 +53,10 @@ export async function createOracle(
     // Call the new_oracle function
     transaction.moveCall({
       target: `${packageId}::${ORACLE_BUILDER_MODULE}::${ORACLE_BUILDER_FUNCTIONS.NEW_ORACLE}`,
-      arguments: [],
+      arguments: [
+        transaction.pure.string(name),
+        transaction.pure.string(description),
+      ],
     });
 
     // Execute transaction
@@ -106,9 +109,9 @@ export async function createPriceFeed(
   signAndExecuteTransaction: (args: SignAndExecuteTransactionArgs) => Promise<SuiSignAndExecuteTransactionOutput>
 ): Promise<PriceFeedCreationResult> {
   try {
-    const { packageId, oracle, api_key, underlying_url, response_field, live_url } = params;
+    const { packageId, oracle, name, description, api_key, underlying_url, response_field, live_url } = params;
 
-    if (!packageId || !oracle || !api_key || !underlying_url || !response_field || !live_url) {
+    if (!packageId || !oracle || !name || !description || !api_key || !underlying_url || !response_field || !live_url) {
       throw new Error('All parameters are required for creating a price feed');
     }
 
@@ -125,7 +128,10 @@ export async function createPriceFeed(
       target: `${packageId}::${ORACLE_BUILDER_MODULE}::${ORACLE_BUILDER_FUNCTIONS.NEW_PRICE_FEED}`,
       arguments: [
         transaction.object(oracle.objectId),
-        transaction.pure.string(api_key),
+        transaction.pure.string(name),
+        transaction.pure.string(description),
+        transaction.pure.option('string', api_key),
+        transaction.pure.option('string', null), // api_key_config - not used in current UI
         transaction.pure.string(underlying_url),
         transaction.pure.string(response_field),
         transaction.pure.string(live_url),

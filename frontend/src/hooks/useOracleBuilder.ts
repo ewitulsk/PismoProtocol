@@ -23,7 +23,7 @@ export interface UseOracleBuilderReturn {
   isCreatingPriceFeed: boolean;
   
   // Actions
-  createNewOracle: () => Promise<OracleCreationResult>;
+  createNewOracle: (name: string, description: string) => Promise<OracleCreationResult>;
   createNewPriceFeed: (
     oracle: SuiObjectRef,
     priceFeedData: PriceFeedFormData
@@ -49,7 +49,7 @@ export function useOracleBuilder(): UseOracleBuilderReturn {
   const [isCreatingOracle, setIsCreatingOracle] = useState(false);
   const [isCreatingPriceFeed, setIsCreatingPriceFeed] = useState(false);
 
-  const createNewOracle = useCallback(async (): Promise<OracleCreationResult> => {
+  const createNewOracle = useCallback(async (name: string, description: string): Promise<OracleCreationResult> => {
     if (!ORACLE_BUILDER_CONFIG.packageId) {
       return {
         success: false,
@@ -63,6 +63,8 @@ export function useOracleBuilder(): UseOracleBuilderReturn {
       const result = await createOracle(
         {
           packageId: ORACLE_BUILDER_CONFIG.packageId,
+          name,
+          description,
         },
         signAndExecuteTransaction
       );
@@ -91,6 +93,8 @@ export function useOracleBuilder(): UseOracleBuilderReturn {
         {
           packageId: ORACLE_BUILDER_CONFIG.packageId,
           oracle,
+          name: priceFeedData.name,
+          description: priceFeedData.description,
           api_key: priceFeedData.api_key,
           underlying_url: priceFeedData.underlying_url,
           response_field: priceFeedData.response_field,

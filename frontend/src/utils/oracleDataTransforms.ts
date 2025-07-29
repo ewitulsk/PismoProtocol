@@ -7,9 +7,8 @@ export const transformOracleFromApi = (apiOracle: IndexerOracle): UIOracle => {
     id: apiOracle.oracle_id,
     owner: apiOracle.owner,
     is_valid: apiOracle.is_valid,
-    // Generate UI-friendly display values.  TODO ADD THESE WHEN CONTRACTS SUPPORT NAME/DESC
-    // name: apiOracle.name,
-    //description: apiOracle.description,
+    name: apiOracle.name,
+    description: apiOracle.description,
     type: 'Price Feed',
     status: apiOracle.is_valid ? 'Live' : 'Inactive',
     createdBy: apiOracle.owner,
@@ -27,8 +26,8 @@ export const transformPriceFeedFromApi = (apiPriceFeed: IndexerPriceFeed): UIPri
     underlying_url: apiPriceFeed.underlying_url,
     response_field: apiPriceFeed.response_field,
     live_url: apiPriceFeed.live_url,
-    // Generate UI-friendly display values
-    name: `Price Feed ${apiPriceFeed.price_feed_id.slice(0, 8)}...`,
+    name: apiPriceFeed.name,
+    description: apiPriceFeed.description,
     feedId: apiPriceFeed.price_feed_id.slice(0, 16),
     isProtected: false, // Default - could be derived from other data
   };

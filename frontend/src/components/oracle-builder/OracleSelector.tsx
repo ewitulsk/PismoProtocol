@@ -29,17 +29,17 @@ const OracleSelector: React.FC<OracleSelectorProps> = ({ oracles, selectedOracle
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <div className={
                   oracle.id === selectedOracleId
                     ? "font-semibold text-blue-100"
                     : "font-medium text-gray-100"
-                }>{oracle.name}</div>
+                }>{oracle.name || `Oracle ${oracle.id.slice(0, 8)}...`}</div>
                 <div className={
                   oracle.id === selectedOracleId
                     ? "text-sm text-blue-300 mt-1"
                     : "text-sm text-gray-400 mt-1"
-                }>{oracle.type}</div>
+                }>{oracle.description ? oracle.description.slice(0, 60) + (oracle.description.length > 60 ? '...' : '') : 'No description'}</div>
               </div>
               <Badge
                 variant={oracle.id === selectedOracleId ? "secondary" : "outline"}
