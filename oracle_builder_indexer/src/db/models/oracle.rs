@@ -10,6 +10,8 @@ pub struct Oracle {
     pub oracle_id: String,
     pub owner: String,
     pub is_valid: bool,
+    pub name: String,
+    pub description: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -20,4 +22,6 @@ pub struct NewOracle {
     pub oracle_id: String,
     pub owner: String,
     pub is_valid: bool,
+    pub name: String,
+    pub description: String,
 } 

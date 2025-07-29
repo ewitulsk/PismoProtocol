@@ -7,6 +7,8 @@ CREATE TABLE price_feeds (
     underlying_url TEXT NOT NULL,
     response_field TEXT NOT NULL,
     live_url TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     FOREIGN KEY (oracle_id) REFERENCES oracles(oracle_id)

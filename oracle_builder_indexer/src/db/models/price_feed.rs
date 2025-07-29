@@ -15,6 +15,8 @@ pub struct PriceFeed {
     pub underlying_url: String,
     pub response_field: String,
     pub live_url: String,
+    pub name: String,
+    pub description: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -30,4 +32,6 @@ pub struct NewPriceFeed {
     pub underlying_url: String,
     pub response_field: String,
     pub live_url: String,
+    pub name: String,
+    pub description: String,
 } 

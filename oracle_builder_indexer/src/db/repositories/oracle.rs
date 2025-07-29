@@ -111,6 +111,8 @@ impl BaseRepository<Oracle, NewOracle> for OracleRepository {
         diesel::update(oracles.filter(oracle_id.eq(id)))
             .set((
                 owner.eq(&updated_oracle.owner),
+                name.eq(&updated_oracle.name),
+                description.eq(&updated_oracle.description),
                 is_valid.eq(&updated_oracle.is_valid),
                 updated_at.eq(chrono::Utc::now())
             ))

@@ -16,12 +16,16 @@ module oracle_builder::oracle_builder {
     public struct Oracle has key, store {
         id: UID,
         owner: address,
+        name: String,
+        description: String,
         is_valid: bool,
     }
 
     public struct PriceFeed has key, store {
         id: UID,
         oracle_id: address,
+        name: String,
+        description: String,
         is_valid: bool,
         api_key: Option<String>,
         api_key_config: Option<String>,
@@ -35,6 +39,8 @@ module oracle_builder::oracle_builder {
     public struct OracleCreated has copy, drop {
         oracle_id: address,
         owner: address,
+        name: String,
+        description: String,
         is_valid: bool,
     }
 
@@ -42,6 +48,8 @@ module oracle_builder::oracle_builder {
         price_feed_id: address,
         oracle_id: address,
         owner: address,
+        name: String,
+        description: String,
         is_valid: bool,
         api_key: Option<String>,
         api_key_config: Option<String>,
@@ -71,7 +79,11 @@ module oracle_builder::oracle_builder {
         transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
-    public fun new_oracle(ctx: &mut TxContext) {
+    public fun new_oracle(
+        name: String,
+        description: String,
+        ctx: &mut TxContext
+    ) {
         let oracle_id = object::new(ctx);
         let oracle_address = object::uid_to_address(&oracle_id);
         let owner = tx_context::sender(ctx);
@@ -79,12 +91,16 @@ module oracle_builder::oracle_builder {
         let oracle = Oracle {
             id: oracle_id,
             owner,
+            name,
+            description,
             is_valid: true,
         };
 
         event::emit(OracleCreated {
             oracle_id: oracle_address,
             owner,
+            name,
+            description,
             is_valid: true,
         });
 
@@ -93,6 +109,8 @@ module oracle_builder::oracle_builder {
 
     public fun new_price_feed(
         oracle: &Oracle,
+        name: String,
+        description: String,
         api_key: Option<String>,
         api_key_config: Option<String>,
         underlying_url: String,
@@ -113,6 +131,8 @@ module oracle_builder::oracle_builder {
         let price_feed = PriceFeed {
             id: price_feed_id,
             oracle_id: oracle_address,
+            name,
+            description,
             is_valid: true,
             api_key,
             api_key_config,
@@ -125,6 +145,8 @@ module oracle_builder::oracle_builder {
             price_feed_id: price_feed_address,
             oracle_id: oracle_address,
             owner: caller,
+            name,
+            description,
             is_valid: true,
             api_key,
             api_key_config,
@@ -173,12 +195,28 @@ module oracle_builder::oracle_builder {
         oracle.is_valid
     }
 
+    public fun get_oracle_name(oracle: &Oracle): String {
+        oracle.name
+    }
+
+    public fun get_oracle_description(oracle: &Oracle): String {
+        oracle.description
+    }
+
     public fun get_price_feed_oracle_id(price_feed: &PriceFeed): address {
         price_feed.oracle_id
     }
 
     public fun get_price_feed_validity(price_feed: &PriceFeed): bool {
         price_feed.is_valid
+    }
+
+    public fun get_price_feed_name(price_feed: &PriceFeed): String {
+        price_feed.name
+    }
+
+    public fun get_price_feed_description(price_feed: &PriceFeed): String {
+        price_feed.description
     }
 }
 
