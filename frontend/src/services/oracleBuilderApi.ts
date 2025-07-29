@@ -25,6 +25,8 @@ export interface IndexerOracle {
   oracle_id: string;
   owner: string;
   is_valid: boolean;
+  name: string;
+  description: string;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +35,8 @@ export interface IndexerPriceFeed {
   price_feed_id: string;
   oracle_id: string;
   is_valid: boolean;
+  name: string;
+  description: string;
   api_key: string;
   underlying_url: string;
   response_field: string;

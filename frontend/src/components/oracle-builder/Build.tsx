@@ -25,6 +25,7 @@ interface OracleFormData {
   priceFeeds: Array<{
     id: string
     name: string
+    description: string
     feedId: string
     api_key: string
     underlying_url: string
@@ -47,10 +48,10 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
     priceFeeds: [],
   })
 
-  // Sample configured price feeds for the new oracle (mock)
   const [configuredPriceFeeds, setConfiguredPriceFeeds] = useState<Array<{
     id: string
     name: string
+    description: string
     feedId: string
     api_key: string
     underlying_url: string

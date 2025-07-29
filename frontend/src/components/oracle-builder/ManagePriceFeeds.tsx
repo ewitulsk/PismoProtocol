@@ -56,7 +56,7 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium text-sm">{feed.name}</div>
-                      <div className="text-xs text-gray-400 mt-1">{feed.feedId}</div>
+                      <div className="text-xs text-gray-400 mt-1">{feed.description}</div>
                     </div>
                     {feed.isProtected && (
                       <div className="text-xs text-yellow-400 bg-yellow-900/20 px-2 py-1 rounded">Protected</div>

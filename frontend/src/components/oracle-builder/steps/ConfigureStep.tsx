@@ -27,6 +27,7 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
   const [formData, setFormData] = useState<PriceFeedFormData>({
     id: '',
     name: '',
+    description: '',
     feedId: '',
     api_key: '',
     underlying_url: 'https://api.example.com/price',
@@ -57,7 +58,7 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
       return;
     }
 
-    if (!formData.api_key.trim() || !formData.underlying_url.trim() || !formData.response_field.trim() || !formData.live_url.trim()) {
+    if (!formData.name.trim() || !formData.description.trim() || !formData.api_key.trim() || !formData.underlying_url.trim() || !formData.response_field.trim() || !formData.live_url.trim()) {
       setErrorMessage('All fields are required');
       setCreationStatus('error');
       return;
@@ -91,7 +92,9 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
     }
   };
 
-  const isFormValid = formData.api_key.trim() && 
+  const isFormValid = formData.name.trim() &&
+                     formData.description.trim() &&
+                     formData.api_key.trim() && 
                      formData.underlying_url.trim() && 
                      formData.response_field.trim() && 
                      formData.live_url.trim();
@@ -119,6 +122,24 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
             <CardTitle className="text-lg font-bold text-gray-100">API Configuration</CardTitle>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-300">Name:</Label>
+              <Input
+                className="bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-500 focus:border-blue-500"
+                placeholder="Enter price feed name..."
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-300">Description:</Label>
+              <Input
+                className="bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-500 focus:border-blue-500"
+                placeholder="Describe what this price feed provides..."
+                value={formData.description}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-300">API Key:</Label>
               <Input
@@ -166,6 +187,18 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
           </CardHeader>
           <CardContent className="p-6">
             <div className="space-y-3 text-sm">
+              <div>
+                <span className="text-gray-400">Name:</span>
+                <span className="text-gray-100 ml-2">
+                  {formData.name || 'Not set'}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">Description:</span>
+                <span className="text-gray-100 ml-2">
+                  {formData.description || 'Not set'}
+                </span>
+              </div>
               <div>
                 <span className="text-gray-400">API Key:</span>
                 <span className="text-gray-100 ml-2">

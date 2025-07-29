@@ -48,7 +48,7 @@ const PriceFeeds: React.FC<PriceFeedsProps> = ({ selectedOracle }) => {
                   onClick={() => setSelectedPriceFeed(feed.id)}
                 >
                   <div className="font-medium text-sm">{feed.name}</div>
-                  <div className="text-xs text-gray-400 mt-1">{feed.feedId}</div>
+                  <div className="text-xs text-gray-400 mt-1">{feed.description}</div>
                 </div>
               ))}
             </div>
