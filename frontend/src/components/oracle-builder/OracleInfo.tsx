@@ -1,6 +1,7 @@
 import React from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Database } from "lucide-react"
+import { abbreviateAddress } from "@/utils/addressUtils"
 
 interface OracleInfoProps {
   selectedOracle: any
@@ -22,7 +23,7 @@ const OracleInfo: React.FC<OracleInfoProps> = ({ selectedOracle }) => (
           <div className="space-y-4">
             <div>
               <span className="text-sm font-medium text-gray-400">Created By</span>
-              <div className="text-gray-100 mt-1">{selectedOracle.createdBy}</div>
+              <div className="text-gray-100 mt-1 font-mono">{abbreviateAddress(selectedOracle.createdBy)}</div>
             </div>
             <div>
               <span className="text-sm font-medium text-gray-400">Usage Fee</span>
@@ -32,7 +33,7 @@ const OracleInfo: React.FC<OracleInfoProps> = ({ selectedOracle }) => (
           <div className="space-y-4">
             <div>
               <span className="text-sm font-medium text-gray-400">Oracle ID</span>
-              <div className="text-gray-100 mt-1 font-mono">{selectedOracle.id}</div>
+              <div className="text-gray-100 mt-1 font-mono">{abbreviateAddress(selectedOracle.id)}</div>
             </div>
             <div>
               <span className="text-sm font-medium text-gray-400">Trusted By</span>

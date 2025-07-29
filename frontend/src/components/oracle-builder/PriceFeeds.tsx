@@ -70,7 +70,7 @@ const PriceFeeds: React.FC<PriceFeedsProps> = ({ selectedOracle }) => {
                   <label className="text-xs font-medium text-gray-400">Underlying URL:</label>
                   <Input
                     className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.underlyingUrl}
+                    value={selectedFeed.underlying_url}
                     disabled
                   />
                 </div>
@@ -78,7 +78,7 @@ const PriceFeeds: React.FC<PriceFeedsProps> = ({ selectedOracle }) => {
                   <label className="text-xs font-medium text-gray-400">Response Field:</label>
                   <Input
                     className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.responseField}
+                    value={selectedFeed.response_field}
                     disabled
                   />
                 </div>
@@ -86,7 +86,7 @@ const PriceFeeds: React.FC<PriceFeedsProps> = ({ selectedOracle }) => {
                   <label className="text-xs font-medium text-gray-400">Live URL:</label>
                   <Input
                     className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.liveUrl}
+                    value={selectedFeed.live_url}
                     disabled
                   />
                 </div>

@@ -3,10 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Plus, Database } from "lucide-react"
-import { Oracle, PriceFeed } from "./mockOracles"
+import { UIOracle, UIPriceFeed } from "@/types/oracleBuilder"
 
 interface ManagePriceFeedProps {
-  oracle: Oracle | undefined
+  oracle: UIOracle | undefined
   selectedPriceFeedId: string
   setSelectedPriceFeedId: (id: string) => void
   handleNavigateToConfigure: (source: string) => void
@@ -87,7 +87,7 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
                   <label className="text-xs font-medium text-gray-400">Underlying URL:</label>
                   <Input
                     className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.underlyingUrl}
+                    value={selectedFeed.underlying_url}
                     disabled
                   />
                 </div>
@@ -95,7 +95,7 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
                   <label className="text-xs font-medium text-gray-400">Response Field:</label>
                   <Input
                     className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.responseField}
+                    value={selectedFeed.response_field}
                     disabled
                   />
                 </div>
@@ -103,7 +103,7 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
                   <label className="text-xs font-medium text-gray-400">Live URL:</label>
                   <Input
                     className="bg-gray-800 border-gray-700 text-gray-300 mt-1 cursor-not-allowed"
-                    value={selectedFeed.liveUrl}
+                    value={selectedFeed.live_url}
                     disabled
                   />
                 </div>

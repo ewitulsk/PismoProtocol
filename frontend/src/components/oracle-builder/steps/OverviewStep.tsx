@@ -3,13 +3,13 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import OracleSelector from "../OracleSelector"
 import { ManagePriceFeeds } from "../ManagePriceFeeds"
-import { Oracle } from "../mockOracles"
+import { UIOracle } from "@/types/oracleBuilder"
 
 interface OverviewStepProps {
-  oracles: Oracle[]
+  oracles: UIOracle[]
   selectedOracleId: string
   setSelectedOracleId: (id: string) => void
-  selectedOracle: Oracle | undefined
+  selectedOracle: UIOracle | undefined
   selectedPriceFeedId: string
   setSelectedPriceFeedId: (id: string) => void
   onCreateNew: () => void
