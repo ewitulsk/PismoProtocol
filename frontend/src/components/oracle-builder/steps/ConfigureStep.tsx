@@ -30,6 +30,7 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
     description: '',
     feedId: '',
     api_key: '',
+    api_key_config: '',
     underlying_url: 'https://api.example.com/price',
     response_field: 'price',
     live_url: 'https://oracle.example.com/feed',
@@ -39,10 +40,19 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleInputChange = (field: keyof PriceFeedFormData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      
+      // Clear API key config when API key is cleared
+      if (field === 'api_key' && !value.trim()) {
+        updated.api_key_config = '';
+      }
+      
+      return updated;
+    });
   };
 
   const handleCreatePriceFeed = async () => {
@@ -58,8 +68,8 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
       return;
     }
 
-    if (!formData.name.trim() || !formData.description.trim() || !formData.api_key.trim() || !formData.underlying_url.trim() || !formData.response_field.trim() || !formData.live_url.trim()) {
-      setErrorMessage('All fields are required');
+    if (!formData.name.trim() || !formData.description.trim() || !formData.underlying_url.trim() || !formData.response_field.trim() || !formData.live_url.trim()) {
+      setErrorMessage('Name, description, underlying URL, response field, and live URL are required');
       setCreationStatus('error');
       return;
     }
@@ -93,8 +103,7 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
   };
 
   const isFormValid = formData.name.trim() &&
-                     formData.description.trim() &&
-                     formData.api_key.trim() && 
+                     formData.description.trim() && 
                      formData.underlying_url.trim() && 
                      formData.response_field.trim() && 
                      formData.live_url.trim();
@@ -141,13 +150,25 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-300">API Key:</Label>
+              <Label className="text-sm font-medium text-gray-300">API Key (Optional):</Label>
               <Input
                 type="password"
                 className="bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-500 focus:border-blue-500"
-                placeholder="Enter your API key..."
+                placeholder="Enter your API key (if required)..."
                 value={formData.api_key}
                 onChange={(e) => handleInputChange('api_key', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-300">API Key Config:</Label>
+              <Input
+                className={`bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-500 focus:border-blue-500 ${
+                  !formData.api_key.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                placeholder="Enter API key configuration (headers, query params, etc)..."
+                value={formData.api_key_config}
+                onChange={(e) => handleInputChange('api_key_config', e.target.value)}
+                disabled={!formData.api_key.trim()}
               />
             </div>
             <div className="space-y-2">
@@ -202,7 +223,13 @@ const ConfigureStep: React.FC<ConfigureStepProps> = ({
               <div>
                 <span className="text-gray-400">API Key:</span>
                 <span className="text-gray-100 ml-2">
-                  {formData.api_key ? '••••••••' : 'Not set'}
+                  {formData.api_key ? '••••••••' : 'Not provided'}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">API Key Config:</span>
+                <span className="text-gray-100 ml-2">
+                  {formData.api_key_config || 'Not set'}
                 </span>
               </div>
               <div>

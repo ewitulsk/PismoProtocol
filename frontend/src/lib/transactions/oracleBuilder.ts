@@ -109,10 +109,10 @@ export async function createPriceFeed(
   signAndExecuteTransaction: (args: SignAndExecuteTransactionArgs) => Promise<SuiSignAndExecuteTransactionOutput>
 ): Promise<PriceFeedCreationResult> {
   try {
-    const { packageId, oracle, name, description, api_key, underlying_url, response_field, live_url } = params;
+    const { packageId, oracle, name, description, api_key, api_key_config, underlying_url, response_field, live_url } = params;
 
-    if (!packageId || !oracle || !name || !description || !api_key || !underlying_url || !response_field || !live_url) {
-      throw new Error('All parameters are required for creating a price feed');
+    if (!packageId || !oracle || !name || !description || !underlying_url || !response_field || !live_url) {
+      throw new Error('Package ID, oracle, name, description, underlying URL, response field, and live URL are required for creating a price feed');
     }
 
     // Validate URLs
@@ -130,8 +130,8 @@ export async function createPriceFeed(
         transaction.object(oracle.objectId),
         transaction.pure.string(name),
         transaction.pure.string(description),
-        transaction.pure.option('string', api_key),
-        transaction.pure.option('string', null), // api_key_config - not used in current UI
+        transaction.pure.option('string', api_key || null),
+        transaction.pure.option('string', api_key_config || null),
         transaction.pure.string(underlying_url),
         transaction.pure.string(response_field),
         transaction.pure.string(live_url),

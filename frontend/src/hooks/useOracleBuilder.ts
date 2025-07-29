@@ -96,6 +96,7 @@ export function useOracleBuilder(): UseOracleBuilderReturn {
           name: priceFeedData.name,
           description: priceFeedData.description,
           api_key: priceFeedData.api_key,
+          api_key_config: priceFeedData.api_key_config,
           underlying_url: priceFeedData.underlying_url,
           response_field: priceFeedData.response_field,
           live_url: priceFeedData.live_url,
