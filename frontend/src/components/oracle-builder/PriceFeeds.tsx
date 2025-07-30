@@ -8,7 +8,6 @@ interface PriceFeedsProps {
   selectedOracle: any
 }
 
-
 const PriceFeeds: React.FC<PriceFeedsProps> = ({ selectedOracle }) => {
   const [selectedPriceFeed, setSelectedPriceFeed] = React.useState<string>("");
   const [copiedFeedId, setCopiedFeedId] = React.useState<boolean>(false);
@@ -40,8 +39,9 @@ const PriceFeeds: React.FC<PriceFeedsProps> = ({ selectedOracle }) => {
   };
 
   const abbreviateFeedId = (feedId: string) => {
-    if (feedId.length <= 30) return feedId;
-    return `${feedId.slice(0, 24)}...`;
+    // console.log("Abbreviating feed ID:", feedId);
+    if (feedId?.length <= 30) return feedId;
+    return `${feedId?.slice(0, 24)}...`;
   };
 
   return (

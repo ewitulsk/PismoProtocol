@@ -4,11 +4,13 @@ import React, { useState } from "react"
 import OracleNav from "./OracleNav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search, Filter, Loader2, AlertCircle } from "lucide-react"
+import { Search, Filter, Loader2, AlertCircle, Wifi, WifiOff } from "lucide-react"
 import OracleSelector from "./OracleSelector"
 import OracleInfo from "./OracleInfo"
 import PriceFeeds from "./PriceFeeds"
 import { useOraclesWithPriceFeeds } from "@/hooks/useOracleBuilderData"
+import { useOracleBuilderRealtimeUpdates } from "@/hooks/useOracleWebSocket"
+import { WebSocketConnectionState } from "@/types/oracleWebSocket"
 
 interface OracleDashboardProps {
   onNavigate?: (tab: string) => void
@@ -37,9 +39,51 @@ const ErrorDisplay = ({ error }: { error: Error }) => (
   </div>
 );
 
+// WebSocket connection status indicator
+const ConnectionStatus = ({ connectionState }: { 
+  connectionState: WebSocketConnectionState;
+}) => (
+  <div className="flex items-center gap-2 text-sm">
+    {connectionState.isConnecting ? (
+      <>
+        <Loader2 className="w-4 h-4 animate-spin text-yellow-400" />
+        <span className="text-yellow-400">
+          {connectionState.error?.includes('Reconnecting') 
+            ? connectionState.error
+            : 'Connecting to real-time updates...'}
+        </span>
+      </>
+    ) : connectionState.isConnected ? (
+      <>
+        <Wifi className="w-4 h-4 text-green-400" />
+        <span className="text-green-400">Real-time updates active</span>
+      </>
+    ) : (
+      <>
+        <WifiOff className="w-4 h-4 text-red-400" />
+        <span className="text-red-400">
+          {connectionState.error 
+            ? connectionState.error 
+            : 'Real-time updates offline'}
+        </span>
+      </>
+    )}
+  </div>
+);
+
 export default function Component({ onNavigate }: OracleDashboardProps) {
-  // Fetch real oracle data
-  const { data: oracles, isLoading, error } = useOraclesWithPriceFeeds();
+  // Fetch oracle data via REST API with real-time integration
+  const { 
+    data: oracles, 
+    isLoading, 
+    error,
+    isConnected: isRealtimeConnected,
+    lastUpdateTime,
+    updateCount
+  } = useOraclesWithPriceFeeds();
+  
+  // Set up simple WebSocket connection for console logging
+  const { connection } = useOracleBuilderRealtimeUpdates();
   
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("")
@@ -89,6 +133,14 @@ export default function Component({ onNavigate }: OracleDashboardProps) {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-7xl mx-auto p-6">
         <OracleNav activeTab="oracles" />
+        
+        {/* Real-time connection status */}
+        <div className="mb-4 p-3 bg-gray-900 rounded-lg border border-gray-800">
+          <ConnectionStatus 
+            connectionState={connection}
+          />
+        </div>
+        
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Left Sidebar */}
           <div className="lg:col-span-2 space-y-6">

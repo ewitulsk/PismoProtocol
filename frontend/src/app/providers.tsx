@@ -6,6 +6,7 @@ import { getFullnodeUrl } from "@mysten/sui/client";
 import '@mysten/dapp-kit/dist/index.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { customTheme } from "@/styles/customTheme";
+import { ToastProvider } from '@/components/ui/ToastNotifications';
 
 const queryClient = new QueryClient();
 
@@ -32,7 +33,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SuiClientProvider networks={networkConfig} defaultNetwork={defaultNetwork}>
         {/* Consider adding autoConnect={true} if you want the wallet to connect automatically on page load */}
         <WalletProvider theme={customTheme}>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </WalletProvider>
       </SuiClientProvider>
     </QueryClientProvider>

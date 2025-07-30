@@ -37,8 +37,9 @@ export const ManagePriceFeeds: React.FC<ManagePriceFeedProps> = ({
   };
 
   const abbreviateFeedId = (feedId: string) => {
-    if (feedId.length <= 30) return feedId;
-    return `${feedId.slice(0, 24)}...`;
+    // console.log("Abbreviating feed ID:", feedId);
+    if (feedId?.length <= 30) return feedId;
+    return `${feedId?.slice(0, 24)}...`;
   };
 
   return (

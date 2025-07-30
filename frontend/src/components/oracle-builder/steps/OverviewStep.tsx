@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import OracleSelector from "../OracleSelector"
 import { ManagePriceFeeds } from "../ManagePriceFeeds"
-import { UIOracle } from "@/types/oracleBuilder"
+import { UIOracle, UIPriceFeed } from "@/types/oracleBuilder"
 
 interface OverviewStepProps {
   oracles: UIOracle[]
