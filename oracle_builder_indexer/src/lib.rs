@@ -4,6 +4,7 @@ pub mod events;
 pub mod worker;
 pub mod router;
 pub mod handlers;
+pub mod websocket;
 
 pub use config::Config;
 pub use worker::OracleBuilderWorker;
