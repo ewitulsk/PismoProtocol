@@ -7,6 +7,7 @@ import {
   transformOracleWithPriceFeeds
 } from '@/utils/oracleDataTransforms';
 import { UIOracle, UIPriceFeed } from '@/types/oracleBuilder';
+import { useRealtimeDataIntegration } from './useRealtimeDataIntegration';
 
 // Hook to fetch all oracles
 export const useOracles = (ownerId?: string, enabled: boolean = true) => {
@@ -91,14 +92,25 @@ export const usePriceFeedsByOracle = (oracleId: string) => {
   });
 };
 
-// Combined hook to fetch oracles with their price feeds (transformed for UI)
+// Combined hook to fetch oracles with their price feeds (transformed for UI) with real-time updates
 export const useOraclesWithPriceFeeds = (ownerId?: string, enabled: boolean = true): {
   data: UIOracle[] | undefined;
   isLoading: boolean;
   error: Error | null;
+  // Real-time integration status
+  isConnected?: boolean;
+  lastUpdateTime?: Date | null;
+  updateCount?: number;
 } => {
   const { data: oracles, isLoading: oraclesLoading, error: oraclesError } = useOracles(ownerId, enabled);
   const { data: priceFeeds, isLoading: priceFeedsLoading, error: priceFeedsError } = usePriceFeeds();
+
+  // Set up real-time integration for all oracles
+  const realtimeIntegration = useRealtimeDataIntegration({
+    enableOptimisticUpdates: true,
+    enableToastNotifications: false,
+    autoSubscribe: enabled
+  });
 
   const isLoading = oraclesLoading || priceFeedsLoading;
   const error = oraclesError || priceFeedsError;
@@ -113,6 +125,10 @@ export const useOraclesWithPriceFeeds = (ownerId?: string, enabled: boolean = tr
     data: transformedData,
     isLoading,
     error,
+    // Real-time status
+    isConnected: realtimeIntegration.isConnected,
+    lastUpdateTime: realtimeIntegration.lastUpdateTime,
+    updateCount: realtimeIntegration.updateCount
   };
 };
 
@@ -139,10 +155,17 @@ export const useOracleWithPriceFeeds = (oracleId: string): {
   };
 };
 
-// Hook to fetch user's own oracles
+// Hook to fetch user's own oracles with real-time integration
 export const useMyOracles = () => {
   const currentAccount = useCurrentAccount();
   const ownerAddress = currentAccount?.address;
+  
+  // Set up WebSocket integration for user's oracles
+  const realtimeIntegration = useRealtimeDataIntegration({
+    enableOptimisticUpdates: true,
+    enableToastNotifications: false,
+    autoSubscribe: !!ownerAddress
+  });
   
   // Only make the API call if we have a wallet connected
   const result = useOraclesWithPriceFeeds(ownerAddress, !!ownerAddress);
@@ -152,11 +175,21 @@ export const useMyOracles = () => {
     return {
       data: [],
       isLoading: false,
-      error: null
+      error: null,
+      // Real-time status
+      isConnected: realtimeIntegration.isConnected,
+      lastUpdateTime: realtimeIntegration.lastUpdateTime,
+      updateCount: realtimeIntegration.updateCount
     };
   }
 
-  return result;
+  return {
+    ...result,
+    // Real-time status
+    isConnected: realtimeIntegration.isConnected,
+    lastUpdateTime: realtimeIntegration.lastUpdateTime,
+    updateCount: realtimeIntegration.updateCount
+  };
 };
 
 // Hook for transformed price feeds

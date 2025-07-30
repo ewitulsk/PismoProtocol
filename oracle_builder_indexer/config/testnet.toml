@@ -1,7 +1,7 @@
 [indexer]
 package_id = "0x3c15ce11b86d364572f00a40b508d4a80f06d213f37e6b77db3932ffec5c7127"
 remote_store_url = "https://checkpoints.testnet.sui.io"
-start_checkpoint = 223_816_191
+start_checkpoint = 224178340
 concurrency = 4
 
 [database]
