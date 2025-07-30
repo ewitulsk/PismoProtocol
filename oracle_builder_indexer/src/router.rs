@@ -14,8 +14,9 @@ use crate::handlers::{
     oracles::{get_oracles, get_oracle_by_id},
     price_feeds::{get_price_feeds, get_price_feed_by_id},
 };
+use crate::websocket::{WebSocketState, websocket_handler};
 
-pub fn create_router(db_pool: Arc<DBPool>) -> Router {
+pub fn create_router(db_pool: Arc<DBPool>, ws_state: WebSocketState) -> Router {
     // API v0 routes
     let api_v0 = Router::new()
         // Oracle routes
@@ -23,15 +24,21 @@ pub fn create_router(db_pool: Arc<DBPool>) -> Router {
         .route("/oracles/:id", get(get_oracle_by_id))
         // Price feed routes  
         .route("/price-feeds", get(get_price_feeds))
-        .route("/price-feeds/:id", get(get_price_feed_by_id));
+        .route("/price-feeds/:id", get(get_price_feed_by_id))
+        .with_state(db_pool);
+
+    // WebSocket route
+    let ws_routes = Router::new()
+        .route("/ws", get(websocket_handler))
+        .with_state(ws_state);
 
     // Main router with middleware
     Router::new()
         .nest("/v0", api_v0)
+        .merge(ws_routes)
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
                 .layer(CorsLayer::permissive())
         )
-        .with_state(db_pool)
 } 

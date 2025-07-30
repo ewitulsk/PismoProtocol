@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, error};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use sui_data_ingestion_core::Worker;
 use sui_types::full_checkpoint_content::CheckpointData;
@@ -13,6 +14,7 @@ use crate::events::{
 use crate::config::Config;
 use crate::db::repositories::{DBPool, oracle::OracleRepository, price_feed::PriceFeedRepository};
 use crate::db::repositories::base::BaseRepository;
+use crate::websocket::messages::InternalBroadcastMessage;
 
 pub struct OracleBuilderWorker {
     oracle_created_event_type: String,
@@ -21,6 +23,7 @@ pub struct OracleBuilderWorker {
     price_feed_invalidated_event_type: String,
     oracle_repository: OracleRepository,
     price_feed_repository: PriceFeedRepository,
+    broadcast_sender: Option<mpsc::UnboundedSender<InternalBroadcastMessage>>,
 }
 
 impl OracleBuilderWorker {
@@ -51,6 +54,22 @@ impl OracleBuilderWorker {
             price_feed_invalidated_event_type,
             oracle_repository,
             price_feed_repository,
+            broadcast_sender: None,
+        }
+    }
+
+    /// Set the WebSocket broadcast sender for real-time updates
+    pub fn set_broadcast_sender(&mut self, sender: mpsc::UnboundedSender<InternalBroadcastMessage>) {
+        self.broadcast_sender = Some(sender);
+        info!("WebSocket broadcast sender configured");
+    }
+
+    /// Send a broadcast message if WebSocket is configured
+    fn broadcast(&self, message: InternalBroadcastMessage) {
+        if let Some(ref sender) = self.broadcast_sender {
+            if let Err(e) = sender.send(message) {
+                error!("Failed to send WebSocket broadcast message: {}", e);
+            }
         }
     }
 }
@@ -84,6 +103,8 @@ impl Worker for OracleBuilderWorker {
                                     match self.oracle_repository.create(new_oracle).await {
                                         Ok(oracle) => {
                                             info!("Successfully created Oracle in database: {}", oracle.oracle_id);
+                                            // Broadcast the oracle creation event
+                                            self.broadcast(InternalBroadcastMessage::OracleCreated(oracle));
                                         },
                                         Err(e) => {
                                             error!("Failed to create Oracle in database for tx {}: {}", tx_digest_str, e);
@@ -107,6 +128,8 @@ impl Worker for OracleBuilderWorker {
                                     match self.price_feed_repository.create(new_price_feed).await {
                                         Ok(price_feed) => {
                                             info!("Successfully created PriceFeed in database: {}", price_feed.price_feed_id);
+                                            // Broadcast the price feed creation event
+                                            self.broadcast(InternalBroadcastMessage::PriceFeedCreated(price_feed));
                                         },
                                         Err(e) => {
                                             error!("Failed to create PriceFeed in database for tx {}: {}", tx_digest_str, e);
@@ -130,6 +153,8 @@ impl Worker for OracleBuilderWorker {
                                     match self.oracle_repository.update_validity(&oracle_id, false).await {
                                         Ok(oracle) => {
                                             info!("Successfully invalidated Oracle in database: {}", oracle.oracle_id);
+                                            // Broadcast the oracle invalidation event
+                                            self.broadcast(InternalBroadcastMessage::OracleInvalidated(oracle.oracle_id));
                                         },
                                         Err(e) => {
                                             error!("Failed to invalidate Oracle in database for tx {}: {}", tx_digest_str, e);
@@ -153,6 +178,11 @@ impl Worker for OracleBuilderWorker {
                                     match self.price_feed_repository.update_validity(&price_feed_id, false).await {
                                         Ok(price_feed) => {
                                             info!("Successfully invalidated PriceFeed in database: {}", price_feed.price_feed_id);
+                                            // Broadcast the price feed invalidation event
+                                            self.broadcast(InternalBroadcastMessage::PriceFeedInvalidated {
+                                                price_feed_id: price_feed.price_feed_id,
+                                                oracle_id: price_feed.oracle_id,
+                                            });
                                         },
                                         Err(e) => {
                                             error!("Failed to invalidate PriceFeed in database for tx {}: {}", tx_digest_str, e);
@@ -171,7 +201,7 @@ impl Worker for OracleBuilderWorker {
                     }
                 }
             }
-        }
+        }        
         Ok(())
     }
 } 
