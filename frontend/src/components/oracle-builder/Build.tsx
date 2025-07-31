@@ -107,13 +107,6 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
   const { connection, recentMessages } = useOracleBuilderRealtimeUpdates(
     currentAccount?.address
   );
-  
-  // State for create/configure steps (unaffected by overview selectors)
-  const [oracleFormData, setOracleFormData] = useState<OracleFormData>({
-    name: "",
-    description: "",
-    priceFeeds: [],
-  })
 
   const [configuredPriceFeeds, setConfiguredPriceFeeds] = useState<Array<{
     id: string
@@ -156,12 +149,25 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
   
   const selectedFeed = selectedOracle?.priceFeeds.find((feed: UIPriceFeed) => feed.id === selectedPriceFeedId);
 
-  const handleFormChange = (field: keyof OracleFormData, value: string) => {
-    setOracleFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
+  // Track when we're in the process of creating a new oracle
+  const [isCreatingOracle, setIsCreatingOracle] = useState(false);
+
+  // Listen for WebSocket messages to detect new oracle creation
+  React.useEffect(() => {
+    if (recentMessages && recentMessages.length > 0 && isCreatingOracle) {
+      const latestMessage = recentMessages[0];
+      // console.log("Latest WebSocket message:", latestMessage);
+      
+      // Check if the message indicates a new oracle was created
+      if (latestMessage.messageType === 'oracle_created') {
+        const newOracleId = latestMessage.parsedData?.oracle?.id;
+        if (newOracleId) {
+          setSelectedOracleId(newOracleId);
+          setIsCreatingOracle(false);
+        }
+      }
+    }
+  }, [recentMessages, isCreatingOracle]);
 
   const handleNavigateToConfigure = (source: ConfigureSource) => {
     setConfigureSource(source)
@@ -186,6 +192,10 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
 
   const handleContinueToConfiguration = () => {
     setCurrentStep("configure")
+  }
+
+  const handleOracleCreationStarted = () => {
+    setIsCreatingOracle(true);
   }
 
   return (
@@ -225,12 +235,11 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
         )}
         {currentStep === "create" && (
           <CreateStep
-            formData={oracleFormData}
-            onFormChange={handleFormChange}
             configuredPriceFeeds={configuredPriceFeeds}
             onAddFeed={handleAddFeed}
             onNext={handleContinueToConfiguration}
             onBack={handleBackToOverview}
+            onOracleCreationStarted={handleOracleCreationStarted}
           />
         )}
         {currentStep === "configure" && (
