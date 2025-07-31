@@ -179,6 +179,7 @@ export default function Component({ onNavigate }: OracleDashboardProps) {
               oracles={filteredOracles}
               selectedOracleId={selectedOracleId}
               setSelectedOracleId={setSelectedOracleId}
+              emptyState="dashboard"
             />
           </div>
           {/* Right Main Content */}
