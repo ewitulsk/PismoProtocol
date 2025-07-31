@@ -15,22 +15,32 @@ interface OracleFormData {
 }
 
 interface CreateStepProps {
-  formData: OracleFormData
-  onFormChange: (field: keyof OracleFormData, value: string) => void
   configuredPriceFeeds: Array<any>
   onAddFeed: () => void
   onNext: () => void
   onBack: () => void
+  onOracleCreationStarted: () => void
 }
 
 const CreateStep: React.FC<CreateStepProps> = ({
-  formData,
-  onFormChange,
   configuredPriceFeeds,
   onAddFeed,
   onNext,
   onBack,
+  onOracleCreationStarted,
 }) => {
+  const [formData, setFormData] = useState<OracleFormData>({
+    name: '',
+    description: '',
+    priceFeeds: [],
+  });
+
+  const handleFormChange = (field: keyof OracleFormData, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
   const currentAccount = useCurrentAccount();
   const oracleBuilder = useOracleBuilder();
   const [creationStatus, setCreationStatus] = useState<'idle' | 'creating' | 'success' | 'error'>('idle');
@@ -53,6 +63,9 @@ const CreateStep: React.FC<CreateStepProps> = ({
     setCreationStatus('creating');
     setErrorMessage('');
 
+    // Notify parent that we're starting oracle creation (for WebSocket listening)
+    onOracleCreationStarted();
+
     try {
       const result = await oracleBuilder.createNewOracle(formData.name, formData.description);
       
@@ -62,7 +75,7 @@ const CreateStep: React.FC<CreateStepProps> = ({
         // Auto-proceed after successful creation
         setTimeout(() => {
           onNext();
-        }, 5000);
+        }, 2000);
       } else {
         setCreationStatus('error');
         setErrorMessage(result.error || 'Failed to create oracle');
@@ -101,7 +114,7 @@ const CreateStep: React.FC<CreateStepProps> = ({
               className="bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-500 focus:border-blue-500"
               placeholder="Enter oracle name..."
               value={formData.name}
-              onChange={(e) => onFormChange("name", e.target.value)}
+              onChange={(e) => handleFormChange("name", e.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -110,7 +123,7 @@ const CreateStep: React.FC<CreateStepProps> = ({
               className="bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-500 focus:border-blue-500 min-h-[120px]"
               placeholder="Describe what your oracle does..."
               value={formData.description}
-              onChange={(e) => onFormChange("description", e.target.value)}
+              onChange={(e) => handleFormChange("description", e.target.value)}
             />
           </div>
         </CardContent>
