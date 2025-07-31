@@ -14,6 +14,7 @@ interface OverviewStepProps {
   setSelectedPriceFeedId: (id: string) => void
   onCreateNew: () => void
   onNavigateToConfigure: (source: string) => void
+  walletConnected?: boolean
 }
 
 const OverviewStep: React.FC<OverviewStepProps> = ({
@@ -25,6 +26,7 @@ const OverviewStep: React.FC<OverviewStepProps> = ({
   setSelectedPriceFeedId,
   onCreateNew,
   onNavigateToConfigure,
+  walletConnected,
 }) => (
   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
     {/* Left Sidebar */}
@@ -45,6 +47,8 @@ const OverviewStep: React.FC<OverviewStepProps> = ({
         oracles={oracles}
         selectedOracleId={selectedOracleId}
         setSelectedOracleId={setSelectedOracleId}
+        emptyState="build"
+        walletConnected={walletConnected}
       />
     </div>
     {/* Right Panel - ManageOracle */}

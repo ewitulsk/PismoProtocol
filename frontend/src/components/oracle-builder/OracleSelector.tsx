@@ -6,14 +6,30 @@ interface OracleSelectorProps {
   oracles: any[]
   selectedOracleId: string
   setSelectedOracleId: (id: string) => void
+  /**
+   * Which empty state to show: 'build' (manage/create) or 'dashboard' (find/view)
+   */
+  emptyState: 'build' | 'dashboard'
+  /**
+   * Whether a wallet is connected (only needed for build/manage tab)
+   */
+  walletConnected?: boolean
 }
 
-const OracleSelector: React.FC<OracleSelectorProps> = ({ oracles, selectedOracleId, setSelectedOracleId }) => (
+const OracleSelector: React.FC<OracleSelectorProps> = ({ oracles, selectedOracleId, setSelectedOracleId, emptyState, walletConnected }) => (
   <div className="space-y-3">
     {oracles.length === 0 ? (
       <div className="text-center py-8">
         <div className="text-gray-400 text-sm">
-          Connect your wallet to view and manage your oracles
+          {emptyState === 'dashboard' && (
+            <>No oracles found!</>
+          )}
+          {emptyState === 'build' && !walletConnected && (
+            <>Connect your wallet to view and manage your oracles</>
+          )}
+          {emptyState === 'build' && walletConnected && (
+            <>No oracles found! Create a new oracle or try refreshing.</>
+          )}
         </div>
       </div>
     ) : (

@@ -202,10 +202,12 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
         />
         
         {/* WebSocket Debug Console */}
-        <WebSocketDebugger 
-          messages={recentMessages}
-          isConnected={connection.isConnected}
-        />
+        <div className="mb-6">
+          <WebSocketDebugger 
+            messages={recentMessages}
+            isConnected={connection.isConnected}
+          />
+        </div>
         
         {/* Render Current Step */}
         {currentStep === "overview" && (
@@ -218,6 +220,7 @@ export default function BuildOracle({ onNavigate }: BuildOracleProps) {
             setSelectedPriceFeedId={setSelectedPriceFeedId}
             onCreateNew={handleCreateNew}
             onNavigateToConfigure={(source: string) => handleNavigateToConfigure(source as ConfigureSource)}
+            walletConnected={!!currentAccount?.address}
           />
         )}
         {currentStep === "create" && (
